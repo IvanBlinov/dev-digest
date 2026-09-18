@@ -2,6 +2,18 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-09-17 — [Pitfall] The two `vendor/shared` copies already drift
+Symptom: `diff -r server/src/vendor/shared client/src/vendor/shared` reports 5 differing files before any L01 change.
+Cause: the server copy gained fields (`sessionId`, `CommitFile`, provider ids) that were never mirrored.
+Rule: apply new contract edits to BOTH copies in the same commit; do not attempt a full re-sync inside a feature branch.
+Proof: `server/src/vendor/shared/adapters.ts:69`, `client/src/vendor/shared/adapters.ts:77`
+
+## 2026-09-17 — [Non-obvious behaviour] `next-intl` message files are the only source of column headers
+Symptom: adding a column key to `COLUMN_KEYS` without a message renders the raw key path.
+Cause: the PR list header maps `COLUMN_KEYS` → `t("list.columns.<key>")`.
+Rule: every new column needs both `constants.ts` (`COLUMN_KEYS`, `GRID` width) and `messages/en/prReview.json`.
+Proof: `client/src/app/repos/[repoId]/pulls/page.tsx:100`, `client/src/app/repos/[repoId]/pulls/constants.ts:42`
+
 ## 2026-09-17 — [Pitfall] Component tests run without the API
 Symptom: a new test tries to reach `localhost:3001` and hangs or fails.
 Cause: the suite is jsdom with a global setup file; there is no server in the loop, and the only real `fetch` lives in `src/lib/api.ts`.

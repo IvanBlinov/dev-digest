@@ -209,6 +209,43 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     expect(run!.findingsCount).toBe(1);
     expect(run!.grounding).toBe('1/2 passed');
 
+    // L01 cost: MockLLMProvider prices every call at 0.001 USD, the engine sums
+    // per call, and the value must reach the run row, the trace, the review DTO
+    // and the run-history list unchanged.
+    const calls = trace.tool_calls.length;
+    expect(calls).toBeGreaterThan(0);
+    expect(run!.costUsd).toBeCloseTo(0.001 * calls, 9);
+    expect(trace.stats.cost_usd).toBeCloseTo(0.001 * calls, 9);
+    expect(review.cost_usd).toBeCloseTo(0.001 * calls, 9);
+    const runs = (await app.inject({ method: 'GET', url: `/pulls/${pr.id}/runs` })).json();
+    expect(runs.find((r: { run_id: string }) => r.run_id === runId).cost_usd).toBeCloseTo(0.001 * calls, 9);
+    // …and the PR list carries the SUM of the PR's done runs (one run here).
+    const list = (await app.inject({ method: 'GET', url: `/repos/${pr.repoId}/pulls` })).json();
+    expect(list.find((p: { id: string }) => p.id === pr.id).cost_usd).toBeCloseTo(0.001 * calls, 9);
+
+    await app.close();
+  });
+
+  it('L01 cost: a failed run persists cost_usd = null (never 0)', async () => {
+    // A fixture that fails the Review schema makes the mock throw → run fails.
+    const app = await appWith({ not: 'a review' });
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'Broken', provider: 'openai', model: 'gpt-4.1', system_prompt: 'x' },
+      })
+    ).json();
+    const res = await app.inject({ method: 'POST', url: `/pulls/${pr.id}/review`, payload: { agentId: agent.id } });
+    expect(res.statusCode).toBe(200);
+    const runId = res.json().runs[0].run_id;
+    await waitForPrRuns(pg.handle.db, pr.id, { expected: 1 });
+    const [run] = await pg.handle.db.select().from(t.agentRuns).where(eq(t.agentRuns.id, runId));
+    expect(run!.status).toBe('failed');
+    expect(run!.costUsd).toBeNull();
+    const trace = (await app.inject({ method: 'GET', url: `/runs/${runId}/trace` })).json();
+    expect(trace.stats.cost_usd).toBeNull();
     await app.close();
   });
 
@@ -297,6 +334,15 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     ).json();
     // seed has 2 enabled agents; we may have created more above in this PR's ws.
     expect(body.runs.length).toBeGreaterThanOrEqual(2);
+
+    await app.close();
+  });
+
+  it('L01: PR with no runs lists cost_usd = null', async () => {
+    const app = await appWith(REVIEW_FIXTURE);
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+    const list = (await app.inject({ method: 'GET', url: `/repos/${pr.repoId}/pulls` })).json();
+    expect(list.find((p: { id: string }) => p.id === pr.id).cost_usd).toBeNull();
     await app.close();
   });
 });

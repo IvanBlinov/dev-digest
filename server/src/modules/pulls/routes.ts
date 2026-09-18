@@ -7,7 +7,7 @@ import * as t from '../../db/schema.js';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
-import { deriveReviewStatus } from './status.js';
+import { deriveReviewStatus, sumRunCosts } from './status.js';
 
 /**
  * F1 — pulls module. PR import via Octokit (list + per-PR detail).
@@ -129,6 +129,21 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       }
     }
 
+    // L01: total COST per PR = sum of every done run's cost (null = no priced run).
+    const costByPr = new Map<string, { costUsd: number | null }[]>();
+    if (prIds.length > 0) {
+      const runRows = await container.db
+        .select({ prId: t.agentRuns.prId, costUsd: t.agentRuns.costUsd })
+        .from(t.agentRuns)
+        .where(and(inArray(t.agentRuns.prId, prIds), eq(t.agentRuns.status, 'done')));
+      for (const rr of runRows) {
+        if (!rr.prId) continue;
+        const list = costByPr.get(rr.prId) ?? [];
+        list.push({ costUsd: rr.costUsd });
+        costByPr.set(rr.prId, list);
+      }
+    }
+
     const now = Date.now();
     return rows.map((r) => {
       const review = latestReviewByPr.get(r.id);
@@ -153,6 +168,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         opened_at: r.openedAt?.toISOString() ?? null,
         updated_at: r.updatedAt?.toISOString() ?? null,
         score: review ? review.score : null,
+        cost_usd: sumRunCosts(costByPr.get(r.id) ?? []),
       };
     });
   });

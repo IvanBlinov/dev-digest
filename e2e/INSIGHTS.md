@@ -2,6 +2,12 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-09-17 — [Pitfall] `agent-browser` is a global CLI, not a package dependency
+Symptom: `npm ci` in `e2e/` succeeds but `npm test` / `npm run e2e:hermetic` cannot find `agent-browser`.
+Cause: the runner shells out to a globally installed binary (`npm i -g agent-browser && agent-browser install`).
+Rule: install it once per machine before trusting an e2e run; a green typecheck says nothing about the flows.
+Proof: `e2e/README.md:53`, `e2e/run.ts:5`
+
 ## 2026-09-17 — [Pitfall] Flows 02/04/05 land on the wrong repo against a dev DB
 Symptom: `wait --url /pulls/482` times out when running `npm test` locally.
 Cause: the home route redirects to the *first* repo from `GET /repos`; a dev DB usually has other imports ahead of the seeded one.

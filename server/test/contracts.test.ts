@@ -12,6 +12,10 @@ import {
   EvalRun,
   MemoryItem,
   RunTrace,
+  RunStats,
+  RunSummary,
+  ReviewRecord,
+  PrMeta,
   Settings,
   Repo,
   PrDetail,
@@ -166,6 +170,29 @@ describe('AI contracts parse fixtures', () => {
       log: [{ t: '00.00', kind: 'info', msg: 'started' }],
     });
     expect(trace.tool_calls).toHaveLength(1);
+  });
+
+  it('L01 cost_usd: optional on RunStats (pre-L01 traces), required-nullable on run/review rows', () => {
+    const stats = { duration_ms: 1, tokens_in: 1, tokens_out: 1, findings: 0, grounding: '0/0 passed' };
+    expect(RunStats.parse(stats).cost_usd).toBeUndefined();
+    expect(RunStats.parse({ ...stats, cost_usd: 0.0123 }).cost_usd).toBeCloseTo(0.0123);
+    expect(RunStats.parse({ ...stats, cost_usd: null }).cost_usd).toBeNull();
+
+    const run = {
+      run_id: 'r', agent_id: null, agent_name: null, provider: null, model: null, status: 'done', error: null,
+      duration_ms: 1, tokens_in: 1, tokens_out: 1, findings_count: 0, grounding: '0/0', ran_at: null, score: null, blockers: null,
+    };
+    expect(() => RunSummary.parse(run)).toThrow();
+    expect(RunSummary.parse({ ...run, cost_usd: null }).cost_usd).toBeNull();
+
+    const review = {
+      id: 'v', pr_id: 'p', agent_id: null, run_id: null, kind: 'review', verdict: null, summary: null, score: null,
+      model: null, created_at: '2026-09-17T00:00:00.000Z', findings: [],
+    };
+    expect(() => ReviewRecord.parse(review)).toThrow();
+    expect(ReviewRecord.parse({ ...review, cost_usd: 0.5 }).cost_usd).toBe(0.5);
+
+    expect(PrMeta.parse({ number: 1, title: 't', author: 'a', branch: 'b', base: 'main', head_sha: 'x', additions: 0, deletions: 0, files_count: 0, status: 'needs_review' }).cost_usd).toBeUndefined();
   });
 });
 

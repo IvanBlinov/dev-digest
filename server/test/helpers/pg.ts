@@ -9,9 +9,15 @@ import { runMigrations } from '../../src/db/migrate.js';
  *
  * Integration tests gate on `dockerAvailable()` and skip cleanly when Docker is
  * not reachable (CI/sandbox without a Docker daemon).
+ *
+ * Escape hatch: set `TEST_DATABASE_URL` to run against an EXISTING Postgres
+ * (fresh, throwaway database — migrations are applied, nothing is dropped) when
+ * Testcontainers cannot publish ports on this machine. Run one `*.it.test.ts`
+ * file per database; files assume they own the schema.
  */
 export interface PgFixture {
-  container: StartedPostgreSqlContainer;
+  /** Undefined when `TEST_DATABASE_URL` bypasses Testcontainers. */
+  container: StartedPostgreSqlContainer | undefined;
   handle: DbHandle;
   url: string;
   stop: () => Promise<void>;
@@ -33,6 +39,12 @@ export async function dockerAvailable(): Promise<boolean> {
 }
 
 export async function startPg(): Promise<PgFixture> {
+  const override = process.env.TEST_DATABASE_URL;
+  if (override) {
+    await runMigrations(override);
+    const handle = createDb(override, { max: 5 });
+    return { container: undefined, handle, url: override, stop: () => handle.close() };
+  }
   const container = await new PostgreSqlContainer('pgvector/pgvector:pg16')
     .withDatabase('devdigest')
     .withUsername('devdigest')

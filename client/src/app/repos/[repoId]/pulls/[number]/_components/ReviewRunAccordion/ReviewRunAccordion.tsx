@@ -11,6 +11,7 @@ import type { ReviewRecord, Verdict } from "@devdigest/shared";
 import { FindingsPanel } from "../FindingsPanel";
 import { VerdictBanner } from "../VerdictBanner";
 import { useDeleteReview } from "../../../../../../../lib/hooks/reviews";
+import { formatUsd } from "../../../../../../../lib/format-usd";
 
 const VERDICT_COLOR: Record<string, string> = {
   request_changes: "var(--crit)",
@@ -102,6 +103,11 @@ export function ReviewRunAccordion({
           <Badge mono color="var(--text-secondary)">
             {review.score}
           </Badge>
+        )}
+        {review.cost_usd != null && (
+          <span className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }} title="Run cost (USD)">
+            {formatUsd(review.cost_usd)}
+          </span>
         )}
         <span className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>
           {formatWhen(review.created_at)}
