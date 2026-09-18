@@ -6,7 +6,7 @@
  * + age, so it gets unit coverage independent of the route's queries.
  */
 import { describe, it, expect } from 'vitest';
-import { deriveReviewStatus, rollupSeverities, STALE_DAYS } from '../src/modules/pulls/status.js';
+import { deriveReviewStatus, rollupSeverities, sumRunCosts, STALE_DAYS } from '../src/modules/pulls/status.js';
 
 const DAY = 86_400_000;
 const now = Date.UTC(2026, 5, 11);
@@ -64,5 +64,16 @@ describe('rollupSeverities', () => {
 
   it('is all-zero for no findings', () => {
     expect(rollupSeverities([])).toEqual({ critical: 0, warning: 0, suggestion: 0 });
+  });
+});
+
+describe('sumRunCosts (L01 PR-list cost)', () => {
+  it('null when there are no runs or none is priced', () => {
+    expect(sumRunCosts([])).toBeNull();
+    expect(sumRunCosts([{ costUsd: null }, { costUsd: null }])).toBeNull();
+  });
+  it('sums the known costs and ignores unpriced runs', () => {
+    expect(sumRunCosts([{ costUsd: 0.1 }, { costUsd: null }, { costUsd: 0.2 }])).toBeCloseTo(0.3, 9);
+    expect(sumRunCosts([{ costUsd: 0 }])).toBe(0);
   });
 });

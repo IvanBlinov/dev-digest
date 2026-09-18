@@ -33,6 +33,8 @@ export const ReviewRecord = z.object({
   model: z.string().nullable(),
   grounding: z.string().nullish(),
   created_at: z.string(),
+  /** USD of the run that produced this review (from agent_runs via run_id); null when unknown. */
+  cost_usd: z.number().nullable(),
   findings: z.array(FindingRecord),
 });
 export type ReviewRecord = z.infer<typeof ReviewRecord>;

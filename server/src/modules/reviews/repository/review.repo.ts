@@ -58,18 +58,21 @@ export async function insertFindings(
 export async function reviewsForPull(
   db: Db,
   prId: string,
-): Promise<{ review: ReviewRow; findings: FindingRow[] }[]> {
+): Promise<{ review: ReviewRow; findings: FindingRow[]; costUsd: number | null }[]> {
+  // Cost lives on the run row (agent_runs), not on the review — join by run_id.
   const reviews = await db
-    .select()
+    .select({ review: t.reviews, costUsd: t.agentRuns.costUsd })
     .from(t.reviews)
+    .leftJoin(t.agentRuns, eq(t.agentRuns.id, t.reviews.runId))
     .where(eq(t.reviews.prId, prId))
     .orderBy(desc(t.reviews.createdAt));
   if (reviews.length === 0) return [];
-  const ids = reviews.map((r) => r.id);
+  const ids = reviews.map((r) => r.review.id);
   const findings = await db.select().from(t.findings).where(inArray(t.findings.reviewId, ids));
-  return reviews.map((review) => ({
+  return reviews.map(({ review, costUsd }) => ({
     review,
     findings: findings.filter((f) => f.reviewId === review.id),
+    costUsd: costUsd ?? null,
   }));
 }
 

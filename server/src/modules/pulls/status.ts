@@ -53,3 +53,17 @@ export function deriveReviewStatus(args: {
   if (updatedAt && now - updatedAt.getTime() > staleMs) return 'stale';
   return 'reviewed';
 }
+
+/**
+ * PR-list COST rollup: sum of the known per-run costs (USD). Unpriced runs
+ * (null) are skipped; the result is null only when NO run carries a cost, so
+ * "—" in the UI means "unknown", never "free".
+ */
+export function sumRunCosts(rows: { costUsd: number | null }[]): number | null {
+  let total: number | null = null;
+  for (const r of rows) {
+    if (r.costUsd == null) continue;
+    total = (total ?? 0) + r.costUsd;
+  }
+  return total;
+}

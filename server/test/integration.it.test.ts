@@ -34,6 +34,11 @@ d('Testcontainers: pg + pgvector', () => {
       WHERE table_schema = 'public'`;
     // 35 domain tables + drizzle migration bookkeeping
     expect(rows[0]!.count).toBeGreaterThanOrEqual(35);
+    // L01: agent_runs.cost_usd added by migration 0010
+    const col = await pg.handle.sql<{ data_type: string }[]>`
+      SELECT data_type FROM information_schema.columns
+      WHERE table_name = 'agent_runs' AND column_name = 'cost_usd'`;
+    expect(col[0]?.data_type).toBe('double precision');
   });
 
   it('pgvector extension is enabled', async () => {

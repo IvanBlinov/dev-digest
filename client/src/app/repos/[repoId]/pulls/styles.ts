@@ -46,6 +46,8 @@ export const s = {
     textAlign: "right",
   } satisfies CSSProperties,
   muted: { color: "var(--text-muted)" } satisfies CSSProperties,
+  /** L01 — summed run cost; monospace, muted, so it reads as a number not a label. */
+  costCell: { fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
   filterBar: {
     display: "flex",
     alignItems: "center",

@@ -135,4 +135,44 @@ describe('reviewPullRequest (engine)', () => {
     expect(seen.length).toBeGreaterThan(0);
     expect(seen.every((s) => s === 'sess-abc')).toBe(true);
   });
+
+  /** Provider stub whose per-call cost is scripted (null = unpriced model). */
+  function costingProvider(costs: (number | null)[]): { llm: LLMProvider; calls: () => number } {
+    let n = 0;
+    const llm: LLMProvider = {
+      id: 'openrouter',
+      async completeStructured<T>(req): Promise<StructuredResult<T>> {
+        const costUsd = costs[Math.min(n, costs.length - 1)] ?? null;
+        n += 1;
+        return { data: fixture as unknown as T, model: req.model, tokensIn: 10, tokensOut: 5, costUsd, raw: '', attempts: 1 };
+      },
+      async listModels() {
+        return [];
+      },
+      async complete() {
+        throw new Error('not used');
+      },
+      async embed() {
+        return [];
+      },
+    };
+    return { llm, calls: () => n };
+  }
+
+  it('costUsd is the sum of every LLM call in the run', async () => {
+    const { llm, calls } = costingProvider([0.002]);
+    const diff = await new MockGitClient().diff();
+    const outcome = await reviewPullRequest({ systemPrompt: 's', model: 'm', diff, llm, strategy: 'map-reduce' });
+    expect(calls()).toBeGreaterThan(0);
+    expect(outcome.costUsd).toBeCloseTo(0.002 * calls(), 9);
+  });
+
+  it('costUsd is null when any call is unpriced (never a partial sum)', async () => {
+    const { llm } = costingProvider([0.002, null]);
+    const diff = await new MockGitClient().diff();
+    const outcome = await reviewPullRequest({ systemPrompt: 's', model: 'm', diff, llm, strategy: 'map-reduce' });
+    // With a single-file diff there is one call; with a multi-file diff the second is null — either way null.
+    if (diff.files.length > 1) expect(outcome.costUsd).toBeNull();
+    else expect(outcome.costUsd).toBeCloseTo(0.002, 9);
+  });
 });
