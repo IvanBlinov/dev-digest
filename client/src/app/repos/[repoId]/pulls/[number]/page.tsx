@@ -22,6 +22,7 @@ import { useActiveRepo, useRepoNotFound } from "../../../../../lib/repo-context"
 import { ApiError } from "../../../../../lib/api";
 import { githubPrUrl } from "../../../../../lib/github-urls";
 import type { FindingRecord } from "@devdigest/shared";
+import { isSeverityLevel, prSeverityCounts, type SeverityLevel } from "@/lib/findings";
 
 export default function PRDetailPage() {
   const params = useParams<{ repoId: string; number: string }>();
@@ -66,6 +67,17 @@ export default function PRDetailPage() {
     router.replace(`/repos/${repoId}/pulls/${number}${sp.toString() ? `?${sp.toString()}` : ""}`);
   };
   const setTab = (t: string) => setParam("tab", t);
+  // L01 — severity filter lives in the URL (?severity=CRITICAL); clicking the
+  // active level clears it.
+  const rawSeverity = search.get("severity");
+  const severity: SeverityLevel | null = isSeverityLevel(rawSeverity) ? rawSeverity : null;
+  const selectSeverity = (level: SeverityLevel) => {
+    const sp = new URLSearchParams(search.toString());
+    sp.set("tab", "findings");
+    if (severity === level) sp.delete("severity");
+    else sp.set("severity", level);
+    router.replace(`/repos/${repoId}/pulls/${number}?${sp.toString()}`);
+  };
 
   // Reviews come newest-first; each is its own run (grouped into accordions).
   const runs = reviews ?? [];
@@ -75,6 +87,8 @@ export default function PRDetailPage() {
   );
   const lethalTrifecta = allFindings.filter((f) => f.kind === "lethal_trifecta");
   const findingsCount = allFindings.length;
+  // PR summary = newest review per agent, dismissed excluded (same rule as the list).
+  const severityCounts = React.useMemo(() => prSeverityCounts(runs), [reviews]);
 
   const repoName = activeRepo?.full_name ?? repoId;
   // The real "owner/repo" (null until the repo is loaded) — used to build
@@ -127,6 +141,9 @@ export default function PRDetailPage() {
         prId={prId}
         tab={tab}
         findingsCount={findingsCount}
+        severityCounts={severityCounts}
+        activeSeverity={severity}
+        onSelectSeverity={selectSeverity}
         githubUrl={repoFullName ? githubPrUrl(repoFullName, pr.number) : null}
         onSetTab={setTab}
         onRunStart={() => setTab("findings")}
@@ -143,6 +160,9 @@ export default function PRDetailPage() {
             reviewRunning={reviewRunning}
             lethalTrifecta={lethalTrifecta}
             runs={runs}
+            severity={severity}
+            severityCounts={severityCounts}
+            onSelectSeverity={selectSeverity}
             prRuns={prRuns}
             prCommits={pr.commits}
             repoFullName={repoFullName}

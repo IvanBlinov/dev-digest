@@ -223,6 +223,21 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     const list = (await app.inject({ method: 'GET', url: `/repos/${pr.repoId}/pulls` })).json();
     expect(list.find((p: { id: string }) => p.id === pr.id).cost_usd).toBeCloseTo(0.001 * calls, 9);
 
+    // L01 findings-by-severity: grounding kept ONE critical finding.
+    expect(list.find((p: { id: string }) => p.id === pr.id).findings).toEqual({ critical: 1, warning: 0, suggestion: 0 });
+    // The agent card carries the same rule (newest review per PR).
+    const agents = (await app.inject({ method: 'GET', url: '/agents' })).json();
+    expect(agents.find((a: { id: string }) => a.id === agent.id).findings).toEqual({ critical: 1, warning: 0, suggestion: 0 });
+    const preview = (await app.inject({ method: 'GET', url: `/agents/${agent.id}/findings?limit=6` })).json();
+    expect(preview).toHaveLength(1);
+    expect(preview[0].pr_number).toBe(482);
+    expect(preview[0].severity).toBe('CRITICAL');
+    // Dismissing the finding removes it from every counter (zeros, not null).
+    await app.inject({ method: 'POST', url: `/findings/${review.findings[0].id}/dismiss` });
+    const after = (await app.inject({ method: 'GET', url: `/repos/${pr.repoId}/pulls` })).json();
+    expect(after.find((p: { id: string }) => p.id === pr.id).findings).toEqual({ critical: 0, warning: 0, suggestion: 0 });
+    expect((await app.inject({ method: 'GET', url: `/agents/${agent.id}/findings` })).json()).toHaveLength(0);
+
     await app.close();
   });
 
@@ -338,11 +353,12 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     await app.close();
   });
 
-  it('L01: PR with no runs lists cost_usd = null', async () => {
+  it('L01: PR with no runs lists cost_usd = null and findings = null', async () => {
     const app = await appWith(REVIEW_FIXTURE);
     const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
     const list = (await app.inject({ method: 'GET', url: `/repos/${pr.repoId}/pulls` })).json();
     expect(list.find((p: { id: string }) => p.id === pr.id).cost_usd).toBeNull();
+    expect(list.find((p: { id: string }) => p.id === pr.id).findings).toBeNull();
     await app.close();
   });
 });

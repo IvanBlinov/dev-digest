@@ -7,7 +7,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import type { RunSummary } from "@devdigest/shared";
+import type { RunSummary, ReviewRecord } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/prReview.json";
 import { RunHistory } from "./RunHistory";
 
@@ -35,12 +35,48 @@ function run(o: Partial<RunSummary>): RunSummary {
   };
 }
 
-function renderRuns(runs: RunSummary[]) {
+function renderRuns(runs: RunSummary[], reviewsByRunId?: Map<string, ReviewRecord>) {
   return render(
     <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
-      <RunHistory runs={runs} onOpenTrace={() => {}} />
+      <RunHistory runs={runs} reviewsByRunId={reviewsByRunId} onOpenTrace={() => {}} />
     </NextIntlClientProvider>,
   );
+}
+
+function reviewFor(runId: string, severities: string[]): ReviewRecord {
+  return {
+    id: `rv-${runId}`,
+    pr_id: "pr1",
+    agent_id: "a1",
+    run_id: runId,
+    agent_name: "Security Reviewer",
+    kind: "review",
+    verdict: "request_changes",
+    summary: null,
+    score: 38,
+    model: "m",
+    grounding: null,
+    created_at: "2026-06-11T18:44:34.000Z",
+    cost_usd: null,
+    findings: severities.map((severity, i) => ({
+      id: `f${i}`,
+      severity: severity as ReviewRecord["findings"][number]["severity"],
+      category: "security",
+      title: `Finding ${i}`,
+      file: "src/config.ts",
+      start_line: 12,
+      end_line: 12,
+      rationale: "r",
+      suggestion: null,
+      confidence: 0.9,
+      kind: "finding",
+      trifecta_components: null,
+      evidence: null,
+      review_id: `rv-${runId}`,
+      accepted_at: null,
+      dismissed_at: i === severities.length - 1 && severities.length > 2 ? "2026-06-12T00:00:00.000Z" : null,
+    })),
+  };
 }
 
 describe("RunHistory — outcome badge", () => {
@@ -82,5 +118,18 @@ describe("RunHistory — outcome badge", () => {
   it("L01: shows no cost element when the cost is unknown", () => {
     renderRuns([run({ cost_usd: null })]);
     expect(screen.queryByText(/^\$/)).toBeNull();
+  });
+
+  it("L01: a settled run shows its own severity counters (dismissed excluded) with a hover preview", () => {
+    const review = reviewFor("run-1", ["CRITICAL", "CRITICAL", "WARNING", "SUGGESTION"]); // last one dismissed
+    renderRuns([run({ findings_count: 4, score: 38 })], new Map([["run-1", review]]));
+    expect(screen.getByLabelText("2 critical findings")).toBeInTheDocument();
+    expect(screen.getByLabelText("1 warning finding")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/suggestion/)).toBeNull();
+  });
+
+  it("L01: without a matching review the row falls back to the findings count text", () => {
+    renderRuns([run({ findings_count: 3, score: 60 })]);
+    expect(screen.getByText("3 finding(s)")).toBeInTheDocument();
   });
 });

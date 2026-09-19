@@ -1,7 +1,7 @@
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
-import type { Finding } from '@devdigest/shared';
+import type { Finding, FindingPreview } from '@devdigest/shared';
 import type { FindingRow, PullRow } from '../../../db/rows.js';
 
 export type ReviewRow = typeof t.reviews.$inferSelect;
@@ -143,4 +143,88 @@ export async function setFindingDismissed(
     .where(eq(t.findings.id, findingId))
     .returning();
   return row;
+}
+
+// ---------------------------------------------------------------------------
+// L01 findings-by-severity — read models for the rule in ../severity.ts.
+// Only the columns the rule needs are selected (the PR list loads every PR).
+// ---------------------------------------------------------------------------
+
+export interface SeveritySummaryRows {
+  reviews: { id: string; prId: string; agentId: string | null; createdAt: Date }[];
+  findings: { reviewId: string; severity: string; dismissedAt: Date | null }[];
+}
+
+/** All `review`-kind reviews + their findings for a set of PRs. */
+export async function severitySummaryForPulls(db: Db, prIds: string[]): Promise<SeveritySummaryRows> {
+  if (prIds.length === 0) return { reviews: [], findings: [] };
+  const reviews = await db
+    .select({ id: t.reviews.id, prId: t.reviews.prId, agentId: t.reviews.agentId, createdAt: t.reviews.createdAt })
+    .from(t.reviews)
+    .where(and(inArray(t.reviews.prId, prIds), eq(t.reviews.kind, 'review')));
+  const findings = await findingsLiteFor(db, reviews.map((r) => r.id));
+  return { reviews, findings };
+}
+
+/** All `review`-kind reviews + findings of one workspace (agent aggregates). */
+export async function severitySummaryForWorkspace(db: Db, workspaceId: string): Promise<SeveritySummaryRows> {
+  const reviews = await db
+    .select({ id: t.reviews.id, prId: t.reviews.prId, agentId: t.reviews.agentId, createdAt: t.reviews.createdAt })
+    .from(t.reviews)
+    .where(and(eq(t.reviews.workspaceId, workspaceId), eq(t.reviews.kind, 'review')));
+  const findings = await findingsLiteFor(db, reviews.map((r) => r.id));
+  return { reviews, findings };
+}
+
+async function findingsLiteFor(db: Db, reviewIds: string[]): Promise<SeveritySummaryRows['findings']> {
+  if (reviewIds.length === 0) return [];
+  return db
+    .select({ reviewId: t.findings.reviewId, severity: t.findings.severity, dismissedAt: t.findings.dismissedAt })
+    .from(t.findings)
+    .where(inArray(t.findings.reviewId, reviewIds));
+}
+
+/**
+ * Newest active findings of one agent, restricted to the given review ids (the
+ * caller passes the agent's latest-per-PR reviews), joined with the PR number
+ * for the hover preview.
+ */
+export async function recentActiveFindings(db: Db, reviewIds: string[], limit: number): Promise<FindingPreview[]> {
+  if (reviewIds.length === 0) return [];
+  const rows = await db
+    .select({
+      id: t.findings.id,
+      severity: t.findings.severity,
+      category: t.findings.category,
+      title: t.findings.title,
+      file: t.findings.file,
+      startLine: t.findings.startLine,
+      endLine: t.findings.endLine,
+      confidence: t.findings.confidence,
+      rationale: t.findings.rationale,
+      reviewId: t.findings.reviewId,
+      prId: t.reviews.prId,
+      prNumber: t.pullRequests.number,
+      createdAt: t.reviews.createdAt,
+    })
+    .from(t.findings)
+    .innerJoin(t.reviews, eq(t.reviews.id, t.findings.reviewId))
+    .innerJoin(t.pullRequests, eq(t.pullRequests.id, t.reviews.prId))
+    .where(and(inArray(t.findings.reviewId, reviewIds), isNull(t.findings.dismissedAt)))
+    .orderBy(desc(t.reviews.createdAt))
+    .limit(limit);
+  return rows.map((r) => ({
+    id: r.id,
+    severity: r.severity as FindingPreview['severity'],
+    category: r.category as FindingPreview['category'],
+    title: r.title,
+    file: r.file,
+    start_line: r.startLine,
+    end_line: r.endLine,
+    confidence: r.confidence,
+    rationale: r.rationale,
+    review_id: r.reviewId,
+    pr_id: r.prId,
+    pr_number: r.prNumber,
+  }));
 }

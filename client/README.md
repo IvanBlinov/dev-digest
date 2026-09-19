@@ -23,7 +23,7 @@ Routes (`src/app/**/page.tsx`) and the API surface each leans on (via
 
 ```mermaid
 flowchart TD
-  ROOT["/"] -->|"useRepos → GET /repos"| PULLS["/repos/:repoId/pulls<br/>PR list (score · cost)"]
+  ROOT["/"] -->|"useRepos → GET /repos"| PULLS["/repos/:repoId/pulls<br/>PR list (score · findings · cost)"]
   ONB["/onboarding<br/>add repo"] -->|"POST /repos"| API[("Fastify API")]
   PULLS --> PR["/pulls/:number<br/>review detail<br/>(overview · diff · findings)"]
 

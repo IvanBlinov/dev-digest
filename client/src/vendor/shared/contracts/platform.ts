@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SeverityCounts } from './findings.js';
 import { Provider } from './knowledge.js';
 
 /**
@@ -172,6 +173,9 @@ export const PrMeta = z.object({
   score: z.number().int().nullish(),
   // Sum of all done runs' cost in USD (list endpoint only); null when no priced run exists.
   cost_usd: z.number().nullish(),
+  // Active findings by severity (latest review per agent, dismissed excluded);
+  // null = never reviewed, zeros = reviewed and clean. List endpoint only.
+  findings: SeverityCounts.nullish(),
 });
 export type PrMeta = z.infer<typeof PrMeta>;
 

@@ -1,7 +1,9 @@
 {
   "card": {
     "noDescription": "No description",
-    "skillCount": "{count} skills"
+    "skillCount": "{count} skills",
+    "findings": "Findings",
+    "findingsPreview": "{count, plural, one {# active finding} other {# active findings}}"
   },
   "list": {
     "breadcrumbLab": "Skills Lab",

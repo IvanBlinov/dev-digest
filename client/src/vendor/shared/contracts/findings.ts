@@ -87,3 +87,29 @@ export const FindingAction = z.object({
   reply: z.string().optional(),
 });
 export type FindingAction = z.infer<typeof FindingAction>;
+
+/** Per-severity counters (L01 findings-by-severity). Zeros = reviewed and clean. */
+export const SeverityCounts = z.object({
+  critical: z.number().int(),
+  warning: z.number().int(),
+  suggestion: z.number().int(),
+});
+export type SeverityCounts = z.infer<typeof SeverityCounts>;
+
+/** Compact finding for hover previews (agent card, PR list). */
+export const FindingPreview = Finding.pick({
+  id: true,
+  severity: true,
+  category: true,
+  title: true,
+  file: true,
+  start_line: true,
+  end_line: true,
+  confidence: true,
+  rationale: true,
+}).extend({
+  review_id: z.string(),
+  pr_id: z.string(),
+  pr_number: z.number().int(),
+});
+export type FindingPreview = z.infer<typeof FindingPreview>;

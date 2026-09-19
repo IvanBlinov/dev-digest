@@ -2,6 +2,18 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-09-19 — [Architectural decision] The PR page derives severity counters locally, the list gets them from the API
+Context: the PR page already loads every review with findings; the PR list must stay one request.
+Decision: `client/src/lib/findings.ts` mirrors the server rule (newest review per agent, dismissed excluded) for the header/accordion/timeline; the list reads `PrMeta.findings` and lazily loads reviews only on hover for the popover.
+Consequence: any change to the rule must be made in BOTH `server/src/modules/reviews/severity.ts` and `client/src/lib/findings.ts`; the unit tests of each encode the same fixture.
+Proof: `client/src/lib/findings.ts:37`, `server/src/modules/reviews/severity.ts:42`
+
+## 2026-09-19 — [Non-obvious behaviour] Hover popovers must stop click propagation inside PR rows
+Symptom: clicking a severity chip inside a PR row navigates to the PR without the filter, or the popover closes the moment it is clicked.
+Cause: the whole PR row is a click target (`router.push` on the row), so any child click bubbles up.
+Rule: interactive children of a row (`SeverityCounters`, the popover card) call `e.stopPropagation()`; links keep `href` for middle-click and also push with the filter.
+Proof: `client/src/components/severity-counters/SeverityCounters.tsx:63`, `client/src/components/findings-preview-popover/FindingsPreviewPopover.tsx:91`
+
 ## 2026-09-17 — [Pitfall] The two `vendor/shared` copies already drift
 Symptom: `diff -r server/src/vendor/shared client/src/vendor/shared` reports 5 differing files before any L01 change.
 Cause: the server copy gained fields (`sessionId`, `CommitFile`, provider ids) that were never mirrored.

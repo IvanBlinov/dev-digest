@@ -8,6 +8,8 @@ import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { deriveReviewStatus, sumRunCosts } from './status.js';
+import { ReviewRepository } from '../reviews/repository.js';
+import { countActiveFindings, groupBy } from '../reviews/severity.js';
 
 /**
  * F1 — pulls module. PR import via Octokit (list + per-PR detail).
@@ -113,8 +115,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
 
     // Latest-review SCORE per PR for the list's score ring. Computed on read
     // from reviews (no FK denorm); the list is small, so one IN-query + JS
-    // grouping is cheap. (The per-severity FINDINGS breakdown is intentionally
-    // not surfaced on the list — findings live on the PR detail page.)
+    // grouping is cheap.
     const prIds = rows.map((r) => r.id);
     const latestReviewByPr = new Map<string, { score: number | null }>();
     if (prIds.length > 0) {
@@ -128,6 +129,17 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         if (!latestReviewByPr.has(rv.prId)) latestReviewByPr.set(rv.prId, { score: rv.score });
       }
     }
+
+    // L01: active FINDINGS by severity per PR (newest review per agent,
+    // dismissed excluded) — the rule lives in reviews/severity.ts.
+    const summary = await new ReviewRepository(container.db).severitySummaryForPulls(prIds);
+    const reviewsByPr = groupBy(summary.reviews, (r) => r.prId);
+    const findingsByReview = groupBy(summary.findings, (f) => f.reviewId);
+    const findingsFor = (prId: string) => {
+      const reviews = reviewsByPr.get(prId) ?? [];
+      const findings = reviews.flatMap((r) => findingsByReview.get(r.id) ?? []);
+      return countActiveFindings(reviews, findings);
+    };
 
     // L01: total COST per PR = sum of every done run's cost (null = no priced run).
     const costByPr = new Map<string, { costUsd: number | null }[]>();
@@ -169,6 +181,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         updated_at: r.updatedAt?.toISOString() ?? null,
         score: review ? review.score : null,
         cost_usd: sumRunCosts(costByPr.get(r.id) ?? []),
+        findings: findingsFor(r.id),
       };
     });
   });

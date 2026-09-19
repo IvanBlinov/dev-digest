@@ -7,6 +7,9 @@ import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
 import { AgentsService } from './service.js';
 
+/** `/agents/:id/findings?limit=` — preview size, clamped. */
+const FindingsQuery = z.object({ limit: z.coerce.number().int().min(1).max(20).default(6) });
+
 /** `/providers/:id` addresses a provider by name, not a uuid. */
 const ProviderParams = z.object({ id: Provider });
 
@@ -75,6 +78,18 @@ export default async function agentsRoutes(appBase: FastifyInstance) {
     const { workspaceId } = await getContext(app.container, req);
     return service.list(workspaceId);
   });
+
+  /** L01 — newest active findings of one agent (hover preview on the agent card). */
+  app.get(
+    '/agents/:id/findings',
+    { schema: { params: IdParams, querystring: FindingsQuery } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      const rows = await service.recentFindings(workspaceId, req.params.id, req.query.limit);
+      if (!rows) throw new NotFoundError('Agent not found');
+      return rows;
+    },
+  );
 
   app.get('/agents/:id', { schema: { params: IdParams } }, async (req) => {
     const { workspaceId } = await getContext(app.container, req);

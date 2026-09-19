@@ -1,6 +1,6 @@
 # L01 — Findings by severity (counters · filter · hover preview)
 
-Status: **design approved 2026-09-18, not implemented**. Plan: [L01-findings-severity-plan.md](L01-findings-severity-plan.md).
+Status: **implemented on branch `feat/l01-findings-severity` (2026-09-19)**; browser e2e not run locally (agent-browser not installed). Plan: [L01-findings-severity-plan.md](L01-findings-severity-plan.md).
 Reference screenshots: PR list with a FINDINGS column + hover popup; PR timeline rows with per-run
 counters + hover popup ("2 findings in this run").
 
@@ -106,14 +106,14 @@ computes counters from the reviews it already has (`usePrReviews`) instead of ex
 
 ## Acceptance criteria
 
-- [ ] `GET /repos/:id/pulls` returns `findings` counts per PR under the latest-per-agent, non-dismissed rule; `null` for never-reviewed PRs; dismissing a finding changes the count on the next fetch.
-- [ ] `GET /agents` returns `findings` counts per agent; `GET /agents/:id/findings?limit=6` returns the newest active findings with `pr_number`.
-- [ ] PR list shows a Findings column; hover opens a popover listing ≤ 6 findings with `+K more`; click on a level navigates to the PR with `?tab=findings&severity=…`.
-- [ ] PR header shows the summary counters; clicking toggles the URL filter; the findings panel shows only that severity and the filter bar reflects counts.
-- [ ] Timeline rows and accordion headers show per-run counters; timeline hover shows "N findings in this run".
-- [ ] Agent cards show counters and a hover popover with PR numbers.
-- [ ] Reviewed-clean PR shows `✓ 0`; never-reviewed shows `—`.
-- [ ] Tests: server unit (rule helper), server `.it.test` (list + agents endpoints incl. dismiss), client component tests for `SeverityCounters`, `FindingsPreviewPopover`, filter bar, PRRow, AgentCard; e2e flow 02 asserts the Findings header and the seeded `⊘ 1 · ⚠ 1` counters.
+- [x] `GET /repos/:id/pulls` returns `findings` counts per PR under the latest-per-agent, non-dismissed rule; `null` for never-reviewed PRs; dismissing a finding changes the count on the next fetch.
+- [x] `GET /agents` returns `findings` counts per agent; `GET /agents/:id/findings?limit=6` returns the newest active findings with `pr_number`.
+- [x] PR list shows a Findings column; hover opens a popover listing ≤ 6 findings with `+K more`; click on a level navigates to the PR with `?tab=findings&severity=…`.
+- [x] PR header shows the summary counters; clicking toggles the URL filter; the findings panel shows only that severity and the filter bar reflects counts.
+- [x] Timeline rows and accordion headers show per-run counters; timeline hover shows "N findings in this run".
+- [x] Agent cards show counters and a hover popover with PR numbers.
+- [x] Reviewed-clean PR shows `✓ 0`; never-reviewed shows `—`.
+- [x] Tests (all but the browser flows, which need `agent-browser`): server unit (rule helper), server `.it.test` (list + agents endpoints incl. dismiss), client component tests for `SeverityCounters`, `FindingsPreviewPopover`, filter bar, PRRow, AgentCard; e2e flow 02 asserts the Findings header and the seeded `⊘ 1 · ⚠ 1` counters.
 
 ## Links
 
