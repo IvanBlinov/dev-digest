@@ -1,14 +1,20 @@
 import type { CSSProperties } from "react";
 
+/** Card width in px — also used to clamp the fixed placement to the viewport. */
+export const CARD_WIDTH = 480;
+
 export const s = {
   anchor: { position: "relative", display: "inline-flex" } satisfies CSSProperties,
-  card: (above: boolean): CSSProperties => ({
-    position: "absolute",
-    left: 0,
-    ...(above ? { bottom: "calc(100% + 8px)" } : { top: "calc(100% + 8px)" }),
-    zIndex: 40,
-    width: 480,
-    maxWidth: "min(480px, 90vw)",
+  card: (p: { left: number; top?: number; bottom?: number }): CSSProperties => ({
+    position: "fixed",
+    left: p.left,
+    ...(p.top != null ? { top: p.top } : {}),
+    ...(p.bottom != null ? { bottom: p.bottom } : {}),
+    zIndex: 1000,
+    width: CARD_WIDTH,
+    maxWidth: "calc(100vw - 16px)",
+    maxHeight: "60vh",
+    overflowY: "auto",
     padding: 12,
     borderRadius: 10,
     border: "1px solid var(--border)",
@@ -20,6 +26,7 @@ export const s = {
     textAlign: "left",
     cursor: "default",
     fontWeight: 400,
+    color: "var(--text-primary)",
   }),
   header: {
     display: "flex",

@@ -2,6 +2,12 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-09-19 — [Pitfall] Absolutely-positioned popovers get clipped by the PR table and agent cards
+Symptom: the findings preview was cut off at the bottom edge of the PR list card (only the header and first row visible).
+Cause: `tableCard` and `AgentCard` use `overflow: hidden` for rounded corners, so any descendant positioned outside their box is clipped.
+Rule: floating UI (popovers, menus) must render in a portal on `document.body` with `position: fixed` computed from the trigger's `getBoundingClientRect()`, close on scroll/resize, and keep a short hover grace period so the pointer can travel into the card.
+Proof: `client/src/components/findings-preview-popover/FindingsPreviewPopover.tsx:189`, `client/src/app/repos/[repoId]/pulls/styles.ts:29`
+
 ## 2026-09-19 — [Architectural decision] The PR page derives severity counters locally, the list gets them from the API
 Context: the PR page already loads every review with findings; the PR list must stay one request.
 Decision: `client/src/lib/findings.ts` mirrors the server rule (newest review per agent, dismissed excluded) for the header/accordion/timeline; the list reads `PrMeta.findings` and lazily loads reviews only on hover for the popover.

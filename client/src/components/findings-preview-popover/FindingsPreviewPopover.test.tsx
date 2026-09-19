@@ -49,7 +49,22 @@ describe("FindingsPreviewPopover (L01)", () => {
     expect(screen.getAllByText("● 86% conf")).toHaveLength(6);
   });
 
-  it("closes on mouse leave and on Escape; renders the prefix", () => {
+  it("renders in a portal (document.body) so overflow:hidden ancestors cannot clip it", () => {
+    vi.useFakeTimers();
+    render(
+      <div style={{ overflow: "hidden", height: 10 }}>
+        <FindingsPreviewPopover title="1 finding" findings={[f(1)]}>
+          <span>trigger</span>
+        </FindingsPreviewPopover>
+      </div>,
+    );
+    open();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.parentElement).toBe(document.body);
+    expect(dialog.style.position).toBe("fixed");
+  });
+
+  it("keeps the card open while hovering it, closes on leave and on Escape; renders the prefix", () => {
     vi.useFakeTimers();
     render(
       <FindingsPreviewPopover title="1 finding" findings={[f(1)]} renderPrefix={() => "#482"}>
@@ -59,6 +74,20 @@ describe("FindingsPreviewPopover (L01)", () => {
     open();
     expect(screen.getByText("#482")).toBeInTheDocument();
     fireEvent.mouseLeave(screen.getByText("trigger"));
+    // Grace period: moving the pointer into the card keeps it open…
+    act(() => {
+      vi.advanceTimersByTime(50);
+    });
+    fireEvent.mouseEnter(screen.getByRole("dialog"));
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    // …leaving the card closes it after the grace period.
+    fireEvent.mouseLeave(screen.getByRole("dialog"));
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
     expect(screen.queryByRole("dialog")).toBeNull();
     open();
     fireEvent.keyDown(screen.getByText("trigger"), { key: "Escape" });
