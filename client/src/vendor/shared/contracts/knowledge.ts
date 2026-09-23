@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SeverityCounts } from './findings.js';
 
 /**
  * Conformance, Onboarding, Eval, Memory, Conventions, Skills,
@@ -182,6 +183,9 @@ export const Agent = z.object({
   // Inject repo-intel context (repo skeleton + callers + rank note) into this
   // agent's review prompt. Default on; gated again by the global flag.
   repo_intel: z.boolean().default(true),
+  // Active findings by severity across the workspace (latest review per PR for
+  // this agent, dismissed excluded); null = no reviews yet. `GET /agents` only.
+  findings: SeverityCounts.nullish(),
 });
 export type Agent = z.infer<typeof Agent>;
 

@@ -7,7 +7,9 @@
 
 import React from "react";
 import { Icon, Badge } from "@devdigest/ui";
-import type { ReviewRecord, Verdict } from "@devdigest/shared";
+import type { ReviewRecord, Verdict, SeverityCounts } from "@devdigest/shared";
+import { activeFindings, countBySeverity, type SeverityLevel } from "@/lib/findings";
+import { SeverityCounters } from "@/components/severity-counters";
 import { FindingsPanel } from "../FindingsPanel";
 import { VerdictBanner } from "../VerdictBanner";
 import { useDeleteReview } from "../../../../../../../lib/hooks/reviews";
@@ -32,10 +34,17 @@ export function ReviewRunAccordion({
   headSha,
   targetRunId = null,
   targetNonce = 0,
+  severity = null,
+  severityCounts = null,
+  onSelectSeverity,
 }: {
   review: ReviewRecord;
   prId: string;
   defaultOpen?: boolean;
+  /** L01 — active filter (URL) and the PR-level counts for the panel's filter bar. */
+  severity?: SeverityLevel | null;
+  severityCounts?: SeverityCounts | null;
+  onSelectSeverity?: (level: SeverityLevel) => void;
   repoFullName?: string | null;
   headSha?: string | null;
   /** When this matches review.run_id, the accordion opens and scrolls into view
@@ -55,6 +64,7 @@ export function ReviewRunAccordion({
   const del = useDeleteReview(prId);
   const findings = review.findings;
   const blockers = findings.filter((f) => f.severity === "CRITICAL" && !f.dismissed_at).length;
+  const runCounts = countBySeverity(activeFindings(findings));
   const verdictColor = review.verdict ? VERDICT_COLOR[review.verdict] ?? "var(--text-muted)" : "var(--text-muted)";
 
   return (
@@ -94,9 +104,9 @@ export function ReviewRunAccordion({
             {review.verdict.replace("_", " ")}
           </Badge>
         )}
+        <SeverityCounters counts={runCounts} variant="inline" active={severity} onSelect={onSelectSeverity} />
         <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-          {findings.length} finding{findings.length === 1 ? "" : "s"}
-          {blockers > 0 ? ` · ${blockers} blocker${blockers === 1 ? "" : "s"}` : ""}
+          {blockers > 0 ? `${blockers} blocker${blockers === 1 ? "" : "s"}` : ""}
         </span>
         <span style={{ flex: 1 }} />
         {review.score != null && (
@@ -154,6 +164,9 @@ export function ReviewRunAccordion({
             </div>
           )}
           <FindingsPanel
+            severity={severity}
+            severityCounts={severityCounts}
+            onSelectSeverity={onSelectSeverity}
             findings={findings}
             prId={prId}
             repoFullName={repoFullName}

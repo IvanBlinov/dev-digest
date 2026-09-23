@@ -2,6 +2,12 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-09-19 — [Architectural decision] One severity rule for PR list and agent cards
+Context: two screens count "findings" and would drift if each had its own SQL.
+Decision: `reviews/severity.ts` holds the pure rule (`countActiveFindings` per PR, `countActiveFindingsForAgent` per agent, newest review per bucket, dismissed excluded); routes only fetch lite rows and group in JS.
+Consequence: `GET /repos/:id/pulls` and `GET /agents` each run two extra IN-queries over reviews + findings (only `severity`, `dismissed_at`, `review_id` selected); acceptable for a workspace-sized list, revisit with an index on `findings(review_id, dismissed_at)` if it grows.
+Proof: `server/src/modules/reviews/severity.ts:83`, `server/src/modules/pulls/routes.ts:135`, `server/src/modules/agents/service.ts:75`
+
 ## 2026-09-17 — [Pitfall] Testcontainers cannot publish ports on this machine; use `TEST_DATABASE_URL`
 Symptom: every `*.it.test.ts` fails with "No host port found for host IP" although `docker run -p` works.
 Cause: Docker Desktop 4.42 returns an empty `NetworkSettings.Ports` for containers created by testcontainers 10.28 (verified with a bare `GenericContainer('nginx:alpine')`); the DB never gets a host port.

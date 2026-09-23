@@ -5,12 +5,19 @@ import { Icon, Avatar, Badge, Button, Tabs } from "@devdigest/ui";
 import { RunReviewDropdown } from "../RunReviewDropdown";
 import { s } from "./styles";
 import type { PrDetail } from "@/lib/types";
+import type { SeverityCounts } from "@devdigest/shared";
+import type { SeverityLevel } from "@/lib/findings";
+import { SeverityCounters } from "@/components/severity-counters";
 
 interface PrDetailHeaderProps {
   pr: PrDetail;
   prId: string | null;
   tab: string;
   findingsCount: number;
+  /** L01 — PR summary (newest review per agent, dismissed excluded); null = never reviewed. */
+  severityCounts?: SeverityCounts | null;
+  activeSeverity?: SeverityLevel | null;
+  onSelectSeverity?: (level: SeverityLevel) => void;
   /** github.com PR URL; null when the repo's full_name isn't known yet. */
   githubUrl?: string | null;
   onSetTab: (tab: string) => void;
@@ -23,6 +30,9 @@ export function PrDetailHeader({
   prId,
   tab,
   findingsCount,
+  severityCounts = null,
+  activeSeverity = null,
+  onSelectSeverity,
   githubUrl,
   onSetTab,
   onRunStart,
@@ -75,6 +85,7 @@ export function PrDetailHeader({
             <Badge dot bg="transparent" color={statusColor}>
               {pr.status}
             </Badge>
+            <SeverityCounters counts={severityCounts} active={activeSeverity} onSelect={onSelectSeverity} />
           </div>
         </div>
         <div style={s.actions}>

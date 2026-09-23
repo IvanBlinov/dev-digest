@@ -6,7 +6,8 @@ import { RunStatus } from "../RunStatus";
 import { RunHistory } from "../RunHistory/RunHistory";
 import { ReviewRunAccordion } from "../ReviewRunAccordion";
 import { s } from "./styles";
-import type { FindingRecord, ReviewRecord, RunSummary, PrCommit } from "@devdigest/shared";
+import type { FindingRecord, ReviewRecord, RunSummary, PrCommit, SeverityCounts } from "@devdigest/shared";
+import type { SeverityLevel } from "@/lib/findings";
 import type { UseMutationResult } from "@tanstack/react-query";
 
 interface FindingsTabProps {
@@ -15,6 +16,10 @@ interface FindingsTabProps {
   reviewRunning: boolean;
   lethalTrifecta: FindingRecord[];
   runs: ReviewRecord[];
+  /** L01 — URL-backed severity filter + the PR summary counters. */
+  severity?: SeverityLevel | null;
+  severityCounts?: SeverityCounts | null;
+  onSelectSeverity?: (level: SeverityLevel) => void;
   prRuns: RunSummary[] | undefined;
   prCommits: PrCommit[];
   cancelMutation: UseMutationResult<any, any, string, any>;
@@ -32,6 +37,9 @@ export function FindingsTab({
   reviewRunning,
   lethalTrifecta,
   runs,
+  severity = null,
+  severityCounts = null,
+  onSelectSeverity,
   prRuns,
   prCommits,
   cancelMutation,
@@ -70,6 +78,13 @@ export function FindingsTab({
   const handleGoToReview = useCallback((runId: string) => {
     setTarget((p) => ({ runId, n: (p?.n ?? 0) + 1 }));
   }, []);
+
+  // Timeline rows show their run's own findings (review ↔ run via run_id).
+  const reviewsByRunId = React.useMemo(() => {
+    const m = new Map<string, ReviewRecord>();
+    for (const r of runs) if (r.run_id) m.set(r.run_id, r);
+    return m;
+  }, [runs]);
 
   return (
     <section>
@@ -130,6 +145,7 @@ export function FindingsTab({
           </SectionLabel>
           <RunHistory
             runs={prRuns ?? []}
+            reviewsByRunId={reviewsByRunId}
             commits={prCommits}
             onOpenTrace={handleOpenTrace}
             onGoToReview={handleGoToReview}
@@ -160,6 +176,9 @@ export function FindingsTab({
             review={review}
             prId={prId}
             defaultOpen={i === 0}
+            severity={severity}
+            severityCounts={severityCounts}
+            onSelectSeverity={onSelectSeverity}
             repoFullName={repoFullName}
             headSha={headSha}
             targetRunId={target?.runId ?? null}

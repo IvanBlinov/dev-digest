@@ -10,6 +10,9 @@ import type {
 } from '@devdigest/shared';
 import { AgentsRepository } from './repository.js';
 import { toAgentDto, toAgentVersionDto } from './helpers.js';
+import { ReviewRepository } from '../reviews/repository.js';
+import { countActiveFindingsForAgent, groupBy, pickLatestBy } from '../reviews/severity.js';
+import type { FindingPreview } from '@devdigest/shared';
 
 /**
  * A2 — agents service. Business logic for the Agents tab + Agent Editor.
@@ -50,14 +53,37 @@ export interface UpdateAgentInput {
 
 export class AgentsService {
   private repo: AgentsRepository;
+  private reviews: ReviewRepository;
 
   constructor(private container: Container) {
     this.repo = new AgentsRepository(container.db);
+    this.reviews = new ReviewRepository(container.db);
   }
 
+  /**
+   * Agents with their active findings by severity (L01): for each agent, its
+   * newest review per PR, dismissed excluded — the same rule the PR list uses.
+   */
   async list(workspaceId: string): Promise<Agent[]> {
     const rows = await this.repo.list(workspaceId);
-    return rows.map(toAgentDto);
+    const summary = await this.reviews.severitySummaryForWorkspace(workspaceId);
+    const reviewsByAgent = groupBy(summary.reviews, (r) => r.agentId ?? '');
+    const findingsByReview = groupBy(summary.findings, (f) => f.reviewId);
+    return rows.map((row) => {
+      const reviews = reviewsByAgent.get(row.id) ?? [];
+      const findings = reviews.flatMap((r) => findingsByReview.get(r.id) ?? []);
+      return { ...toAgentDto(row), findings: countActiveFindingsForAgent(reviews, findings) };
+    });
+  }
+
+  /** Newest active findings of one agent (latest review per PR) for the hover preview. */
+  async recentFindings(workspaceId: string, agentId: string, limit: number): Promise<FindingPreview[] | undefined> {
+    const agent = await this.repo.getById(workspaceId, agentId);
+    if (!agent) return undefined;
+    const summary = await this.reviews.severitySummaryForWorkspace(workspaceId);
+    const mine = summary.reviews.filter((r) => r.agentId === agentId);
+    const latestIds = pickLatestBy(mine, (r) => r.prId).map((r) => r.id);
+    return this.reviews.recentActiveFindings(latestIds, limit);
   }
 
   async get(workspaceId: string, id: string): Promise<Agent | undefined> {

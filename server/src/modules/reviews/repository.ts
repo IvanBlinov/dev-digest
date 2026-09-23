@@ -1,6 +1,6 @@
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
-import type { Finding, Intent, RunSummary, RunTrace } from '@devdigest/shared';
+import type { Finding, FindingPreview, Intent, RunSummary, RunTrace } from '@devdigest/shared';
 
 /**
  * A2 — review data-access. The ONLY layer touching the DB for the review
@@ -66,6 +66,19 @@ export class ReviewRepository {
 
   getReview(reviewId: string): Promise<ReviewRow | undefined> {
     return reviewRepo.getReview(this.db, reviewId);
+  }
+
+  /** L01 — rows for the findings-by-severity rule (see ./severity.ts). */
+  severitySummaryForPulls(prIds: string[]): Promise<reviewRepo.SeveritySummaryRows> {
+    return reviewRepo.severitySummaryForPulls(this.db, prIds);
+  }
+
+  severitySummaryForWorkspace(workspaceId: string): Promise<reviewRepo.SeveritySummaryRows> {
+    return reviewRepo.severitySummaryForWorkspace(this.db, workspaceId);
+  }
+
+  recentActiveFindings(reviewIds: string[], limit: number): Promise<FindingPreview[]> {
+    return reviewRepo.recentActiveFindings(this.db, reviewIds, limit);
   }
 
   /** In-flight runs for a PR (status='running') — the server-side source of

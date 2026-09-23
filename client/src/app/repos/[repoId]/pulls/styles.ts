@@ -48,6 +48,8 @@ export const s = {
   muted: { color: "var(--text-muted)" } satisfies CSSProperties,
   /** L01 — summed run cost; monospace, muted, so it reads as a number not a label. */
   costCell: { fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
+  /** L01 — severity counters; the popover anchors here. */
+  findingsCell: { display: "flex", alignItems: "center" } satisfies CSSProperties,
   filterBar: {
     display: "flex",
     alignItems: "center",

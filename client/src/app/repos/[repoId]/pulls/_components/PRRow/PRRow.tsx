@@ -4,11 +4,16 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { useQueryClient } from "@tanstack/react-query";
 import { Icon, Avatar, Badge, CircularScore } from "@devdigest/ui";
 import type { PrMeta } from "@/lib/types";
 import { SIZE_COLOR, STATUS_META } from "../../constants";
 import { relativeTime, sizeOf } from "../../helpers";
 import { formatUsd } from "@/lib/format-usd";
+import { prActiveFindings, totalCount, type SeverityLevel } from "@/lib/findings";
+import { usePrReviews, prefetchPrReviews } from "@/lib/hooks/reviews";
+import { SeverityCounters } from "@/components/severity-counters";
+import { FindingsPreviewPopover } from "@/components/findings-preview-popover";
 import { s } from "../../styles";
 
 export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
@@ -18,6 +23,18 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
   const st = STATUS_META[pr.status] ?? STATUS_META.needs_review!;
   const { size, lines } = sizeOf(pr);
   const reviewed = pr.score != null; // null score ⇒ PR has never been reviewed
+  const qc = useQueryClient();
+  const [previewOn, setPreviewOn] = React.useState(false);
+  // Reviews load lazily on hover (existing endpoint, cached) — the list itself
+  // only carries the counters.
+  const reviews = usePrReviews(previewOn && pr.id ? pr.id : null);
+  const previewFindings = React.useMemo(() => prActiveFindings(reviews.data ?? []), [reviews.data]);
+  const agentName = React.useMemo(() => {
+    const byReview = new Map<string, string>();
+    for (const r of reviews.data ?? []) byReview.set(r.id, r.agent_name ?? "Agent");
+    return byReview;
+  }, [reviews.data]);
+  const hrefFor = (level: SeverityLevel) => `/repos/${repoId}/pulls/${pr.number}?tab=findings&severity=${level}`;
   return (
     <div
       onMouseEnter={() => setH(true)}
@@ -52,6 +69,26 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
           <CircularScore score={pr.score!} size={34} stroke={3} />
         ) : (
           <span style={s.muted}>—</span>
+        )}
+      </div>
+      <div
+        style={s.findingsCell}
+        onMouseEnter={() => {
+          setPreviewOn(true);
+          if (pr.id) prefetchPrReviews(qc, pr.id);
+        }}
+      >
+        {pr.findings && totalCount(pr.findings) > 0 ? (
+          <FindingsPreviewPopover
+            title={t("preview.pr", { count: totalCount(pr.findings) })}
+            findings={previewFindings}
+            loading={reviews.isLoading}
+            renderPrefix={(f) => agentName.get(f.review_id) ?? null}
+          >
+            <SeverityCounters counts={pr.findings} hrefFor={hrefFor} onSelect={(l) => router.push(hrefFor(l))} />
+          </FindingsPreviewPopover>
+        ) : (
+          <SeverityCounters counts={pr.findings} />
         )}
       </div>
       <div className="mono" style={s.costCell}>

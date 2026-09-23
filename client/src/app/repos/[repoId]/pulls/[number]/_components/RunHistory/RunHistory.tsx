@@ -3,7 +3,10 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Badge, Icon, CircularScore, type IconName } from "@devdigest/ui";
-import type { RunSummary, PrCommit } from "@devdigest/shared";
+import type { RunSummary, PrCommit, ReviewRecord } from "@devdigest/shared";
+import { activeFindings, countBySeverity, totalCount } from "@/lib/findings";
+import { SeverityCounters } from "@/components/severity-counters";
+import { FindingsPreviewPopover } from "@/components/findings-preview-popover";
 import { formatUsd } from "../../../../../../../lib/format-usd";
 
 /**
@@ -87,12 +90,15 @@ function tsOf(s: string | null | undefined): number {
 
 export function RunHistory({
   runs,
+  reviewsByRunId,
   commits = [],
   onOpenTrace,
   onGoToReview,
   onDelete,
 }: {
   runs: RunSummary[];
+  /** L01 — review per run (by run_id) so a row can show its own severity counters. */
+  reviewsByRunId?: Map<string, ReviewRecord>;
   commits?: PrCommit[];
   /** Open the trace + log drawer for a run (the logs icon). */
   onOpenTrace: (runId: string) => void;
@@ -189,12 +195,25 @@ export function RunHistory({
                   {r.error}
                 </div>
               )}
-              {settled && (
-                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  {t("runStatus.findings", { count: r.findings_count ?? 0 })}
-                  {(r.blockers ?? 0) > 0 ? t("runStatus.blockers", { count: r.blockers ?? 0 }) : ""}
-                </div>
-              )}
+              {settled && (() => {
+                const review = reviewsByRunId?.get(r.run_id);
+                const active = review ? activeFindings(review.findings) : null;
+                const counts = active ? countBySeverity(active) : null;
+                return (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-muted)" }}>
+                    {counts && active && totalCount(counts) > 0 ? (
+                      <FindingsPreviewPopover title={t("preview.run", { count: totalCount(counts) })} findings={active}>
+                        <SeverityCounters counts={counts} variant="inline" />
+                      </FindingsPreviewPopover>
+                    ) : counts ? (
+                      <SeverityCounters counts={counts} variant="inline" />
+                    ) : (
+                      <span>{t("runStatus.findings", { count: r.findings_count ?? 0 })}</span>
+                    )}
+                    {(r.blockers ?? 0) > 0 ? <span>{t("runStatus.blockers", { count: r.blockers ?? 0 })}</span> : null}
+                  </div>
+                );
+              })()}
             </div>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, fontSize: 11, color: "var(--text-muted)", flexShrink: 0 }}>
               {r.ran_at && <span>{new Date(r.ran_at).toLocaleTimeString()}</span>}

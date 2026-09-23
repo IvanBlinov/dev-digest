@@ -214,3 +214,12 @@ export function useRunEvents(runIds: string[]) {
 
   return { events, running };
 }
+
+/** Warm the reviews cache for a PR (hover on the PR list → instant popover). */
+export function prefetchPrReviews(qc: ReturnType<typeof useQueryClient>, prId: string): void {
+  void qc.prefetchQuery({
+    queryKey: ["reviews", prId],
+    queryFn: () => api.get<ReviewRecord[]>(`/pulls/${prId}/reviews`),
+    staleTime: 30_000,
+  });
+}

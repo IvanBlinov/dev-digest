@@ -3,12 +3,22 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
-import type { Agent, ModelInfo, Provider, ReviewStrategy } from "@devdigest/shared";
+import type { Agent, FindingPreview, ModelInfo, Provider, ReviewStrategy } from "@devdigest/shared";
 
 export function useAgents() {
   return useQuery({
     queryKey: ["agents"],
     queryFn: () => api.get<Agent[]>("/agents"),
+  });
+}
+
+/** L01 — newest active findings of an agent (hover preview); fetched only when `enabled`. */
+export function useAgentFindings(id: string | null | undefined, enabled: boolean, limit = 6) {
+  return useQuery({
+    queryKey: ["agent-findings", id, limit],
+    queryFn: () => api.get<FindingPreview[]>(`/agents/${id}/findings?limit=${limit}`),
+    enabled: !!id && enabled,
+    staleTime: 30_000,
   });
 }
 

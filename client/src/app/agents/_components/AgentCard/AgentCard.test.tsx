@@ -1,9 +1,21 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Agent } from "@devdigest/shared";
 import messages from "../../../../../messages/en/agents.json";
+vi.mock("../../../../lib/hooks/agents", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  useAgentFindings: (_id: string, enabled: boolean) => ({
+    data: enabled
+      ? [
+          { id: "f1", severity: "CRITICAL", category: "security", title: "Hardcoded key", file: "src/config.ts", start_line: 12, end_line: 12, confidence: 0.98, rationale: "sk_live in diff", review_id: "rv", pr_id: "pr", pr_number: 482 },
+        ]
+      : undefined,
+    isLoading: false,
+  }),
+}));
+
 import { AgentCard } from "./AgentCard";
 
 afterEach(cleanup);
@@ -45,5 +57,28 @@ describe("AgentCard (smoke)", () => {
   it("falls back to a translated placeholder when description is empty", () => {
     renderWithIntl(<AgentCard ag={{ ...AGENT, description: "" }} />);
     expect(screen.getByText("No description")).toBeInTheDocument();
+  });
+
+  it("L01: shows findings counters and a hover preview with PR numbers", () => {
+    vi.useFakeTimers();
+    try {
+      renderWithIntl(<AgentCard ag={{ ...AGENT, findings: { critical: 1, warning: 0, suggestion: 0 } }} />);
+      const chip = screen.getByLabelText("1 critical finding");
+      expect(chip).toBeInTheDocument();
+      fireEvent.mouseEnter(chip.parentElement!.parentElement!);
+      fireEvent.mouseEnter(chip.parentElement!);
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+      expect(screen.getByText("#482")).toBeInTheDocument();
+      expect(screen.getByText("Hardcoded key")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("L01: an agent without reviews shows —", () => {
+    renderWithIntl(<AgentCard ag={{ ...AGENT, findings: null }} />);
+    expect(screen.getByLabelText("Not reviewed yet")).toBeInTheDocument();
   });
 });

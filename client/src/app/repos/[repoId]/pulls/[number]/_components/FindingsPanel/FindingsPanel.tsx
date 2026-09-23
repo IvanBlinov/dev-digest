@@ -5,7 +5,8 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Toggle, EmptyState } from "@devdigest/ui";
-import type { FindingRecord } from "@devdigest/shared";
+import type { FindingRecord, SeverityCounts } from "@devdigest/shared";
+import { SEVERITY_LEVELS, type SeverityLevel } from "@/lib/findings";
 import { FindingCard } from "../FindingCard";
 import { useFindingAction } from "../../../../../../../lib/hooks/reviews";
 import { KEY_TO_ACTION } from "./constants";
@@ -17,9 +18,16 @@ export function FindingsPanel({
   prId,
   repoFullName,
   headSha,
+  severity = null,
+  severityCounts = null,
+  onSelectSeverity,
 }: {
   findings: FindingRecord[];
   prId: string;
+  /** L01 — active severity filter (URL-backed) and the counts for the filter bar. */
+  severity?: SeverityLevel | null;
+  severityCounts?: SeverityCounts | null;
+  onSelectSeverity?: (level: SeverityLevel) => void;
   repoFullName?: string | null;
   headSha?: string | null;
 }) {
@@ -28,7 +36,11 @@ export function FindingsPanel({
   const [hideLow, setHideLow] = React.useState(false);
   const [focusIdx, setFocusIdx] = React.useState(0);
 
-  const shown = React.useMemo(() => visibleFindings(findings, hideLow), [findings, hideLow]);
+  const shown = React.useMemo(() => visibleFindings(findings, hideLow, severity), [findings, hideLow, severity]);
+  // Keep the keyboard cursor inside the (possibly shorter) filtered list.
+  React.useEffect(() => {
+    setFocusIdx((i) => Math.min(i, Math.max(shown.length - 1, 0)));
+  }, [shown.length]);
 
   // j/k navigation + a/d shortcuts on the focused finding (keyboard).
   React.useEffect(() => {
@@ -48,6 +60,30 @@ export function FindingsPanel({
   return (
     <div>
       <div style={s.toolbar}>
+        {onSelectSeverity && (
+          <div style={s.filterBar} role="group" aria-label="Filter by severity">
+            <button
+              type="button"
+              aria-pressed={severity == null}
+              style={s.filterChip(severity == null, "var(--text-secondary)")}
+              onClick={() => severity && onSelectSeverity(severity)}
+            >
+              {t("panel.filter.all")}
+            </button>
+            {SEVERITY_LEVELS.map((m) => (
+              <button
+                key={m.level}
+                type="button"
+                aria-pressed={severity === m.level}
+                style={s.filterChip(severity === m.level, m.color)}
+                onClick={() => onSelectSeverity(m.level)}
+              >
+                {t(`panel.filter.${m.level}`)}
+                {severityCounts ? <span className="mono tnum"> {severityCounts[m.key]}</span> : null}
+              </button>
+            ))}
+          </div>
+        )}
         <div style={s.toggleGroup}>
           {t("panel.hideLowConfidence")}
           <Toggle on={hideLow} onChange={setHideLow} size={16} />
@@ -56,7 +92,11 @@ export function FindingsPanel({
 
       <div style={s.list}>
         {shown.length === 0 ? (
-          <EmptyState icon="Filter" title={t("panel.noMatchTitle")} body={t("panel.noMatchBody")} />
+          <EmptyState
+            icon="Filter"
+            title={severity ? t("panel.filter.noneAtLevel", { level: t(`panel.filter.${severity}`).toLowerCase() }) : t("panel.noMatchTitle")}
+            body={severity ? t("panel.filter.noneAtLevelBody") : t("panel.noMatchBody")}
+          />
         ) : (
           shown.map((f, i) => (
             <FindingCard

@@ -6,7 +6,10 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { Icon, Badge, Toggle } from "@devdigest/ui";
 import type { Agent } from "@devdigest/shared";
-import { useDeleteAgent } from "../../../../lib/hooks/agents";
+import { useDeleteAgent, useAgentFindings } from "../../../../lib/hooks/agents";
+import { totalCount } from "@/lib/findings";
+import { SeverityCounters } from "@/components/severity-counters";
+import { FindingsPreviewPopover } from "@/components/findings-preview-popover";
 import { modelColor } from "./helpers";
 import { s } from "./styles";
 
@@ -26,6 +29,10 @@ export function AgentCard({
   const t = useTranslations("agents");
   const del = useDeleteAgent();
   const color = modelColor(ag.model);
+  // L01 — findings by severity (workspace-wide); the preview loads on hover only.
+  const [previewOn, setPreviewOn] = React.useState(false);
+  const total = ag.findings ? totalCount(ag.findings) : 0;
+  const preview = useAgentFindings(ag.id, previewOn && total > 0);
   return (
     <div onClick={onClick} style={s.card(!!active, ag.enabled)}>
       <div style={s.headerRow}>
@@ -68,6 +75,25 @@ export function AgentCard({
             {t("card.skillCount", { count: skillCount })}
           </Badge>
         )}
+        <span
+          style={{ marginLeft: "auto", display: "inline-flex" }}
+          title={t("card.findings")}
+          onMouseEnter={() => setPreviewOn(true)}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {total > 0 ? (
+            <FindingsPreviewPopover
+              title={t("card.findingsPreview", { count: total })}
+              findings={preview.data ?? []}
+              loading={preview.isLoading}
+              renderPrefix={(f) => `#${f.pr_number}`}
+            >
+              <SeverityCounters counts={ag.findings} />
+            </FindingsPreviewPopover>
+          ) : (
+            <SeverityCounters counts={ag.findings ?? null} />
+          )}
+        </span>
       </div>
     </div>
   );
