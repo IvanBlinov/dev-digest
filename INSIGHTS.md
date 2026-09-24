@@ -3,6 +3,12 @@
 Dated entries, newest first. Format and rubrics: [.claude/skills/engineering-insights/SKILL.md](.claude/skills/engineering-insights/SKILL.md).
 Module-specific lessons go into the module's own `INSIGHTS.md` (`server/`, `client/`, `reviewer-core/`, `e2e/`).
 
+## 2026-09-23 — [Pitfall] `CLAUDE.md` must be a symlink to `AGENTS.md`, not an `@AGENTS.md` import
+Symptom: a headless `claude -p` session launched in `server/` did not see the root "Do not touch" rules when the root `CLAUDE.md` contained only `@AGENTS.md`.
+Cause: Claude Code did not expand an `@` import from a parent-directory `CLAUDE.md` when the session started in a subdirectory, whether written as `@AGENTS.md` or `@./AGENTS.md`. A launch from the repo root expanded it fine.
+Rule: keep every `CLAUDE.md` as a symlink to the `AGENTS.md` next to it (`ln -s AGENTS.md CLAUDE.md`), and edit only `AGENTS.md`. Verified from the root, from `server/`, and with the lazy load of nested files.
+Proof: `AGENTS.md:9`, `CLAUDE.md` (symlink → `AGENTS.md`), `server/CLAUDE.md` (symlink)
+
 ## 2026-09-17 — [Pitfall] `docker compose down -v` wipes the dev database
 Symptom: all imported repos and reviews vanished after a "reset".
 Cause: `-v` removes the named volume `devdigest_pgdata`, which the dev stack and every imported repo share.

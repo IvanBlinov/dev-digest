@@ -6,7 +6,7 @@ description: "Capture engineering insights discovered during ANY task in this re
 # Engineering Insights
 
 This skill is **always on**. It is not a feature you are asked to use; it is part of finishing
-any task in this repository. The root `CLAUDE.md` mandates it and a Stop hook checks it.
+any task in this repository. The root `AGENTS.md` mandates it (in Claude Code a Stop hook also checks it).
 
 ## The rule
 
