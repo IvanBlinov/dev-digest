@@ -36,14 +36,31 @@ export const ToolCall = z.object({
 });
 export type ToolCall = z.infer<typeof ToolCall>;
 
+/** One skill as injected into the prompt, in prompt order (L02). */
+export const SkillPromptBlock = z.object({
+  skill_id: z.string(),
+  name: z.string(),
+  version: z.number().int(),
+  type: z.string(),
+  /** Tokens of this skill's block alone (tokenizer count). */
+  tokens: z.number().int(),
+  text: z.string(),
+});
+export type SkillPromptBlock = z.infer<typeof SkillPromptBlock>;
+
 export const PromptAssembly = z.object({
   system: z.string(),
   skills: z.string().nullish(),
+  /** Per-skill blocks in prompt order; absent/empty when no skill was enabled. */
+  skills_blocks: z.array(SkillPromptBlock).nullish(),
+  /** Tokens of the whole skills block (all enabled skills together), not the whole prompt. */
+  skills_tokens: z.number().int().nullish(),
   memory: z.string().nullish(),
   specs: z.string().nullish(),
-  /** Callers-of-changed-symbols digest (repo-intel); null when absent. */
+  /** Callers-of-changed-symbols digest (T1.3); null when absent. */
   callers: z.string().nullish(),
-  /** Repo skeleton / map (repo-intel); null when absent. */
+  /** Repo skeleton / map (T3); null when absent. Enables per-slot token
+      attribution in the run trace. */
   repo_map: z.string().nullish(),
   /** PR author's description/body (truncated); null when absent. */
   pr_description: z.string().nullish(),
