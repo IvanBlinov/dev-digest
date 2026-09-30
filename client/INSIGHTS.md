@@ -2,6 +2,12 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-09-29 — [Non-obvious behaviour] `api.ts` is generic — new endpoints need only a hook
+Symptom: client/AGENTS.md told agents to add a per-endpoint function to `src/lib/api.ts`, which has none to extend.
+Cause: `api` exposes only `get/post/put/patch/del`; every hook calls them directly with the path and a `@devdigest/shared` type.
+Rule: new endpoint → hook in `src/lib/hooks/<area>.ts` calling `api.get<T>(...)`; `api.ts` stays unchanged (AGENTS.md corrected).
+Proof: `client/src/lib/api.ts:65`, `client/src/lib/hooks/core.ts:102`
+
 ## 2026-09-19 — [Pitfall] Absolutely-positioned popovers get clipped by the PR table and agent cards
 Symptom: the findings preview was cut off at the bottom edge of the PR list card (only the header and first row visible).
 Cause: `tableCard` and `AgentCard` use `overflow: hidden` for rounded corners, so any descendant positioned outside their box is clipped.

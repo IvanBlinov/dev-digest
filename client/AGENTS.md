@@ -36,12 +36,12 @@ Dev server: `next dev -p 3000` (run inside tmux). Needs the API on `:3001`.
 ## Conventions
 
 - **Server vs client components.** Default to server components; add `'use client'` only where hooks or browser APIs are needed.
-- **No fetch outside `src/lib/api.ts`.** New endpoints get a function there and a hook in `src/lib/hooks/`.
+- **No fetch outside `src/lib/api.ts`.** Hooks in `src/lib/hooks/` call its generic `api.get/post/put/patch/del`; a new endpoint needs only a hook.
 - **Contracts, not ad-hoc types.** Response types come from `@devdigest/shared` Zod schemas.
 - **UI primitives first.** Use `src/vendor/ui` before writing new styled components.
 - **Strings through next-intl.** No hard-coded user-facing text in components.
 - **Tests colocated.** Every `_components/<Name>/` ships a `*.test.tsx` (React Testing Library); mock `fetch`, never spin up the API.
-- Skills: `next-best-practices`, `react-best-practices`, `react-testing-library` in [../.claude/skills/](../.claude/skills/README.md).
+- Skills: **`frontend-architecture`** (where files go, naming, tests — read before adding files), `next-best-practices`, `react-best-practices`, `react-testing-library` in [../.claude/skills/](../.claude/skills/README.md).
 
 ## Boundaries
 

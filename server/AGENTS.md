@@ -46,6 +46,7 @@ Dev server: `tsx watch src/server.ts` on `:3001` (run inside tmux).
 - **Services depend on ports, not adapters.** Resolve everything through the DI container so tests can swap `MockLLMProvider`, `MockGitClient`, etc.
 - **Tests split by filename.** `*.it.test.ts` = real Postgres via testcontainers (self-skips without Docker). Everything else must be hermetic and key-free.
 - **Rate limits.** Global 120/min (off under `NODE_ENV=test`); tighter per-route caps on expensive endpoints like `POST /pulls/:id/review`. SSE and `/health*` are exempt.
+- **Layering:** follow the `onion-architecture` skill — routes delegate to services; only services reach ports via the container; `pulls`/`polling`/`settings`/`workspace` routes are legacy, do not copy.
 - **New module checklist:** `modules/<name>/` → register in `modules/index.ts` → contracts in `vendor/shared` → an `*.it.test.ts` for any DB-backed route → spec in `specs/`.
 
 ## Boundaries

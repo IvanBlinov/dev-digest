@@ -117,3 +117,4 @@ In Claude Code a Stop hook (`.claude/hooks/insights-reminder.sh`) also enforces 
 2. Tests first, then implementation (see [TESTING.md](TESTING.md) for which suite).
 3. Record insights as you go (see above), then run the check commands for every package you touched.
 4. Update the module `README.md` only when the "what is it / how to run" story changes.
+5. Before opening a PR, run the `pr-self-review` skill ([.claude/skills/pr-self-review/SKILL.md](.claude/skills/pr-self-review/SKILL.md)).
