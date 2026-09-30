@@ -65,6 +65,10 @@ export const s = {
   promptHead: { display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", cursor: "pointer" } satisfies CSSProperties,
   promptDot: (color: string): CSSProperties => ({ width: 7, height: 7, borderRadius: 2, background: color }),
   promptLabel: { fontSize: 13, fontWeight: 600 } satisfies CSSProperties,
+  // ---- SkillsBlocks (L02) ----
+  skillsGroup: { marginBottom: 8, paddingLeft: 10, borderLeft: "2px solid var(--accent)" } satisfies CSSProperties,
+  skillsHead: { display: "flex", alignItems: "center", gap: 10, padding: "4px 2px 8px" } satisfies CSSProperties,
+  skillsSummary: { marginLeft: "auto", fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
   promptToggle: { marginLeft: "auto", fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
   promptPre: {
     margin: 0,

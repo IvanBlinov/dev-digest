@@ -2,6 +2,30 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-09-29 — [Security] Skill `.zip` import rejects zip bombs before inflating
+Context: imported archives are untrusted uploads.
+Decision: the `unzipSync` filter checks entry count (≤ 200) and the declared uncompressed total (≤ 5 MB) from the central directory before anything is inflated, and only `.md` entries are ever inflated; every other entry is only listed as ignored, never stored.
+Consequence: do not replace the filter with a plain `unzipSync(bytes)`; keep the limits in `skills/constants.ts`.
+Proof: `server/src/modules/skills/import.ts:64`
+
+## 2026-09-29 — [Non-obvious behaviour] Skill import routes need their own `bodyLimit`
+Symptom: a ~1 MB `.zip` upload is rejected with 413 although the upload limit is 1 MB.
+Cause: the app-wide `bodyLimit` is 1 MiB and the file travels base64-encoded in JSON (×4/3).
+Rule: routes that accept base64 files set `bodyLimit: IMPORT_BODY_LIMIT` per route; don't raise the global cap.
+Proof: `server/src/app.ts:49`, `server/src/modules/skills/constants.ts:17`
+
+## 2026-09-29 — [Non-obvious behaviour] `skills_tokens` is counted on the joined section, not summed per skill
+Symptom: summing each skill block's tokens gives a slightly different number than the trace total.
+Cause: reviewer-core joins skill texts with a blank line before inserting them, so the section the model sees has separators the per-block counts omit.
+Rule: count the total with the same joiner (`buildSkillsPrompt` does); per-block counts are for attribution only.
+Proof: `reviewer-core/src/prompt.ts:89`, `server/src/modules/reviews/skills-prompt.ts:54`
+
+## 2026-09-29 — [Pitfall] DB-backed tests silently skip when `docker info` is slow
+Symptom: `*.it.test.ts` reported as skipped (not failed) on a loaded machine although Docker was running.
+Cause: `dockerAvailable()` shells out to `docker info` with a 5 s timeout and caches `false` on timeout.
+Rule: a green run with skipped it-tests is not a pass — check the skip count and re-run when the machine is idle.
+Proof: `server/test/helpers/pg.ts:33`
+
 ## 2026-09-29 — [Non-obvious behaviour] Four route files bypass the service layer — do not copy them
 Symptom: an agent asked to "do what pulls/routes.ts does" puts `container.db` / `container.github()` calls in a handler.
 Cause: `pulls`, `polling`, `settings` and `workspace` routes predate the route → service → repository split that `agents`, `repos` and `reviews` follow.

@@ -8,6 +8,7 @@ import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './reposit
 import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
+import { buildSkillsPrompt, skillsLogLine, type EffectiveSkillsSource } from './skills-prompt.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -45,6 +46,7 @@ export class ReviewRunExecutor {
     private container: Container,
     private repo: ReviewRepository,
     private agents: Container['agentsRepo'],
+    private skills: EffectiveSkillsSource,
   ) {}
 
   /**
@@ -184,6 +186,16 @@ export class ReviewRunExecutor {
 
       const task = taskLine(pull) + rankNote;
 
+      // L02 — the agent's effective skills (link.enabled AND skill.enabled, in
+      // link order) become `### Skill:` blocks in the prompt, in that order.
+      // A lookup failure fails the run: a review silently missing its rules
+      // would look valid but answer a different question.
+      const skillsPlan = buildSkillsPrompt(
+        await this.skills.effectiveSkillsForAgent(agent.id),
+        this.container.tokenizer,
+      );
+      runLog.info(skillsLogLine(skillsPlan));
+
       // ---- Engine: assemble → single-pass → grounding -----------------------
       // The pure review pipeline lives in @devdigest/reviewer-core (shared with
       // the CI runner). The service owns only I/O: repo-intel context resolution
@@ -201,6 +213,8 @@ export class ReviewRunExecutor {
         ...(callersDigest ? { callers: callersDigest } : {}),
         // T3 — repo skeleton, same omit-when-empty contract.
         ...(repoMap ? { repoMap } : {}),
+        // L02 — omitted when no skill is enabled (prompt identical to pre-L02).
+        ...(skillsPlan.texts.length > 0 ? { skills: skillsPlan.texts } : {}),
         // PR author's description/body — untrusted; assemblePrompt wraps +
         // truncates it. Omitted when the PR has no body.
         ...(pull.body ? { prDescription: pull.body } : {}),
@@ -271,7 +285,11 @@ export class ReviewRunExecutor {
           grounding,
           cost_usd: costUsd,
         },
-        prompt_assembly: outcome.assembly,
+        prompt_assembly: {
+          ...outcome.assembly,
+          skills_blocks: skillsPlan.blocks.length > 0 ? skillsPlan.blocks : null,
+          skills_tokens: skillsPlan.totalTokens,
+        },
         tool_calls: outcome.chunks.map((c) => ({
           tool: 'review_file',
           args: c.label,
@@ -426,7 +444,15 @@ export class ReviewRunExecutor {
         source: 'local',
       },
       stats: { duration_ms: durationMs, tokens_in: 0, tokens_out: 0, findings: 0, grounding, cost_usd: null },
-      prompt_assembly: { system: agent.systemPrompt, skills: null, memory: null, specs: null, user: '' },
+      prompt_assembly: {
+        system: agent.systemPrompt,
+        skills: null,
+        skills_blocks: null,
+        skills_tokens: null,
+        memory: null,
+        specs: null,
+        user: '',
+      },
       tool_calls: [],
       raw_output: '',
       memory_pulled: [],

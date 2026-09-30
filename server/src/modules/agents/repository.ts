@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
@@ -209,10 +209,10 @@ export class AgentsRepository {
   async linkSkill(agentId: string, skillId: string, order: number): Promise<void> {
     await this.db
       .insert(t.agentSkills)
-      .values({ agentId, skillId, order })
+      .values({ agentId, skillId, order, enabled: true })
       .onConflictDoUpdate({
         target: [t.agentSkills.agentId, t.agentSkills.skillId],
-        set: { order },
+        set: { order, enabled: true },
       });
   }
 
@@ -228,10 +228,37 @@ export class AgentsRepository {
    * the list are unlinked.
    */
   async setSkills(agentId: string, skillIds: string[]): Promise<void> {
-    await this.db.delete(t.agentSkills).where(eq(t.agentSkills.agentId, agentId));
-    if (skillIds.length === 0) return;
-    await this.db
-      .insert(t.agentSkills)
-      .values(skillIds.map((skillId, i) => ({ agentId, skillId, order: i })));
+    await this.replaceSkillLinks(
+      agentId,
+      skillIds.map((skill_id) => ({ skill_id, enabled: true })),
+    );
+  }
+
+  /**
+   * L02 — atomically replace every link of an agent with `items`, order = index,
+   * keeping each item's per-agent `enabled` flag. Callers validate the ids.
+   */
+  async replaceSkillLinks(
+    agentId: string,
+    items: ReadonlyArray<{ skill_id: string; enabled: boolean }>,
+  ): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx.delete(t.agentSkills).where(eq(t.agentSkills.agentId, agentId));
+      if (items.length === 0) return;
+      await tx.insert(t.agentSkills).values(
+        items.map((item, i) => ({ agentId, skillId: item.skill_id, order: i, enabled: item.enabled })),
+      );
+    });
+  }
+
+  /** L02 — per agent, the number of links with the per-agent switch on. */
+  async enabledSkillCounts(agentIds: string[]): Promise<Map<string, number>> {
+    if (agentIds.length === 0) return new Map();
+    const rows = await this.db
+      .select({ agentId: t.agentSkills.agentId, n: count() })
+      .from(t.agentSkills)
+      .where(and(inArray(t.agentSkills.agentId, agentIds), eq(t.agentSkills.enabled, true)))
+      .groupBy(t.agentSkills.agentId);
+    return new Map(rows.map((r) => [r.agentId, Number(r.n)]));
   }
 }

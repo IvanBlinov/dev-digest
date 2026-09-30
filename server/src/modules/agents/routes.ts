@@ -28,7 +28,7 @@ const VersionParams = z.object({
  *   GET    /agents/:id/versions     → config history (newest first)
  *   GET    /agents/:id/versions/:version → one config snapshot
  *   GET    /agents/:id/skills       → linked skills (ordered)
- *   POST   /agents/:id/skills       → set/reorder linked skills OR link one
+ *   POST   /agents/:id/skills       → replace links (items) / set-reorder (skill_ids) / link one
  *   GET    /agents/:id/models       → dynamic model list for the agent's provider
  *   GET    /providers/:id/models    → dynamic model list for a provider (editor)
  */
@@ -59,16 +59,27 @@ const UpdateAgentBody = z.object({
   enabled: z.boolean().optional(),
 });
 
-/** Either set the whole ordered set (`skill_ids`) or link one (`skill_id`). */
+/** Upper bound for one replacement payload (a workspace-sized skill list). */
+const MAX_SKILL_LINKS = 500;
+
+/**
+ * Either replace the whole ordered set with per-link switches (`items`, L02),
+ * set the whole ordered set all-enabled (`skill_ids`), or link one (`skill_id`).
+ */
 const SetSkillsBody = z
   .object({
-    skill_ids: z.array(z.string().uuid()).optional(),
+    items: z
+      .array(z.object({ skill_id: z.string().uuid(), enabled: z.boolean() }))
+      .max(MAX_SKILL_LINKS)
+      .optional(),
+    skill_ids: z.array(z.string().uuid()).max(MAX_SKILL_LINKS).optional(),
     skill_id: z.string().uuid().optional(),
     order: z.number().int().optional(),
   })
-  .refine((b) => b.skill_ids !== undefined || b.skill_id !== undefined, {
-    message: 'Provide skill_ids (set/reorder) or skill_id (link one)',
-  });
+  .refine(
+    (b) => b.items !== undefined || b.skill_ids !== undefined || b.skill_id !== undefined,
+    { message: 'Provide items (ordered replacement), skill_ids (set/reorder) or skill_id (link one)' },
+  );
 
 export default async function agentsRoutes(appBase: FastifyInstance) {
   const app = appBase.withTypeProvider<ZodTypeProvider>();
@@ -171,9 +182,11 @@ export default async function agentsRoutes(appBase: FastifyInstance) {
       const { workspaceId } = await getContext(app.container, req);
       const body = req.body;
       const links =
-        body.skill_ids !== undefined
-          ? await service.setSkills(workspaceId, req.params.id, body.skill_ids)
-          : await service.linkSkill(workspaceId, req.params.id, body.skill_id!, body.order);
+        body.items !== undefined
+          ? await service.setSkillItems(workspaceId, req.params.id, body.items)
+          : body.skill_ids !== undefined
+            ? await service.setSkills(workspaceId, req.params.id, body.skill_ids)
+            : await service.linkSkill(workspaceId, req.params.id, body.skill_id!, body.order);
       if (!links) throw new NotFoundError('Agent not found');
       return links;
     },

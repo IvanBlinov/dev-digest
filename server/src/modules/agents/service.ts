@@ -12,6 +12,8 @@ import { AgentsRepository } from './repository.js';
 import { toAgentDto, toAgentVersionDto } from './helpers.js';
 import { ReviewRepository } from '../reviews/repository.js';
 import { countActiveFindingsForAgent, groupBy, pickLatestBy } from '../reviews/severity.js';
+import { validateLinkItems } from '../skills/helpers.js';
+import { BadRequestError } from '../../platform/errors.js';
 import type { FindingPreview } from '@devdigest/shared';
 
 /**
@@ -66,13 +68,18 @@ export class AgentsService {
    */
   async list(workspaceId: string): Promise<Agent[]> {
     const rows = await this.repo.list(workspaceId);
+    const skillCounts = await this.repo.enabledSkillCounts(rows.map((r) => r.id));
     const summary = await this.reviews.severitySummaryForWorkspace(workspaceId);
     const reviewsByAgent = groupBy(summary.reviews, (r) => r.agentId ?? '');
     const findingsByReview = groupBy(summary.findings, (f) => f.reviewId);
     return rows.map((row) => {
       const reviews = reviewsByAgent.get(row.id) ?? [];
       const findings = reviews.flatMap((r) => findingsByReview.get(r.id) ?? []);
-      return { ...toAgentDto(row), findings: countActiveFindingsForAgent(reviews, findings) };
+      return {
+        ...toAgentDto(row),
+        findings: countActiveFindingsForAgent(reviews, findings),
+        skill_count: skillCounts.get(row.id) ?? 0,
+      };
     });
   }
 
@@ -88,7 +95,9 @@ export class AgentsService {
 
   async get(workspaceId: string, id: string): Promise<Agent | undefined> {
     const row = await this.repo.getById(workspaceId, id);
-    return row ? toAgentDto(row) : undefined;
+    if (!row) return undefined;
+    const counts = await this.repo.enabledSkillCounts([row.id]);
+    return { ...toAgentDto(row), skill_count: counts.get(row.id) ?? 0 };
   }
 
   /** Delete an agent (and its versions/skill-links, via cascade). */
@@ -184,6 +193,28 @@ export class AgentsService {
     const agent = await this.repo.getById(workspaceId, agentId);
     if (!agent) return undefined;
     await this.repo.setSkills(agentId, skillIds);
+    return this.skillLinks(agentId);
+  }
+
+  /**
+   * L02 — full ordered replacement of an agent's links (order = index), each
+   * with its per-agent `enabled` flag. Every skill must belong to the workspace
+   * and appear once; otherwise 400 and the links are left untouched.
+   */
+  async setSkillItems(
+    workspaceId: string,
+    agentId: string,
+    items: ReadonlyArray<{ skill_id: string; enabled: boolean }>,
+  ): Promise<AgentSkillLink[] | undefined> {
+    const agent = await this.repo.getById(workspaceId, agentId);
+    if (!agent) return undefined;
+    const known = await this.container.skillsRepo.existingIds(
+      workspaceId,
+      items.map((i) => i.skill_id),
+    );
+    const error = validateLinkItems(items, known);
+    if (error) throw new BadRequestError(error);
+    await this.repo.replaceSkillLinks(agentId, items);
     return this.skillLinks(agentId);
   }
 

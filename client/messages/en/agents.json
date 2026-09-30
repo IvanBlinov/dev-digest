@@ -1,9 +1,14 @@
 {
   "card": {
     "noDescription": "No description",
-    "skillCount": "{count} skills",
+    "skillCount": "{count, plural, one {# skill} other {# skills}}",
     "findings": "Findings",
-    "findingsPreview": "{count, plural, one {# active finding} other {# active findings}}"
+    "findingsPreview": "{count, plural, one {# active finding} other {# active findings}}",
+    "delete": "Delete agent",
+    "deleteTitle": "Delete agent?",
+    "deleteBody": "“{name}” will be removed with its skill links. Past reviews keep their history. This cannot be undone.",
+    "deleteConfirm": "Delete",
+    "deleted": "Agent “{name}” deleted"
   },
   "list": {
     "breadcrumbLab": "Skills Lab",
@@ -47,10 +52,7 @@
     "runOnPr": "Run on a PR…",
     "tabs": {
       "config": "Config",
-      "skills": "Skills",
-      "evals": "Evals",
-      "stats": "Stats",
-      "ci": "CI"
+      "skills": "Skills"
     }
   },
   "config": {
@@ -90,10 +92,19 @@
     "savedToast": "Agent saved (v{version})"
   },
   "skills": {
-    "title": "Skills",
-    "enabledCount": "{linked} of {total} enabled",
+    "header": "Skills · {enabled} of {total} enabled",
     "filterPlaceholder": "Filter skills…",
-    "orderHint": "Order matters — earlier skills appear earlier in the assembled prompt. Toggle to attach."
+    "filterLabel": "Filter skills by name",
+    "orderHint": "Order matters — earlier skills appear earlier in the assembled prompt. Drag to reorder.",
+    "filterDragHint": "Clear the filter to reorder skills.",
+    "dragHandle": "Drag to reorder",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "disabledGlobally": "disabled globally",
+    "disabledGloballyHint": "This skill is turned off in Skills Lab, so it never reaches the prompt. Enable it there first.",
+    "empty": "No skills yet — create or import one in Skills Lab.",
+    "noMatch": "No skills match “{query}”.",
+    "loadError": "Could not load skills."
   },
   "mount": {
     "body": "Mount point for {owner}. The Agent Editor shell + tab routing are wired by A2 — {owner} renders this tab."

@@ -39,6 +39,7 @@ export const s = {
     overflow: "hidden",
     textOverflow: "ellipsis",
   } satisfies CSSProperties,
+  deleteBtn: { display: "inline-flex" } satisfies CSSProperties,
   metaRow: { display: "flex", alignItems: "center", gap: 8 } satisfies CSSProperties,
   modelChip: (color: string): CSSProperties => ({
     fontSize: 12,

@@ -7,7 +7,11 @@ export interface EditorTab {
   icon: IconName;
 }
 
-/** Editor tabs. Part-0 ships Config only; later lessons add the rest. */
+/** Editor tabs — L02 req 35: exactly two, Config and Skills. */
 export const TABS: readonly EditorTab[] = [
   { key: "config", labelKey: "editor.tabs.config", icon: "Settings" },
+  { key: "skills", labelKey: "editor.tabs.skills", icon: "Sparkles" },
 ];
+
+/** Valid `?tab=` values; anything else falls back to the first tab. */
+export const TAB_KEYS: readonly string[] = TABS.map((tb) => tb.key);

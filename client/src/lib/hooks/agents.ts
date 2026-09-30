@@ -3,7 +3,15 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
-import type { Agent, FindingPreview, ModelInfo, Provider, ReviewStrategy } from "@devdigest/shared";
+import type {
+  Agent,
+  AgentSkillLink,
+  FindingPreview,
+  ModelInfo,
+  Provider,
+  ReviewStrategy,
+  Skill,
+} from "@devdigest/shared";
 
 export function useAgents() {
   return useQuery({
@@ -97,5 +105,56 @@ export function useProviderModels(provider: Provider | null | undefined) {
     queryFn: () => api.get<ModelInfo[]>(`/providers/${provider}/models`),
     enabled: !!provider,
     staleTime: 5 * 60_000,
+  });
+}
+
+/** L02 — every skill in the workspace, for the agent editor's Skills tab.
+ *  Same query key as the Skills Lab list (`["skills"]`) so both screens share one cache. */
+export function useAllSkillsForAgentEditor() {
+  return useQuery({
+    queryKey: ["skills"],
+    queryFn: () => api.get<Skill[]>("/skills"),
+  });
+}
+
+/** L02 — the agent's skill links (ordered, with the per-agent `enabled` flag). */
+export function useAgentSkills(id: string | null | undefined) {
+  return useQuery({
+    queryKey: ["agent-skills", id],
+    queryFn: () => api.get<AgentSkillLink[]>(`/agents/${id}/skills`),
+    enabled: !!id,
+  });
+}
+
+export interface AgentSkillItem {
+  skill_id: string;
+  enabled: boolean;
+}
+
+/** L02 — full ordered replacement of an agent's skill links (order = index).
+ *  Optimistic: the cache is written first and rolled back if the request fails. */
+export function useSetAgentSkills(id: string) {
+  const qc = useQueryClient();
+  const key = ["agent-skills", id];
+  return useMutation({
+    mutationFn: (items: AgentSkillItem[]) => api.post<AgentSkillLink[]>(`/agents/${id}/skills`, { items }),
+    onMutate: async (items) => {
+      await qc.cancelQueries({ queryKey: key });
+      const previous = qc.getQueryData<AgentSkillLink[]>(key);
+      qc.setQueryData<AgentSkillLink[]>(
+        key,
+        items.map((i, order) => ({ agent_id: id, skill_id: i.skill_id, order, enabled: i.enabled })),
+      );
+      return { previous };
+    },
+    onError: (_err, _items, ctx) => {
+      if (ctx) qc.setQueryData(key, ctx.previous);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: key });
+      qc.invalidateQueries({ queryKey: ["agents"] });
+      qc.invalidateQueries({ queryKey: ["agent", id] });
+      qc.invalidateQueries({ queryKey: ["skills"] });
+    },
   });
 }

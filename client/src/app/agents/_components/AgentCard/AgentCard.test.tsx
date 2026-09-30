@@ -4,8 +4,13 @@ import { NextIntlClientProvider } from "next-intl";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Agent } from "@devdigest/shared";
 import messages from "../../../../../messages/en/agents.json";
+import common from "../../../../../messages/en/common.json";
+import { ToastProvider } from "../../../../lib/toast";
+
+const del = vi.hoisted(() => ({ mutate: vi.fn(), isPending: false }));
 vi.mock("../../../../lib/hooks/agents", async (importOriginal) => ({
   ...(await importOriginal<object>()),
+  useDeleteAgent: () => del,
   useAgentFindings: (_id: string, enabled: boolean) => ({
     data: enabled
       ? [
@@ -18,7 +23,10 @@ vi.mock("../../../../lib/hooks/agents", async (importOriginal) => ({
 
 import { AgentCard } from "./AgentCard";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  del.mutate.mockReset();
+});
 
 const AGENT: Agent = {
   id: "ag1",
@@ -39,8 +47,8 @@ function renderWithIntl(ui: React.ReactElement) {
   const qc = new QueryClient();
   return render(
     <QueryClientProvider client={qc}>
-      <NextIntlClientProvider locale="en" messages={{ agents: messages }}>
-        {ui}
+      <NextIntlClientProvider locale="en" messages={{ agents: messages, common }}>
+        <ToastProvider>{ui}</ToastProvider>
       </NextIntlClientProvider>
     </QueryClientProvider>,
   );
@@ -80,5 +88,37 @@ describe("AgentCard (smoke)", () => {
   it("L01: an agent without reviews shows —", () => {
     renderWithIntl(<AgentCard ag={{ ...AGENT, findings: null }} />);
     expect(screen.getByLabelText("Not reviewed yet")).toBeInTheDocument();
+  });
+
+  it("L02: shows the linked-skills counter from skill_count", () => {
+    renderWithIntl(<AgentCard ag={{ ...AGENT, skill_count: 1 }} />);
+    expect(screen.getByText("1 skill")).toBeInTheDocument();
+  });
+
+  it("L02: delete opens a confirm modal; cancel and X close it without deleting", () => {
+    const onClick = vi.fn();
+    renderWithIntl(<AgentCard ag={AGENT} onClick={onClick} />);
+    fireEvent.click(screen.getByLabelText("Delete agent"));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText("Delete agent?")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByLabelText("Delete agent"));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(del.mutate).not.toHaveBeenCalled();
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("L02: confirming deletes the agent and reports it", () => {
+    const onDeleted = vi.fn();
+    del.mutate.mockImplementation((_id: string, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.());
+    renderWithIntl(<AgentCard ag={AGENT} onDeleted={onDeleted} />);
+    fireEvent.click(screen.getByLabelText("Delete agent"));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(del.mutate).toHaveBeenCalledWith("ag1", expect.anything());
+    expect(onDeleted).toHaveBeenCalledWith("ag1");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByText("Agent “Security Reviewer” deleted")).toBeInTheDocument();
   });
 });

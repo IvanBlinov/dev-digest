@@ -45,6 +45,9 @@
     "prompt": {
       "system": "System",
       "skills": "Skills (dynamic)",
+      "skillsSection": "Skills",
+      "skillsSummary": "{count, plural, one {# skill} other {# skills}} · {tokens} tokens",
+      "skillBlock": "{name} · v{version} · {tokens} tokens",
       "memory": "Memory (dynamic)",
       "repoMap": "Repo skeleton — repo-intel (dynamic)",
       "specs": "Project context (dynamic)",

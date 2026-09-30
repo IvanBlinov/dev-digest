@@ -19,8 +19,11 @@ const TRACE: RunTrace = {
   ],
 };
 
+// Per-test override of the trace the mocked hook returns (defaults to TRACE).
+let currentTrace: RunTrace = TRACE;
+
 vi.mock("../../../../../../../lib/hooks/trace", () => ({
-  useRunTrace: () => ({ data: TRACE, isLoading: false }),
+  useRunTrace: () => ({ data: currentTrace, isLoading: false }),
 }));
 vi.mock("../../../../../../../lib/hooks/reviews", () => ({
   useRunEvents: () => ({ events: [], running: false }),
@@ -28,7 +31,10 @@ vi.mock("../../../../../../../lib/hooks/reviews", () => ({
 
 import RunTraceDrawer from "./RunTraceDrawer";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  currentTrace = TRACE;
+});
 
 function renderWithIntl(ui: React.ReactElement) {
   return render(
@@ -55,5 +61,54 @@ describe("A5 Run Trace drawer (smoke)", () => {
     fireEvent.click(screen.getByText("log"));
     // LiveLogStream renders its filter input
     expect(screen.getByPlaceholderText("Filter log…")).toBeInTheDocument();
+  });
+});
+
+describe("L02 skills in the prompt assembly trace", () => {
+  const SKILLS_TRACE: RunTrace = {
+    ...TRACE,
+    prompt_assembly: {
+      ...TRACE.prompt_assembly,
+      skills: "### Skill: api-contract-guard (v3, security)\nA\n\n### Skill: test-quality (v1, convention)\nB",
+      skills_blocks: [
+        { skill_id: "s1", name: "api-contract-guard", version: 3, type: "security", tokens: 120, text: "### Skill: api-contract-guard (v3, security)\nA" },
+        { skill_id: "s2", name: "test-quality", version: 1, type: "convention", tokens: 85, text: "### Skill: test-quality (v1, convention)\nB" },
+      ],
+      skills_tokens: 207,
+    },
+  };
+
+  function openPromptAssembly() {
+    renderWithIntl(<RunTraceDrawer runId="r1" agentName="Security" prNumber={482} onClose={() => {}} />);
+    fireEvent.click(screen.getByText("Prompt assembly"));
+  }
+
+  it("renders a Skills section with the total and one block per skill, in order", () => {
+    currentTrace = SKILLS_TRACE;
+    openPromptAssembly();
+    expect(screen.getByText("Skills")).toBeInTheDocument();
+    expect(screen.getByText("2 skills · 207 tokens")).toBeInTheDocument();
+    const first = screen.getByText("api-contract-guard · v3 · 120 tokens");
+    const second = screen.getByText("test-quality · v1 · 85 tokens");
+    expect(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // the legacy single block is replaced, not duplicated
+    expect(screen.queryByText("Skills (dynamic)")).not.toBeInTheDocument();
+  });
+
+  it("falls back to the legacy single skills block for pre-L02 traces", () => {
+    openPromptAssembly();
+    expect(screen.getByText("Skills (dynamic)")).toBeInTheDocument();
+    expect(screen.queryByText(/skills · \d+ tokens/)).not.toBeInTheDocument();
+  });
+
+  it("renders nothing for skills when no skill was injected", () => {
+    currentTrace = {
+      ...TRACE,
+      prompt_assembly: { ...TRACE.prompt_assembly, skills: null, skills_blocks: null, skills_tokens: null },
+    };
+    openPromptAssembly();
+    expect(screen.getByText("System")).toBeInTheDocument();
+    expect(screen.queryByText("Skills")).not.toBeInTheDocument();
+    expect(screen.queryByText("Skills (dynamic)")).not.toBeInTheDocument();
   });
 });
