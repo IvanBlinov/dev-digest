@@ -8,7 +8,8 @@
     "deleteTitle": "Delete agent?",
     "deleteBody": "“{name}” will be removed with its skill links. Past reviews keep their history. This cannot be undone.",
     "deleteConfirm": "Delete",
-    "deleted": "Agent “{name}” deleted"
+    "deleted": "Agent “{name}” deleted",
+    "deleteFailed": "Could not delete the agent: {message}"
   },
   "list": {
     "breadcrumbLab": "Skills Lab",

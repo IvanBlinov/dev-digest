@@ -144,6 +144,24 @@ describe('parseSkillUpload — .zip', () => {
     expect(() => parseSkillUpload('b.zip', zip)).toThrow(/uncompressed/);
   });
 
+  it('rejects a markdown entry whose header LIES about its size, aborting inflation early', () => {
+    // 64 MB of one byte deflates to ~64 KB; patch both headers to claim 10 bytes
+    // so the declared-total guard is bypassed. Only an output cap enforced DURING
+    // inflation stops this before the event loop is blocked.
+    const payload = new Uint8Array(64 * 1_048_576).fill(0x61);
+    const zip = lieAboutSize(zipSync({ 'SKILL.md': payload }, { level: 9 }), 10);
+    expect(zip.length).toBeLessThan(MAX_UPLOAD_BYTES);
+    const started = performance.now();
+    expect(() => parseSkillUpload('b.zip', zip)).toThrow(/SKILL\.md is too large/);
+    expect(performance.now() - started).toBeLessThan(300);
+  });
+
+  it('still imports a normal zip after the streaming extraction', () => {
+    const zip = zipSync({ 'pkg/SKILL.md': md('---\nname: normal-zip\n---\nBody text'), 'x.txt': md('x') });
+    const p = parseSkillUpload('n.zip', zip);
+    expect(p).toMatchObject({ name: 'normal-zip', body: 'Body text', source_file: 'pkg/SKILL.md', ignored_files: ['x.txt'] });
+  });
+
   it('rejects a corrupt archive', () => {
     expect(() => parseSkillUpload('b.zip', md('not a zip at all'))).toThrow(SkillImportError);
   });
@@ -163,3 +181,14 @@ describe('decodeUpload', () => {
     expect(() => decodeUpload('not base64 !!!')).toThrow(SkillImportError);
   });
 });
+
+/** Overwrite the uncompressed-size field of the (single) entry's local + central headers. */
+function lieAboutSize(zip: Uint8Array, claimed: number): Uint8Array {
+  const out = zip.slice();
+  const view = new DataView(out.buffer, out.byteOffset, out.byteLength);
+  view.setUint32(22, claimed, true); // local file header
+  const eocd = out.length - 22;
+  const cd = view.getUint32(eocd + 16, true);
+  view.setUint32(cd + 24, claimed, true); // central directory header
+  return out;
+}

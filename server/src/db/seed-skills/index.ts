@@ -1,3 +1,7 @@
+// LAYERING EXCEPTION (seeding only): db/ normally never imports modules/*. The
+// seed deliberately reuses the skills import parser + repositories so the seeded
+// `api-contract-guard` is genuinely `imported` through the same code path as a
+// user upload (and stays in sync with it). Do not copy this into runtime code.
 import { readFileSync } from 'node:fs';
 import { and, eq } from 'drizzle-orm';
 import type { Provider, SkillSource } from '@devdigest/shared';

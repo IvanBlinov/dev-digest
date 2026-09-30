@@ -126,6 +126,41 @@ d('skills (L02)', () => {
     await app.close();
   });
 
+  it('concurrent content PUTs / restore never collide on the version PK: each gets its own version', async () => {
+    const app = await makeApp();
+    const s = (await app.inject({ method: 'POST', url: '/skills', payload: createBody({ body: 'base' }) })).json();
+
+    const puts = await Promise.all(
+      ['one', 'two', 'three'].map((body) =>
+        app.inject({ method: 'PUT', url: `/skills/${s.id}`, payload: { body } }),
+      ),
+    );
+    expect(puts.map((r) => r.statusCode)).toEqual([200, 200, 200]);
+
+    const [put, restore] = await Promise.all([
+      app.inject({ method: 'PUT', url: `/skills/${s.id}`, payload: { body: 'four' } }),
+      app.inject({ method: 'POST', url: `/skills/${s.id}/versions/1/restore` }),
+    ]);
+    expect([put.statusCode, restore.statusCode]).toEqual([200, 200]);
+
+    const versions = (await app.inject({ method: 'GET', url: `/skills/${s.id}/versions` })).json();
+    expect(versions.map((v: { version: number }) => v.version)).toEqual([6, 5, 4, 3, 2, 1]);
+    const current = (await app.inject({ method: 'GET', url: `/skills/${s.id}` })).json();
+    expect(current.version).toBe(6);
+    expect(current.body).toBe(versions[0].body);
+    await app.close();
+  });
+
+  it('two concurrent creates with the same name → one 201 and one 409 (never 500)', async () => {
+    const app = await makeApp();
+    const body = createBody();
+    const codes = (
+      await Promise.all([1, 2].map(() => app.inject({ method: 'POST', url: '/skills', payload: body })))
+    ).map((r) => r.statusCode);
+    expect(codes.sort()).toEqual([201, 409]);
+    await app.close();
+  });
+
   it('PUT renaming onto an existing name → 409; unknown id → 404', async () => {
     const app = await makeApp();
     const a = (await app.inject({ method: 'POST', url: '/skills', payload: createBody() })).json();

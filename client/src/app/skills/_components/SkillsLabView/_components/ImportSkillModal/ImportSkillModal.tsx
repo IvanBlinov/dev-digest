@@ -10,7 +10,7 @@ import { ApiError } from "@/lib/api";
 import { useImportSkill, usePreviewSkillImport } from "@/lib/hooks/skills";
 import { useToast } from "@/lib/toast";
 import { importKind, readFileAsBase64, type SkillMeta } from "@/lib/skill-helpers";
-import { SkillFields, nameErrorKey } from "../../../SkillFields";
+import { SkillFields, nameErrorKey } from "@/app/skills/_components/SkillFields";
 import { ACCEPT, HTTP_CONFLICT, MAX_UPLOAD_BYTES, MODAL_WIDTH } from "./constants";
 import { s } from "./styles";
 

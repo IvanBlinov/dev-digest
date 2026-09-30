@@ -7,7 +7,8 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { Checkbox, ErrorState, Icon, IconBtn, Skeleton, TextInput } from "@devdigest/ui";
 import { SkillTypeChip } from "@/components/skill-type-chip";
-import { useAgentSkills, useAllSkillsForAgentEditor, useSetAgentSkills } from "@/lib/hooks/agents";
+import { useAgentSkills, useSetAgentSkills } from "@/lib/hooks/agents";
+import { useSkills } from "@/lib/hooks/skills";
 import {
   buildRows,
   canCheck,
@@ -25,7 +26,7 @@ import { s } from "./styles";
 
 export function SkillsTab({ agentId }: { agentId: string }) {
   const t = useTranslations("agents");
-  const skillsQ = useAllSkillsForAgentEditor();
+  const skillsQ = useSkills();
   const linksQ = useAgentSkills(agentId);
   const setSkills = useSetAgentSkills(agentId);
   const [query, setQuery] = React.useState("");

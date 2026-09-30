@@ -18,8 +18,10 @@ const SKILLS: Skill[] = [
   skill("s4", "beta-off", "custom", false),
 ];
 
+vi.mock("@/lib/hooks/skills", () => ({
+  useSkills: () => ({ data: SKILLS, isLoading: false, isError: false }),
+}));
 vi.mock("@/lib/hooks/agents", () => ({
-  useAllSkillsForAgentEditor: () => ({ data: SKILLS, isLoading: false, isError: false }),
   useAgentSkills: () => ({ data: links, isLoading: false, isError: false }),
   useSetAgentSkills: () => ({ mutate, isPending: false }),
 }));

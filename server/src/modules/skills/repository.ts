@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { SkillSource, SkillType } from '@devdigest/shared';
@@ -138,15 +138,17 @@ export class SkillsRepository {
   }
 
   /**
-   * Apply a patch. When `bumpMessage` is given the version is incremented and
-   * the new body snapshotted with that message (the service decides whether
-   * content changed); otherwise only the fields are written.
+   * Apply a patch. When `bump` is given the version is incremented IN SQL
+   * (`version = version + 1 … RETURNING`) and the new body snapshotted at the
+   * returned version, in one transaction: the row lock serialises concurrent
+   * writers, so two bumps can never compute the same version (the service only
+   * decides WHETHER content changed). Without `bump` only the fields are written.
    */
   async update(
     workspaceId: string,
     id: string,
     patch: SkillContentPatch,
-    bump: { version: number; message: string | null } | null,
+    bump: { message: string | null } | null,
   ): Promise<SkillRow | undefined> {
     return this.db.transaction(async (tx) => {
       const [row] = await tx
@@ -157,14 +159,14 @@ export class SkillsRepository {
           ...(patch.type !== undefined ? { type: patch.type } : {}),
           ...(patch.body !== undefined ? { body: patch.body } : {}),
           ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
-          ...(bump ? { version: bump.version } : {}),
+          ...(bump ? { version: sql`${t.skills.version} + 1` } : {}),
         })
         .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.id, id)))
         .returning();
       if (row && bump) {
         await tx
           .insert(t.skillVersions)
-          .values({ skillId: row.id, version: bump.version, body: row.body, message: bump.message });
+          .values({ skillId: row.id, version: row.version, body: row.body, message: bump.message });
       }
       return row;
     });

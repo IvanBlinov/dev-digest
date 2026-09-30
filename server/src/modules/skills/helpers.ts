@@ -78,9 +78,18 @@ export function validateLinkItems(
   return null;
 }
 
-/** Postgres unique_violation (23505), possibly wrapped by drizzle in `cause`. */
-export function isUniqueViolation(err: unknown): boolean {
+/**
+ * Postgres unique_violation (23505), possibly wrapped by drizzle in `cause`.
+ * With `constraint`, only a clash on that constraint/index matches (postgres-js
+ * exposes it as `constraint_name`; some drivers use `constraint`) — so e.g. a
+ * `skill_versions` PK clash is never mistaken for a duplicate skill name.
+ */
+export function isUniqueViolation(err: unknown, constraint?: string): boolean {
   if (!err || typeof err !== 'object') return false;
-  const e = err as { code?: unknown; cause?: unknown };
-  return e.code === '23505' || isUniqueViolation(e.cause);
+  const e = err as { code?: unknown; cause?: unknown; constraint_name?: unknown; constraint?: unknown };
+  if (e.code === '23505') {
+    if (constraint === undefined) return true;
+    if (e.constraint_name === constraint || e.constraint === constraint) return true;
+  }
+  return isUniqueViolation(e.cause, constraint);
 }

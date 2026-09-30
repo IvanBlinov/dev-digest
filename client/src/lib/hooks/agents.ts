@@ -10,8 +10,8 @@ import type {
   ModelInfo,
   Provider,
   ReviewStrategy,
-  Skill,
 } from "@devdigest/shared";
+import { SKILLS_KEY } from "./skills";
 
 export function useAgents() {
   return useQuery({
@@ -108,15 +108,6 @@ export function useProviderModels(provider: Provider | null | undefined) {
   });
 }
 
-/** L02 — every skill in the workspace, for the agent editor's Skills tab.
- *  Same query key as the Skills Lab list (`["skills"]`) so both screens share one cache. */
-export function useAllSkillsForAgentEditor() {
-  return useQuery({
-    queryKey: ["skills"],
-    queryFn: () => api.get<Skill[]>("/skills"),
-  });
-}
-
 /** L02 — the agent's skill links (ordered, with the per-agent `enabled` flag). */
 export function useAgentSkills(id: string | null | undefined) {
   return useQuery({
@@ -154,7 +145,7 @@ export function useSetAgentSkills(id: string) {
       qc.invalidateQueries({ queryKey: key });
       qc.invalidateQueries({ queryKey: ["agents"] });
       qc.invalidateQueries({ queryKey: ["agent", id] });
-      qc.invalidateQueries({ queryKey: ["skills"] });
+      qc.invalidateQueries({ queryKey: SKILLS_KEY });
     },
   });
 }

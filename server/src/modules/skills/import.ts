@@ -1,4 +1,4 @@
-import { unzipSync, type UnzipFileInfo } from 'fflate';
+import { Unzip, UnzipInflate, unzipSync, type UnzipFileInfo } from 'fflate';
 import { SKILL_BODY_MAX, SkillType, type SkillImportPreview } from '@devdigest/shared';
 import {
   FALLBACK_SKILL_NAME,
@@ -6,6 +6,8 @@ import {
   MAX_UPLOAD_BYTES,
   MAX_ZIP_ENTRIES,
   MAX_ZIP_UNCOMPRESSED_BYTES,
+  MAX_ZIP_MARKDOWN_BYTES,
+  ZIP_PUSH_CHUNK_BYTES,
 } from './constants.js';
 import { slugifySkillName } from './helpers.js';
 
@@ -54,14 +56,25 @@ export function parseSkillUpload(filename: string, bytes: Uint8Array): SkillImpo
 // ---- zip ------------------------------------------------------------------
 
 function parseZip(bytes: Uint8Array): SkillImportPreview {
+  const entries = readZipEntries(bytes);
+  const files = entries.map((e) => e.name).filter((n) => !n.endsWith('/'));
+  const core = pickCoreFile(files.filter(isMarkdown));
+  const data = inflateEntryCapped(bytes, core, MAX_ZIP_MARKDOWN_BYTES);
+  const ignored = files.filter((n) => n !== core);
+  return parseMarkdown(decodeText(data, core), core, zipFallbackName(core), ignored);
+}
+
+/**
+ * Pass 1 — central-directory metadata only. The filter returns false for every
+ * entry, so NOTHING is inflated here; the entry-count and declared-total limits
+ * reject an obvious zip bomb cheaply. Declared sizes can lie, so they are never
+ * trusted beyond this pre-check (see `inflateEntryCapped`).
+ */
+function readZipEntries(bytes: Uint8Array): UnzipFileInfo[] {
   const entries: UnzipFileInfo[] = [];
   let declaredTotal = 0;
-  let unzipped: Record<string, Uint8Array>;
   try {
-    // The filter sees every entry's central-directory metadata BEFORE anything
-    // is inflated. Only markdown files are ever inflated; limits are enforced
-    // here so a zip bomb is rejected without allocating its payload.
-    unzipped = unzipSync(bytes, {
+    unzipSync(bytes, {
       filter: (file) => {
         entries.push(file);
         declaredTotal += file.originalSize;
@@ -71,20 +84,74 @@ function parseZip(bytes: Uint8Array): SkillImportPreview {
         if (declaredTotal > MAX_ZIP_UNCOMPRESSED_BYTES) {
           throw new SkillImportError('Archive is too large uncompressed (max 5 MB)');
         }
-        return isMarkdown(file.name);
+        return false;
       },
     });
   } catch (err) {
-    if (err instanceof SkillImportError) throw err;
-    throw new SkillImportError('Could not read the .zip archive (corrupt or unsupported compression)');
+    throw asImportError(err);
   }
+  return entries;
+}
 
-  const files = entries.map((e) => e.name).filter((n) => !n.endsWith('/'));
-  const core = pickCoreFile(files.filter(isMarkdown));
-  const data = unzipped[core];
-  if (!data) throw new SkillImportError(`Could not extract ${core}`);
-  const ignored = files.filter((n) => n !== core);
-  return parseMarkdown(decodeText(data, core), core, zipFallbackName(core), ignored);
+/**
+ * Pass 2 — stream-inflate ONLY the chosen markdown entry with a hard OUTPUT cap.
+ * The archive is fed in small chunks so each inflate step is bounded (deflate
+ * expands at most ~1032x), and feeding stops as soon as the output exceeds
+ * `cap` — a lying header can no longer make us inflate hundreds of MB.
+ */
+function inflateEntryCapped(bytes: Uint8Array, target: string, cap: number): Uint8Array {
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  let found = false;
+  let done = false;
+  let failure: SkillImportError | null = null;
+  const unzip = new Unzip((file) => {
+    if (found || file.name !== target) return; // never started → never inflated
+    found = true;
+    file.ondata = (err, data, final) => {
+      if (failure) return;
+      if (err) {
+        failure = new SkillImportError(`Could not extract ${target}`);
+        return;
+      }
+      total += data.length;
+      if (total > cap) {
+        failure = new SkillImportError(`${target} is too large when uncompressed (max ${cap} bytes)`);
+        file.terminate();
+        return;
+      }
+      chunks.push(data);
+      if (final) done = true;
+    };
+    file.start();
+  });
+  unzip.register(UnzipInflate);
+  try {
+    for (let off = 0; off < bytes.length && !failure && !done; off += ZIP_PUSH_CHUNK_BYTES) {
+      const end = Math.min(off + ZIP_PUSH_CHUNK_BYTES, bytes.length);
+      unzip.push(bytes.subarray(off, end), end === bytes.length);
+    }
+  } catch (err) {
+    throw asImportError(err);
+  }
+  if (failure) throw failure;
+  if (!found || !done) throw new SkillImportError(`Could not extract ${target}`);
+  return concat(chunks, total);
+}
+
+function asImportError(err: unknown): SkillImportError {
+  if (err instanceof SkillImportError) return err;
+  return new SkillImportError('Could not read the .zip archive (corrupt or unsupported compression)');
+}
+
+function concat(chunks: readonly Uint8Array[], total: number): Uint8Array {
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    out.set(c, off);
+    off += c.length;
+  }
+  return out;
 }
 
 /** Shallowest `SKILL.md` (case-insensitive), else the only markdown file. */

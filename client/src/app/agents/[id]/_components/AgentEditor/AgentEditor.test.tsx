@@ -9,16 +9,18 @@ import { ToastProvider } from "../../../../../lib/toast";
 const hooks = vi.hoisted(() => ({
   useUpdateAgent: () => ({ mutate: vi.fn(), isPending: false, isSuccess: false, data: undefined }),
   useProviderModels: () => ({ data: [{ id: "gpt-4.1", provider: "openai" }] }),
-  useAllSkillsForAgentEditor: () => ({
-    data: [{ id: "s1", name: "api-contract-guard", description: "", type: "security", source: "imported", body: "b", enabled: true, version: 1 }],
-    isLoading: false,
-    isError: false,
-  }),
   useAgentSkills: () => ({ data: [], isLoading: false, isError: false }),
   useSetAgentSkills: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock("../../../../../lib/hooks/agents", () => hooks);
 vi.mock("@/lib/hooks/agents", () => hooks);
+vi.mock("@/lib/hooks/skills", () => ({
+  useSkills: () => ({
+    data: [{ id: "s1", name: "api-contract-guard", description: "", type: "security", source: "imported", body: "b", enabled: true, version: 1 }],
+    isLoading: false,
+    isError: false,
+  }),
+}));
 
 import { AgentEditor } from "./AgentEditor";
 

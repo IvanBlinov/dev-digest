@@ -90,6 +90,16 @@ describe('isUniqueViolation', () => {
     expect(isUniqueViolation({ code: '23505' })).toBe(true);
     expect(isUniqueViolation(Object.assign(new Error('wrapped'), { cause: { code: '23505' } }))).toBe(true);
   });
+  it('matches the constraint name when one is given (postgres-js `constraint_name`, also under `cause`)', () => {
+    const nameClash = { code: '23505', constraint_name: 'skills_workspace_name_uq' };
+    const versionClash = { code: '23505', constraint_name: 'skill_versions_skill_id_version_pk' };
+    expect(isUniqueViolation(nameClash, 'skills_workspace_name_uq')).toBe(true);
+    expect(isUniqueViolation({ code: '23505', constraint: 'skills_workspace_name_uq' }, 'skills_workspace_name_uq')).toBe(true);
+    expect(isUniqueViolation(Object.assign(new Error('wrapped'), { cause: nameClash }), 'skills_workspace_name_uq')).toBe(true);
+    expect(isUniqueViolation(versionClash, 'skills_workspace_name_uq')).toBe(false);
+    expect(isUniqueViolation({ code: '23505' }, 'skills_workspace_name_uq')).toBe(false);
+    expect(isUniqueViolation(versionClash)).toBe(true);
+  });
   it('ignores other errors', () => {
     expect(isUniqueViolation({ code: '23503' })).toBe(false);
     expect(isUniqueViolation(new Error('boom'))).toBe(false);

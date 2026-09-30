@@ -12,7 +12,12 @@ import { BadRequestError, ConflictError, NotFoundError } from '../../platform/er
 import type { SkillRow, SkillsRepository } from './repository.js';
 import { isContentChange, isUniqueViolation, toSkillDto, toSkillVersionDto } from './helpers.js';
 import { decodeUpload, parseSkillUpload, SkillImportError } from './import.js';
-import { INITIAL_VERSION_MESSAGE, importedMessage, restoredMessage } from './constants.js';
+import {
+  INITIAL_VERSION_MESSAGE,
+  SKILL_NAME_UNIQUE_CONSTRAINT,
+  importedMessage,
+  restoredMessage,
+} from './constants.js';
 
 /**
  * L02 — skills service: CRUD, versioning (every content change is a new
@@ -57,9 +62,8 @@ export class SkillsService {
     if (patch.name !== undefined && patch.name !== existing.name) {
       await this.assertNameFree(workspaceId, patch.name);
     }
-    const bump = isContentChange(existing, patch)
-      ? { version: existing.version + 1, message: patch.message ?? null }
-      : null;
+    // The repository increments the version atomically; we only decide whether to.
+    const bump = isContentChange(existing, patch) ? { message: patch.message ?? null } : null;
     const row = await this.guardName(patch.name ?? existing.name, () =>
       this.repo.update(workspaceId, id, patch, bump),
     );
@@ -82,11 +86,8 @@ export class SkillsService {
     if (!skill) throw new NotFoundError('Skill not found');
     const snapshot = await this.repo.getVersion(id, version);
     if (!snapshot) throw new NotFoundError(`Version ${version} not found`);
-    await this.repo.update(
-      workspaceId,
-      id,
-      { body: snapshot.body },
-      { version: skill.version + 1, message: restoredMessage(version) },
+    await this.guardName(skill.name, () =>
+      this.repo.update(workspaceId, id, { body: snapshot.body }, { message: restoredMessage(version) }),
     );
     return (await this.get(workspaceId, id))!;
   }
@@ -118,12 +119,15 @@ export class SkillsService {
     return toSkillDto(row, 0);
   }
 
-  /** The pre-check above is racy; the DB unique index is the real guard — map its clash to 409. */
+  /**
+   * The pre-check above is racy; the DB unique index is the real guard — map
+   * ONLY its clash to 409. Any other unique violation is a bug and stays a 500.
+   */
   private async guardName<T>(name: string, write: () => Promise<T>): Promise<T> {
     try {
       return await write();
     } catch (err) {
-      if (isUniqueViolation(err)) throw new ConflictError(`A skill named "${name}" already exists`);
+      if (isUniqueViolation(err, SKILL_NAME_UNIQUE_CONSTRAINT)) throw new ConflictError(`A skill named "${name}" already exists`);
       throw err;
     }
   }

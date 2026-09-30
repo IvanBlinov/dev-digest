@@ -44,6 +44,8 @@ export function AgentCard({
         toast.success(t("card.deleted", { name: ag.name }));
         onDeleted?.(ag.id);
       },
+      // Keep the modal open on failure (mirrors SkillCard) so the user can retry or cancel.
+      onError: (e) => toast.error(t("card.deleteFailed", { message: e.message })),
     });
   const color = modelColor(ag.model);
   // L01 — findings by severity (workspace-wide); the preview loads on hover only.

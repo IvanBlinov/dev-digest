@@ -2,17 +2,35 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
-## 2026-09-29 — [Security] Skill `.zip` import rejects zip bombs before inflating
-Context: imported archives are untrusted uploads.
-Decision: the `unzipSync` filter checks entry count (≤ 200) and the declared uncompressed total (≤ 5 MB) from the central directory before anything is inflated, and only `.md` entries are ever inflated; every other entry is only listed as ignored, never stored.
-Consequence: do not replace the filter with a plain `unzipSync(bytes)`; keep the limits in `skills/constants.ts`.
-Proof: `server/src/modules/skills/import.ts:64`
+## 2026-09-30 — [Pitfall] Running the "hermetic" unit suite used to fail live dev review runs
+Symptom: a review started in the dev stack flips to `failed` with no error and no trace while `pnpm test` runs.
+Cause: `routes-smoke.test.ts` calls `buildApp()` with the default `DATABASE_URL` (the dev DB), and the boot reaper marked every `running` agent_run there as failed.
+Rule: the boot reaper is skipped under `NODE_ENV=test` (covered by `test/app-boot-reaper.test.ts`). Any new boot-time side effect that writes to the DB needs the same guard.
+Proof: `server/src/app.ts:82`, `server/test/routes-smoke.test.ts:15`
+
+## 2026-09-30 — [Security] A zip's declared sizes can lie — cap skill-import output while inflating
+Context: imported archives are untrusted; a 205 KB zip whose `SKILL.md` claims 10 bytes can inflate to 200 MB.
+Decision: pass 1 reads the central directory only (entry count ≤ 200, declared total ≤ 5 MB); pass 2 inflates just the chosen markdown entry with fflate's streaming `Unzip`, fed 4 KB at a time, and stops as soon as output passes 80 KB. Everything else is listed as ignored and never inflated or stored.
+Consequence: never go back to `unzipSync` — with a lying header it silently truncates (no error) or burns CPU on the event loop; `terminate()` is a no-op on the sync inflater, so "stop feeding" is the only real abort.
+Proof: `server/src/modules/skills/import.ts:102`, `server/src/modules/skills/constants.ts:19`
+
+## 2026-09-30 — [Pitfall] Increment `skills.version` in SQL, and map only the name index to 409
+Symptom: two concurrent saves of one skill answered 200 / 409 "name already exists" / 200.
+Cause: the service computed `version + 1` from an earlier read, so both writers inserted the same `skill_versions` key; the unique-violation handler treated every 23505 as a name clash.
+Rule: bump with `version = version + 1 … RETURNING` inside the repository transaction and snapshot at the returned version; check `constraint_name === 'skills_workspace_name_uq'` before answering 409.
+Proof: `server/src/modules/skills/repository.ts:162`, `server/src/modules/skills/helpers.ts:87`
+
+## 2026-09-30 — [Security] Skill bodies are hardened before they enter the prompt
+Context: skills are instructions by design, but imported ones come from third-party files and land verbatim under `## Skills / rules`.
+Decision: headings in a body are demoted three levels (max 6, fenced code untouched) so they nest under `### Skill: …`, and `<untrusted`/`</untrusted` look-alikes are escaped so a body cannot fake the prompt's data delimiters.
+Consequence: keep `hardenSkillBody` on every path that injects skills (e.g. a future CI runner).
+Proof: `server/src/modules/reviews/skills-prompt.ts:59`
 
 ## 2026-09-29 — [Non-obvious behaviour] Skill import routes need their own `bodyLimit`
 Symptom: a ~1 MB `.zip` upload is rejected with 413 although the upload limit is 1 MB.
 Cause: the app-wide `bodyLimit` is 1 MiB and the file travels base64-encoded in JSON (×4/3).
 Rule: routes that accept base64 files set `bodyLimit: IMPORT_BODY_LIMIT` per route; don't raise the global cap.
-Proof: `server/src/app.ts:49`, `server/src/modules/skills/constants.ts:17`
+Proof: `server/src/app.ts:49`, `server/src/modules/skills/constants.ts:16`
 
 ## 2026-09-29 — [Non-obvious behaviour] `skills_tokens` is counted on the joined section, not summed per skill
 Symptom: summing each skill block's tokens gives a slightly different number than the trace total.

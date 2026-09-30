@@ -121,4 +121,16 @@ describe("AgentCard (smoke)", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByText("Agent “Security Reviewer” deleted")).toBeInTheDocument();
   });
+  it("L02: a failed delete shows an error toast and keeps the modal open", () => {
+    const onDeleted = vi.fn();
+    del.mutate.mockImplementation((_id: string, opts?: { onError?: (e: Error) => void }) =>
+      opts?.onError?.(new Error("agent is busy")),
+    );
+    renderWithIntl(<AgentCard ag={AGENT} onDeleted={onDeleted} />);
+    fireEvent.click(screen.getByLabelText("Delete agent"));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(screen.getByText("Could not delete the agent: agent is busy")).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(onDeleted).not.toHaveBeenCalled();
+  });
 });
