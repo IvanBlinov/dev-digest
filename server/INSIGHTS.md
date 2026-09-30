@@ -2,6 +2,12 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-09-29 — [Non-obvious behaviour] Four route files bypass the service layer — do not copy them
+Symptom: an agent asked to "do what pulls/routes.ts does" puts `container.db` / `container.github()` calls in a handler.
+Cause: `pulls`, `polling`, `settings` and `workspace` routes predate the route → service → repository split that `agents`, `repos` and `reviews` follow.
+Rule: copy `modules/agents|repos|reviews`; new logic in a legacy route goes into a new service. See `.claude/skills/onion-architecture/SKILL.md`.
+Proof: `server/src/modules/pulls/routes.ts:30`, `server/src/modules/settings/routes.ts:30`, `server/src/modules/agents/routes.ts:75`
+
 ## 2026-09-19 — [Architectural decision] One severity rule for PR list and agent cards
 Context: two screens count "findings" and would drift if each had its own SQL.
 Decision: `reviews/severity.ts` holds the pure rule (`countActiveFindings` per PR, `countActiveFindingsForAgent` per agent, newest review per bucket, dismissed excluded); routes only fetch lite rows and group in JS.

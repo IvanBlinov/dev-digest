@@ -114,5 +114,5 @@ client
 - Engine cost source: `reviewer-core/src/review/run.ts:159`, `reviewer-core/src/review/run.ts:184`, `reviewer-core/src/llm/openrouter.ts:97`
 - Cost dropped today: `server/src/modules/reviews/run-executor.ts:213` (destructures only tokens/grounding)
 - Price sources: `server/src/platform/price-book.ts`, `server/src/adapters/llm/pricing.ts`
-- Do-not-touch rules for migrations and lock files: [../CLAUDE.md](../CLAUDE.md)
+- Do-not-touch rules for migrations and lock files: [../AGENTS.md](../AGENTS.md)
 - Insights to read first: [../server/INSIGHTS.md](../server/INSIGHTS.md), [../client/INSIGHTS.md](../client/INSIGHTS.md)
