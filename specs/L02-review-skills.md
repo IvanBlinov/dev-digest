@@ -1,6 +1,6 @@
 # L02 — Skills for review agents (Skills Lab)
 
-Status: **decisions agreed 2026-09-29; implementation in progress on `feat/l02-review-skills`.**
+Status: **implemented on `feat/l02-review-skills` (2026-09-30)**; control experiment 17 still running at PR time (see Results).
 
 ## Goal
 
@@ -140,4 +140,17 @@ Foundation (done first, sequentially): contracts in both `vendor/shared` copies
 
 ## Results
 
-_To be filled after implementation: test/typecheck gates, control experiments 17/18, trace checks 14/19/20._
+Recorded 2026-09-30 against the seeded dev stack (`deepseek/deepseek-v4-flash` via OpenRouter).
+
+| # | Check | Result |
+|---|-------|--------|
+| Gates | server typecheck + 166 unit tests; 40 DB it-tests on a throwaway DB; client typecheck + 160 tests + `next build` | all pass |
+| 8 | create via API → row in Postgres; delete row directly → `GET /skills` omits it | it-test `server/test/skills.it.test.ts` |
+| 14 | swap skill order → prompt and `skills_blocks` swap | it-test `server/test/reviews-skills.it.test.ts` (real executor, mock LLM) |
+| 18 | API Contract Reviewer on PR #484 **without** `api-contract-guard` | 2 findings, both tenant-security; route rename, `email → emailAddress`, required `tenantId` **not** flagged |
+| 18 | same PR **with** the skill (imported, v1) | 3 CRITICAL breaking changes flagged (route `:id → :userId`, `email → emailAddress`, required `tenantId`) + 1 warning |
+| 19 | trace of the with-skill run | Prompt assembly shows **Skills · 1 skill · 380 tokens** and the block `api-contract-guard · v1 · 380 tokens` |
+| 20 | trace of the without-skill run | no skills block; run log `skills: none enabled for this agent` |
+| 21 | manual `pr-self-review` on this branch (client + server diff) | loaded frontend-architecture, react/next/RTL **and** onion-architecture, fastify, drizzle, postgres, security in one run; no git hook exists |
+| 17 | Test Quality Reviewer on PR #483 without / with `test-quality-rubric` | **pending** — the without-skill run was still waiting on the model when the PR was opened |
+
