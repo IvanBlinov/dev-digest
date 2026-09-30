@@ -1,6 +1,6 @@
 # L02 — Skills for review agents (Skills Lab)
 
-Status: **implemented on `feat/l02-review-skills` (2026-09-30)**; control experiment 17 still running at PR time (see Results).
+Status: **implemented on `feat/l02-review-skills` (2026-09-30); all requirements 6–37 verified (see Results).**
 
 ## Goal
 
@@ -152,5 +152,17 @@ Recorded 2026-09-30 against the seeded dev stack (`deepseek/deepseek-v4-flash` v
 | 19 | trace of the with-skill run | Prompt assembly shows **Skills · 1 skill · 380 tokens** and the block `api-contract-guard · v1 · 380 tokens` |
 | 20 | trace of the without-skill run | no skills block; run log `skills: none enabled for this agent` |
 | 21 | manual `pr-self-review` on this branch (client + server diff) | loaded frontend-architecture, react/next/RTL **and** onion-architecture, fastify, drizzle, postgres, security in one run; no git hook exists |
-| 17 | Test Quality Reviewer on PR #483 without / with `test-quality-rubric` | **pending** — the without-skill run was still waiting on the model when the PR was opened |
+| 17 | Test Quality Reviewer on PR #483 **without** `test-quality-rubric` | 1 finding, about coupon validation in code; tests not mentioned |
+| 17 | same PR **with** the skill (v1, 377 tokens in trace) | new WARNING "Test suite covers only the happy path": lists untested branches (negative amount throws, 0, null coupon, expired coupon, cap at max) and boundary values |
+| 14 (live) | Performance Reviewer on PR #482 with `pr-quality-rubric` + `secret-leakage-gate`, order A,B then B,A | prompt `### Skill:` sections and `skills_blocks` follow the order both times (234 + 239 tokens, section 473) |
+| 20 (live) | same agent with `secret-leakage-gate` disabled on the link | only `pr-quality-rubric` block (234 tokens) |
+| 8 (live) | dev DB: POST /skills → row + `skill_versions` 1,2 after PUT → `DELETE` row in SQL → `GET /skills` omits it, `GET /skills/:id` 404 | pass |
+
+### UI checks (browser, argent + Chrome CDP, 2026-09-30)
+
+All pass: 6, 7, 9, 10, 11, 12 (incl. kebab-case and duplicate-name errors), 13, 15 (.md and .zip preview with ignored `README.txt`, `assets/run.js`; `.txt` rejected), 16, 22 (agent count 0 → 1 after linking), 23, 24 (Cancel / X keep, Delete removes), 25, 26, 27, 28 (`+2 −0` diff), 29 (restore v1 → v4 "Restored from v1"), 30, 31 (disabled rows have no handle and don't move), 32, 33/34, 35, 36, 37.
+
+Req 26 initially failed — markdown was parsed but unstyled (Tailwind preflight strips heading sizes and list markers, and `.dd-md` had no rules); fixed with scoped `.dd-md` styles in `client/src/app/globals.css`.
+
+Known follow-ups (not requirements): agent Config edits are discarded without a warning when switching to the Skills tab; the first card click on a cold `/skills` page is occasionally ignored while Next dev compiles the route; a review run has no overall deadline — one Test Quality run waited on the model for >12 min until cancelled (cancel works).
 
