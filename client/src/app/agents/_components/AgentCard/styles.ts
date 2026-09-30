@@ -40,7 +40,9 @@ export const s = {
     textOverflow: "ellipsis",
   } satisfies CSSProperties,
   deleteBtn: { display: "inline-flex" } satisfies CSSProperties,
-  metaRow: { display: "flex", alignItems: "center", gap: 8 } satisfies CSSProperties,
+  // Wraps instead of overflowing: model chip + skills count + L01 severity counters
+  // don't fit one line in the narrow /agents/:id list column.
+  metaRow: { display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, rowGap: 6, minWidth: 0 } satisfies CSSProperties,
   modelChip: (color: string): CSSProperties => ({
     fontSize: 12,
     fontWeight: 600,
@@ -48,5 +50,10 @@ export const s = {
     background: color + "1a",
     padding: "1px 8px",
     borderRadius: 4,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    maxWidth: "100%",
+    minWidth: 0,
   }),
 } as const;
