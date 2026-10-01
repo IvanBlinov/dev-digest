@@ -278,6 +278,23 @@ export type SecretKey =
   | 'DATABASE_URL'
   | (string & {});
 
+// ---------- URL fetcher (L03c — skill import from URL) ----------
+export interface FetchedTextFile {
+  /** Final URL after redirects. */
+  url: string;
+  contentType: string | null;
+  text: string;
+}
+
+/**
+ * Fetches a small public text file. Implementations MUST refuse non-http(s) schemes,
+ * private / loopback / link-local / metadata addresses (checked after DNS resolution and on
+ * every redirect), oversized bodies and non-text content — this is the SSRF boundary.
+ */
+export interface UrlFetcher {
+  fetchText(url: string, opts: { maxBytes: number; timeoutMs: number }): Promise<FetchedTextFile>;
+}
+
 export interface SecretsProvider {
   get(key: SecretKey): Promise<string | undefined>;
   /**

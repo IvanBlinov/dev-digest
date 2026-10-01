@@ -46,3 +46,11 @@ export const SKILL_NAME_MAX = 64;
 export const INITIAL_VERSION_MESSAGE = 'Initial version';
 export const restoredMessage = (version: number): string => `Restored from v${version}`;
 export const importedMessage = (filename: string): string => `Imported from ${filename}`;
+
+/** L03b — max chars of an injection finding's excerpt (mirrors the contract doc). */
+export const MAX_INJECTION_EXCERPT_CHARS = 120;
+
+/** L03c — URL import: body cap (same as an upload), whole-request deadline, name fallback file. */
+export const URL_IMPORT_MAX_BYTES = MAX_UPLOAD_BYTES;
+export const URL_IMPORT_TIMEOUT_MS = 10_000;
+export const URL_IMPORT_FALLBACK_FILE = 'skill.md';

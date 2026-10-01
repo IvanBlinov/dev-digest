@@ -8,7 +8,13 @@ import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './reposit
 import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
-import { buildSkillsPrompt, skillsLogLine, type EffectiveSkillsSource } from './skills-prompt.js';
+import {
+  blockedSkillsLogLine,
+  buildSkillsPrompt,
+  partitionBlockedSkills,
+  skillsLogLine,
+  type EffectiveSkillsSource,
+} from './skills-prompt.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -190,10 +196,14 @@ export class ReviewRunExecutor {
       // link order) become `### Skill:` blocks in the prompt, in that order.
       // A lookup failure fails the run: a review silently missing its rules
       // would look valid but answer a different question.
-      const skillsPlan = buildSkillsPrompt(
+      // L03b — skills with prompt-injection findings never reach the prompt,
+      // even when their link is enabled; the run log names them.
+      const { allowed: usableSkills, blocked: blockedSkills } = partitionBlockedSkills(
         await this.skills.effectiveSkillsForAgent(agent.id),
-        this.container.tokenizer,
       );
+      const blockedLine = blockedSkillsLogLine(blockedSkills);
+      if (blockedLine) runLog.info(blockedLine);
+      const skillsPlan = buildSkillsPrompt(usableSkills, this.container.tokenizer);
       runLog.info(skillsLogLine(skillsPlan));
 
       // ---- Engine: assemble → single-pass → grounding -----------------------

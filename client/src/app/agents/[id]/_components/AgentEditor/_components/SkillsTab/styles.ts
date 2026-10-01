@@ -31,9 +31,10 @@ export const s = {
   } satisfies CSSProperties,
   handleSpacer: { width: 16, flexShrink: 0 } satisfies CSSProperties,
   checkboxOff: { pointerEvents: "none", opacity: 0.6 } satisfies CSSProperties,
+  nameCell: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 } satisfies CSSProperties,
+  blockedHint: { fontSize: 12, color: "var(--crit)" } satisfies CSSProperties,
   name: {
     fontSize: 13,
-    flex: 1,
     minWidth: 0,
     overflow: "hidden",
     textOverflow: "ellipsis",

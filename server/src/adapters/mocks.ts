@@ -31,6 +31,8 @@ import type {
   AuthWorkspace,
   SecretsProvider,
   SecretKey,
+  UrlFetcher,
+  FetchedTextFile,
 } from '@devdigest/shared';
 import { parseUnifiedDiff } from './git/diff-parser.js';
 
@@ -326,5 +328,22 @@ export class MockSecretsProvider implements SecretsProvider {
   constructor(private secrets: Partial<Record<string, string>> = {}) {}
   async get(key: SecretKey): Promise<string | undefined> {
     return this.secrets[key as string];
+  }
+}
+
+/**
+ * L03c — URL fetcher double: `url → FetchedTextFile | Error`. An Error entry is
+ * thrown as-is (its message is what the service turns into a 400); an unknown
+ * URL throws "The server answered 404". Records every requested URL.
+ */
+export class MockUrlFetcher implements UrlFetcher {
+  readonly calls: string[] = [];
+  constructor(private responses: Record<string, FetchedTextFile | Error> = {}) {}
+  async fetchText(url: string, _opts: { maxBytes: number; timeoutMs: number }): Promise<FetchedTextFile> {
+    this.calls.push(url);
+    const hit = this.responses[url];
+    if (hit === undefined) throw new Error('The server answered 404');
+    if (hit instanceof Error) throw hit;
+    return hit;
   }
 }

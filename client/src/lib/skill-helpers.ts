@@ -3,7 +3,7 @@
    NOTE: only *type* imports from @devdigest/shared — its barrel re-exports with `.js`
    extensions that Next's webpack cannot resolve, so runtime values are mirrored here and
    pinned to the contract by skill-helpers.test.ts. */
-import type { Skill, SkillType } from "@devdigest/shared";
+import type { Skill, SkillSecurity, SkillType } from "@devdigest/shared";
 
 /** Mirrors `SkillName` (contracts/knowledge.ts): kebab-case slug, 2–64 chars. */
 export const SKILL_NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
@@ -11,6 +11,11 @@ export const SKILL_NAME_MIN = 2;
 export const SKILL_NAME_MAX = 64;
 /** Mirrors `SKILL_BODY_MAX`. */
 export const SKILL_BODY_MAX = 20_000;
+
+/** A skill is blocked iff its injection scan says so; a missing scan counts as clean. */
+export function isSkillBlocked(security: SkillSecurity | null | undefined): boolean {
+  return security?.status === "blocked";
+}
 
 /** Client-side token estimate shown in the editor ("~N tokens"): ceil(length / 4). */
 export function estimateTokens(text: string): number {

@@ -1,0 +1,1 @@
+export { InjectionChip } from "./InjectionChip";

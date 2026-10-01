@@ -1,6 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { SkillName, SkillType, SKILL_BODY_MAX as CONTRACT_BODY_MAX, type Skill } from "@devdigest/shared";
-import { estimateTokens, skillNameError, filterSkills, importKind, readFileAsBase64, SKILL_TYPES, SKILL_BODY_MAX } from "./skill-helpers";
+import {
+  estimateTokens,
+  skillNameError,
+  filterSkills,
+  importKind,
+  readFileAsBase64,
+  isSkillBlocked,
+  SKILL_TYPES,
+  SKILL_BODY_MAX,
+} from "./skill-helpers";
 
 const skill = (over: Partial<Skill>): Skill => ({
   id: "s",
@@ -80,5 +89,19 @@ describe("contract parity (runtime values are mirrored, see skill-helpers.ts)", 
     for (const n of ["ab", "a", "a-b-c", "A-b", "-x", "x_y", "a".repeat(64), "a".repeat(65), "9lives"]) {
       expect(skillNameError(n) === null, n).toBe(SkillName.safeParse(n).success);
     }
+  });
+});
+
+describe("isSkillBlocked", () => {
+  const finding = { rule: "ignore-instructions", label: "Overrides instructions", severity: "high" as const, line: 3, excerpt: "ignore all previous instructions" };
+
+  it("is true only when the scan status is blocked", () => {
+    expect(isSkillBlocked({ status: "blocked", findings: [finding] })).toBe(true);
+    expect(isSkillBlocked({ status: "clean", findings: [] })).toBe(false);
+  });
+
+  it("treats a missing scan as clean", () => {
+    expect(isSkillBlocked(undefined)).toBe(false);
+    expect(isSkillBlocked(null)).toBe(false);
   });
 });

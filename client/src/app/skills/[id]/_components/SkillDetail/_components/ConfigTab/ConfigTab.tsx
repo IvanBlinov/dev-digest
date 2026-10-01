@@ -10,7 +10,7 @@ import { ApiError } from "@/lib/api";
 import { useUpdateSkill } from "@/lib/hooks/skills";
 import { useToast } from "@/lib/toast";
 import { SKILL_BODY_MAX } from "@/lib/skill-helpers";
-import { BodyEditor } from "@/app/skills/_components/BodyEditor";
+import { BodyEditor } from "@/components/skill-body-editor";
 import { SkillFields, nameErrorKey } from "@/app/skills/_components/SkillFields";
 import { EDITOR_HEIGHT, HTTP_CONFLICT } from "./constants";
 import { buildPatch, draftFrom, isDirty, type ConfigDraft } from "./helpers";

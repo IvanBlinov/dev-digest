@@ -3,6 +3,7 @@ import { render, screen, cleanup, fireEvent, within } from "@testing-library/rea
 import { NextIntlClientProvider } from "next-intl";
 import type { AgentSkillLink, Skill } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/agents.json";
+import common from "../../../../../../../../messages/en/common.json";
 
 const mutate = vi.fn();
 let links: AgentSkillLink[] = [];
@@ -11,12 +12,20 @@ function skill(id: string, name: string, type: Skill["type"], enabled = true): S
   return { id, name, description: "", type, source: "manual", body: "b", enabled, version: 1 } as Skill;
 }
 
-const SKILLS: Skill[] = [
+const BASE_SKILLS: Skill[] = [
   skill("s1", "zeta-rules", "convention"),
   skill("s2", "alpha-guard", "security"),
   skill("s3", "mid-check", "rubric"),
   skill("s4", "beta-off", "custom", false),
 ];
+const EVIL: Skill = {
+  ...skill("s5", "evil-skill", "custom"),
+  security: {
+    status: "blocked",
+    findings: [{ rule: "ignore-instructions", label: "Overrides", severity: "high", line: 1, excerpt: "ignore" }],
+  },
+};
+let SKILLS: Skill[] = BASE_SKILLS;
 
 vi.mock("@/lib/hooks/skills", () => ({
   useSkills: () => ({ data: SKILLS, isLoading: false, isError: false }),
@@ -30,6 +39,7 @@ import { SkillsTab } from "./SkillsTab";
 
 beforeEach(() => {
   mutate.mockReset();
+  SKILLS = BASE_SKILLS;
   links = [
     { agent_id: "ag1", skill_id: "s3", order: 0, enabled: true },
     { agent_id: "ag1", skill_id: "s1", order: 1, enabled: true },
@@ -40,7 +50,7 @@ afterEach(cleanup);
 
 function renderTab() {
   return render(
-    <NextIntlClientProvider locale="en" messages={{ agents: messages }}>
+    <NextIntlClientProvider locale="en" messages={{ agents: messages, common }}>
       <SkillsTab agentId="ag1" />
     </NextIntlClientProvider>,
   );
@@ -125,5 +135,43 @@ describe("Agent editor · Skills tab", () => {
     expect(within(off).getByText("disabled globally")).toBeInTheDocument();
     fireEvent.click(within(off).getByRole("checkbox"));
     expect(mutate).not.toHaveBeenCalled();
+  });
+
+  describe("blocked skill (injection detected)", () => {
+    beforeEach(() => {
+      SKILLS = [...BASE_SKILLS, EVIL];
+    });
+
+    it("shows the chip and hint, disables the checkbox and is not draggable", () => {
+      renderTab();
+      const evil = row("evil-skill");
+      expect(within(evil).getByText("Injection detected")).toBeInTheDocument();
+      expect(within(evil).getByText("Blocked — injection detected. Clean the skill body to enable it.")).toBeInTheDocument();
+      expect(within(evil).queryByLabelText("Drag to reorder")).toBeNull();
+      expect(evil).not.toHaveAttribute("draggable", "true");
+      fireEvent.click(within(evil).getByRole("checkbox"));
+      expect(mutate).not.toHaveBeenCalled();
+    });
+
+    it("an enabled link to it is shown unchecked in the non-enabled section and is not counted", () => {
+      links = [{ agent_id: "ag1", skill_id: "s5", order: 0, enabled: true }, ...links.map((l) => ({ ...l, order: l.order + 1 }))];
+      renderTab();
+      expect(screen.getByText("Skills · 2 of 5 enabled")).toBeInTheDocument();
+      const names = screen.getAllByRole("listitem").map((li) => li.getAttribute("aria-label"));
+      expect(names).toEqual(["mid-check", "zeta-rules", "alpha-guard", "beta-off", "evil-skill"]);
+      expect(within(row("evil-skill")).getByRole("checkbox")).not.toBeChecked();
+    });
+
+    it("any change sends the blocked link with enabled:false — never an enable", () => {
+      links = [{ agent_id: "ag1", skill_id: "s5", order: 0, enabled: true }, ...links.map((l) => ({ ...l, order: l.order + 1 }))];
+      renderTab();
+      fireEvent.click(within(row("alpha-guard")).getByRole("checkbox"));
+      expect(mutate).toHaveBeenCalledWith([
+        { skill_id: "s3", enabled: true },
+        { skill_id: "s1", enabled: true },
+        { skill_id: "s2", enabled: true },
+        { skill_id: "s5", enabled: false },
+      ]);
+    });
   });
 });

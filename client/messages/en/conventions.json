@@ -3,24 +3,113 @@
     "crumbLab": "Skills Lab",
     "crumbConventions": "Conventions",
     "headingPrefix": "Conventions in ",
-    "repoFallback": "repo",
-    "subtitle": "Scan the cloned repo to surface house-rules — each backed by evidence you can turn into a Skill.",
+    "subtitle": "Detected from {count, plural, one {# sample file} other {# sample files}} · last scan {when}",
+    "subtitleRunning": "Sampling configs and top-ranked files, then asking the model for house rules…",
+    "subtitleIntro": "Scan the repo to surface house rules — each backed by evidence you can turn into a skill.",
+    "runScan": "Run Scan",
+    "rescan": "ReScan",
     "scanning": "Scanning…",
-    "rescan": "Re-scan",
-    "runExtraction": "Run extraction",
-    "extractionFailed": "Extraction failed",
     "loadError": "Could not load conventions.",
+    "scanFailed": "Last scan failed: {error}",
+    "scanFailedRetry": "Use the scan button to try again.",
+    "noRepo": {
+      "title": "No repository selected",
+      "body": "Pick a repository in the switcher (or add one) to analyse its conventions."
+    },
+    "notIndexed": {
+      "title": "This repository isn't indexed yet",
+      "body": "Conventions are sampled from repo-intel's top-ranked files. Index the repository first — scanning stays disabled until then."
+    },
     "empty": {
       "title": "No conventions extracted yet",
-      "body": "Scan the repo to surface house-rules — naming, error handling, structure — each backed by evidence you can turn into a Skill.",
-      "cta": "Run extraction"
+      "body": "Run a scan to sample the repo's configs and top-ranked files and surface naming, structure, error-handling and other house rules."
     },
-    "candidateCount": "{count, plural, one {# candidate} other {# candidates}} · grounded against sampled files"
+    "noCandidates": {
+      "title": "No open conventions",
+      "body": "Every candidate from the last scan was rejected. ReScan to look for new ones."
+    },
+    "running": {
+      "title": "Scanning the repository…",
+      "body": "This usually takes under a minute. The page refreshes on its own."
+    },
+    "created": "Skill {name} created and added to Skills Lab.",
+    "openSkill": "Open skill"
+  },
+  "toolbar": {
+    "acceptedCount": "{accepted} of {total} accepted",
+    "deselectAll": "Deselect all",
+    "createSkill": "Create skill"
+  },
+  "categories": {
+    "naming": "naming",
+    "structure": "structure",
+    "imports": "imports",
+    "error-handling": "error handling",
+    "async": "async",
+    "typing": "typing",
+    "testing": "testing",
+    "formatting": "formatting",
+    "other": "other"
   },
   "card": {
-    "confidence": "Confidence",
+    "accept": "Accept",
     "accepted": "Accepted",
-    "accepting": "Accepting…",
-    "acceptAsSkill": "Accept as Skill"
+    "reject": "Reject",
+    "edit": "Edit",
+    "edited": "edited",
+    "confidence": "Confidence",
+    "copy": "Copy snippet",
+    "copied": "Snippet copied",
+    "copyFailed": "Could not copy the snippet",
+    "editTitle": "Edit convention title",
+    "titleField": "Convention title",
+    "titleHint": "Enter to save · Shift+Enter for a new line · Esc to cancel"
+  },
+  "edit": {
+    "rule": "Rule",
+    "category": "Category",
+    "path": "Evidence file",
+    "startLine": "Start line",
+    "endLine": "End line",
+    "snippet": "Snippet",
+    "save": "Save",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "ruleTooShort": "The rule needs at least 3 characters.",
+    "pathRequired": "The evidence file is required.",
+    "linesInvalid": "Lines must be positive whole numbers, with the end line not before the start line.",
+    "ruleTooLong": "The rule can be at most 300 characters."
+  },
+  "modal": {
+    "title": "Create skill from conventions",
+    "banner": "Merged from {count, plural, one {# accepted convention} other {# accepted conventions}} in <mono>{repo}</mono>. Everything below is editable before you save.",
+    "loading": "Building the skill draft…",
+    "draftFailed": "Could not build the skill draft: {message}",
+    "retry": "Retry",
+    "name": "Name",
+    "nameHint": "kebab-case, 2–64 characters",
+    "nameRequired": "Name is required.",
+    "nameInvalid": "Use kebab-case: lowercase letters, digits and dashes (2–64 characters).",
+    "nameTaken": "A skill with this name already exists.",
+    "description": "Description",
+    "type": "Type",
+    "types": {
+      "rubric": "rubric",
+      "convention": "convention",
+      "security": "security",
+      "custom": "custom"
+    },
+    "enabled": "Enabled",
+    "enabledHint": "Whether this block is added to agents' prompts.",
+    "agent": "Attach to agent",
+    "agentHint": "The skill is appended to the agent's skills, switched on.",
+    "noAgent": "Don't link",
+    "body": "Skill body",
+    "bodyRequired": "Body is required.",
+    "bodyTooLong": "Body is too long (max {max} characters).",
+    "footerNote": "Saved as v1 · added to Skills Lab",
+    "cancel": "Cancel",
+    "submit": "Create skill",
+    "creating": "Creating…"
   }
 }

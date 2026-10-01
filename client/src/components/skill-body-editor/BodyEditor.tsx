@@ -1,4 +1,4 @@
-/* BodyEditor — markdown body editor for a skill: line-number gutter (scroll-synced with the
+/* BodyEditor — markdown body editor for a skill (Skills Lab create/config, Conventions → Create skill): line-number gutter (scroll-synced with the
    textarea), a header with `<name>.md`, an `unsaved` badge and the "~N tokens" estimate. */
 "use client";
 
@@ -22,7 +22,7 @@ export interface BodyEditorProps {
 }
 
 export function BodyEditor({ value, onChange, label, fileName, dirty, placeholder, height }: BodyEditorProps) {
-  const t = useTranslations("skills");
+  const t = useTranslations("common");
   const gutterRef = React.useRef<HTMLDivElement>(null);
   const lineCount = Math.max(1, value.split("\n").length);
   const numbers = React.useMemo(
@@ -42,9 +42,9 @@ export function BodyEditor({ value, onChange, label, fileName, dirty, placeholde
             {fileName}.md
           </span>
         )}
-        {dirty && <Badge color="var(--warn, #f59e0b)">{t("config.unsaved")}</Badge>}
+        {dirty && <Badge color="var(--warn, #f59e0b)">{t("skillBodyEditor.unsaved")}</Badge>}
         <span className="tnum" style={s.tokens}>
-          {t("form.tokens", { count: estimateTokens(value) })}
+          {t("skillBodyEditor.tokens", { count: estimateTokens(value) })}
         </span>
       </div>
       <div style={s.body(height ?? DEFAULT_EDITOR_HEIGHT)}>

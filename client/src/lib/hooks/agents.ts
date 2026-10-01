@@ -13,9 +13,12 @@ import type {
 } from "@devdigest/shared";
 import { SKILLS_KEY } from "./skills";
 
+export const AGENTS_KEY = ["agents"] as const;
+export const agentSkillsKey = (id: string | null | undefined) => ["agent-skills", id] as const;
+
 export function useAgents() {
   return useQuery({
-    queryKey: ["agents"],
+    queryKey: AGENTS_KEY,
     queryFn: () => api.get<Agent[]>("/agents"),
   });
 }

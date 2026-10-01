@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
@@ -251,14 +251,16 @@ export class AgentsRepository {
     });
   }
 
-  /** L02 — per agent, the number of links with the per-agent switch on. */
-  async enabledSkillCounts(agentIds: string[]): Promise<Map<string, number>> {
-    if (agentIds.length === 0) return new Map();
-    const rows = await this.db
-      .select({ agentId: t.agentSkills.agentId, n: count() })
+  /**
+   * Per-agent links with the per-agent switch on, with the skill body — the
+   * service drops blocked skills (L03b) before counting.
+   */
+  async enabledSkillLinks(agentIds: string[]): Promise<Array<{ agentId: string; body: string }>> {
+    if (agentIds.length === 0) return [];
+    return this.db
+      .select({ agentId: t.agentSkills.agentId, body: t.skills.body })
       .from(t.agentSkills)
-      .where(and(inArray(t.agentSkills.agentId, agentIds), eq(t.agentSkills.enabled, true)))
-      .groupBy(t.agentSkills.agentId);
-    return new Map(rows.map((r) => [r.agentId, Number(r.n)]));
+      .innerJoin(t.skills, eq(t.agentSkills.skillId, t.skills.id))
+      .where(and(inArray(t.agentSkills.agentId, agentIds), eq(t.agentSkills.enabled, true)));
   }
 }

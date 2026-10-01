@@ -2,6 +2,34 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-09-30 — [Pitfall] Async previews can land after the input changed
+Symptom: an import preview for an old URL could appear under a newly typed URL.
+Rule: remember the requested value (ref) and drop responses that don't match the current input; clear the preview on every input change.
+Proof: `client/src/app/skills/_components/SkillsLabView/_components/ImportUrlSkillModal/ImportUrlSkillModal.tsx`
+
+## 2026-09-30 — [Pitfall] A flex chip next to a `minWidth: 0` name squeezes the name to nothing
+Symptom: blocked skill cards showed the "Injection detected" chip but no skill name.
+Cause: the name was `flex: 1; minWidth: 0` while the badge doesn't shrink, so the name got 0 px on narrow cards.
+Rule: give the primary label a real `minWidth` and wrap secondary chips in a shrinkable slot (`flex: 0 1 auto; minWidth: 0; overflow: hidden`).
+Proof: `client/src/app/skills/_components/SkillsLabView/_components/SkillCard/styles.ts:24`
+
+## 2026-09-30 — [Pitfall] Never run `next build` while `next dev` serves the same folder
+Symptom: the dev app turned unstyled and stopped hydrating (404 for main-app.js / layout.css).
+Cause: `next build` overwrites `.next`, which the running dev server is using.
+Rule: stop the dev server, build, then `rm -rf .next` and start dev again.
+Proof: `client/package.json:1`
+
+## 2026-09-30 — [Non-obvious behaviour] Mutation errors are already toasted globally
+Symptom: a component's own `onError` toast for a failed mutation shows twice or the custom one seems never to win.
+Cause: the app's `MutationCache` has a global `onError` that toasts every mutation error.
+Rule: in components handle failures for UI state only (keep a modal open, roll back); don't add another toast.
+Proof: `client/src/lib/providers.tsx:42`
+
+## 2026-09-30 — [Pitfall] next-intl `t.rich`: a tag named like a value overwrites it
+Symptom: `<repo>{repo}</repo>` rendered the tag function's output instead of the repo name.
+Rule: give rich-text tags names distinct from interpolated values (`<mono>{repo}</mono>`).
+Proof: `client/messages/en/conventions.json:81`
+
 ## 2026-09-29 — [Pitfall] Runtime (non-type) imports from `@devdigest/shared` break `next build`
 Symptom: `pnpm test` and `pnpm typecheck` pass, but `next build` fails to resolve `./contracts/knowledge.js`.
 Cause: the shared barrel re-exports with `.js` extensions that webpack can't map to `.ts`; vitest and tsc accept them. `import type` is erased, so only value imports (schemas, constants) hit it.

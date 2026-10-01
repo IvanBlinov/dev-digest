@@ -81,7 +81,10 @@ export class OpenRouterProvider implements LLMProvider {
         // OpenRouter usage accounting — ask it to return the REAL generation
         // cost (USD) in `usage.cost`, instead of estimating from a price book.
         ...(this.id === 'openrouter' ? { usage: { include: true } } : {}),
-      });
+      },
+      // Per-request timeout: without it every attempt falls back to the client-wide
+      // 90 s and a slow (reasoning) model can hang a run for minutes.
+      req.timeoutMs ? { timeout: req.timeoutMs } : undefined);
 
       // OpenRouter can return HTTP 200 with no `choices` (an upstream provider
       // error / moderation / free-tier limit in the body) — surface it.

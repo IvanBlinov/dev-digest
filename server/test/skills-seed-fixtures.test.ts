@@ -22,7 +22,7 @@ describe('L02 seed fixtures', () => {
 
   it('every skill fixture parses with frontmatter and no warnings', () => {
     const files = readdirSync(FIXTURE_DIR).filter((f) => f.endsWith('.md'));
-    expect(files).toHaveLength(4);
+    expect(files).toHaveLength(8);
     for (const f of files) {
       const p = parseSkillUpload(f, new Uint8Array(readFileSync(new URL(f, FIXTURE_DIR))));
       expect(p.name).toBe(f.replace(/\.md$/, ''));

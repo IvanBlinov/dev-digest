@@ -9,6 +9,8 @@ import type {
   SkillImportCommit,
   SkillImportPreview,
   SkillImportRequest,
+  SkillUrlImportCommit,
+  SkillUrlImportRequest,
   SkillVersion,
   UpdateSkillBody,
 } from "@devdigest/shared";
@@ -108,6 +110,23 @@ export function useImportSkill() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: SkillImportCommit) => api.post<Skill>("/skills/import", body),
+    onSuccess: (skill) => refreshSkill(qc, skill),
+  });
+}
+
+/** Fetch a raw .md/.txt URL server-side and parse it without saving anything (L03c). */
+export function useSkillUrlImportPreview() {
+  return useMutation({
+    mutationFn: (body: SkillUrlImportRequest) =>
+      api.post<SkillImportPreview>("/skills/import-url/preview", body),
+  });
+}
+
+/** Save a URL import (source `imported_url`) with the edits made in the preview. */
+export function useImportSkillFromUrl() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SkillUrlImportCommit) => api.post<Skill>("/skills/import-url", body),
     onSuccess: (skill) => refreshSkill(qc, skill),
   });
 }
