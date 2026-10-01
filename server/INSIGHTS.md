@@ -2,6 +2,23 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-09-30 — [Performance] Reasoning models are a bad default for structured LLM features
+Symptom: a conventions scan with `deepseek/deepseek-v4-flash` used all 4 000 output tokens on hidden reasoning, returned empty content and timed out; `openai/gpt-4.1-mini` finished the same scan in 10 s with 12 grounded candidates.
+Cause: reasoning tokens count against `max_tokens` and are produced before any visible answer.
+Rule: default structured-output features (conventions, intent, risks) to non-reasoning models; if a reasoning model is chosen in Settings, raise `max_tokens` and expect minutes, not seconds.
+Proof: `server/src/vendor/shared/contracts/platform.ts:77`, `server/src/modules/conventions/constants.ts:34`
+
+## 2026-09-30 — [Architectural decision] One running conventions scan per repo via an advisory lock
+Context: two quick clicks on Run Scan must not start two LLM jobs for the same repo.
+Decision: `startScan` takes `pg_advisory_xact_lock(hashtext('convention_scan:<repo>'))` inside the insert transaction and returns 409 if a `running` scan exists; a scan stuck `running` for > 10 min is treated as stale.
+Consequence: single-DB assumption (like the boot reaper); completion only updates a scan that is still `running`.
+Proof: `server/src/modules/conventions/repository.ts:91`
+
+## 2026-09-30 — [Non-obvious behaviour] `MockGitClient.readFile` returns `''` for missing files; the real client throws
+Symptom: sampler code that relies on a throw to skip absent config files passes tests but behaves differently in dev.
+Rule: treat both "empty" and "throws" as missing in code that probes optional files.
+Proof: `server/src/adapters/mocks.ts:293`
+
 ## 2026-09-30 — [Pitfall] Running the "hermetic" unit suite used to fail live dev review runs
 Symptom: a review started in the dev stack flips to `failed` with no error and no trace while `pnpm test` runs.
 Cause: `routes-smoke.test.ts` calls `buildApp()` with the default `DATABASE_URL` (the dev DB), and the boot reaper marked every `running` agent_run there as failed.

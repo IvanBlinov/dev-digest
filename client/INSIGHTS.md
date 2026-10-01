@@ -2,6 +2,17 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-09-30 — [Non-obvious behaviour] Mutation errors are already toasted globally
+Symptom: a component's own `onError` toast for a failed mutation shows twice or the custom one seems never to win.
+Cause: the app's `MutationCache` has a global `onError` that toasts every mutation error.
+Rule: in components handle failures for UI state only (keep a modal open, roll back); don't add another toast.
+Proof: `client/src/lib/providers.tsx:42`
+
+## 2026-09-30 — [Pitfall] next-intl `t.rich`: a tag named like a value overwrites it
+Symptom: `<repo>{repo}</repo>` rendered the tag function's output instead of the repo name.
+Rule: give rich-text tags names distinct from interpolated values (`<mono>{repo}</mono>`).
+Proof: `client/messages/en/conventions.json:81`
+
 ## 2026-09-29 — [Pitfall] Runtime (non-type) imports from `@devdigest/shared` break `next build`
 Symptom: `pnpm test` and `pnpm typecheck` pass, but `next build` fails to resolve `./contracts/knowledge.js`.
 Cause: the shared barrel re-exports with `.js` extensions that webpack can't map to `.ts`; vitest and tsc accept them. `import type` is erased, so only value imports (schemas, constants) hit it.

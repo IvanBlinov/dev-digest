@@ -29,6 +29,8 @@ export interface InsertSkill {
   source: SkillSource;
   body: string;
   enabled?: boolean;
+  /** Files the skill was derived from (L03: extracted conventions). */
+  evidenceFiles?: string[] | null;
   /** Note stored on the v1 snapshot. */
   message: string;
 }
@@ -127,6 +129,7 @@ export class SkillsRepository {
           source: values.source,
           body: values.body,
           enabled: values.enabled ?? true,
+          evidenceFiles: values.evidenceFiles ?? null,
           version: 1,
         })
         .returning();

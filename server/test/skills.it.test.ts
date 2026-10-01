@@ -300,14 +300,18 @@ d('skills (L02)', () => {
 
     const agents = await pg.handle.db.select().from(t.agents).where(eq(t.agents.workspaceId, workspaceId));
     const repo = new SkillsRepository(pg.handle.db);
-    for (const [agentName, skillName] of [
-      ['Test Quality Reviewer', 'test-quality-rubric'],
-      ['API Contract Reviewer', 'api-contract-guard'],
+    // L03 req 43 appends the four contract skills after api-contract-guard.
+    for (const [agentName, skillNames] of [
+      ['Test Quality Reviewer', ['test-quality-rubric']],
+      [
+        'API Contract Reviewer',
+        ['api-contract-guard', 'breaking-change', 'response-schema', 'semver-discipline', 'deprecation-policy'],
+      ],
     ] as const) {
       const matching = agents.filter((a) => a.name === agentName);
       expect(matching).toHaveLength(1);
       expect(matching[0]!.systemPrompt).not.toMatch(/boundary|breaking/i);
-      expect((await repo.effectiveSkillsForAgent(matching[0]!.id)).map((s) => s.name)).toEqual([skillName]);
+      expect((await repo.effectiveSkillsForAgent(matching[0]!.id)).map((s) => s.name)).toEqual(skillNames);
     }
 
     const [repoRow] = await pg.handle.db.select().from(t.repos).where(eq(t.repos.fullName, 'acme/payments-api'));

@@ -3,6 +3,7 @@ import { render, screen, cleanup, fireEvent, within } from "@testing-library/rea
 import { NextIntlClientProvider } from "next-intl";
 import type { Skill } from "@devdigest/shared";
 import skills from "../../../../../../messages/en/skills.json";
+import common from "../../../../../../messages/en/common.json";
 import { ToastProvider } from "@/lib/toast";
 
 const SKILL: Skill = {
@@ -30,7 +31,7 @@ afterEach(cleanup);
 
 function setup() {
   render(
-    <NextIntlClientProvider locale="en" messages={{ skills }}>
+    <NextIntlClientProvider locale="en" messages={{ skills, common }}>
       <ToastProvider>
         <SkillDetail id="s1" />
       </ToastProvider>

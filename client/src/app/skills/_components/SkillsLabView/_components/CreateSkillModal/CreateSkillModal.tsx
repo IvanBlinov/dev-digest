@@ -9,7 +9,7 @@ import { ApiError } from "@/lib/api";
 import { useCreateSkill } from "@/lib/hooks/skills";
 import { useToast } from "@/lib/toast";
 import { SKILL_BODY_MAX, type SkillMeta } from "@/lib/skill-helpers";
-import { BodyEditor } from "@/app/skills/_components/BodyEditor";
+import { BodyEditor } from "@/components/skill-body-editor";
 import { SkillFields, nameErrorKey } from "@/app/skills/_components/SkillFields";
 import { BODY_EDITOR_HEIGHT, EMPTY_META, HTTP_CONFLICT, MODAL_WIDTH } from "./constants";
 import { s } from "./styles";

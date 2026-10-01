@@ -2,6 +2,12 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-09-30 — [Pitfall] `OpenRouterProvider` ignored the per-request `timeoutMs`
+Symptom: a review / conventions call against a slow model hung for 5–12 minutes although callers passed `timeoutMs`.
+Cause: the timeout was only set on the OpenAI client (90 s default) and the SDK retries; `req.timeoutMs` never reached `chat.completions.create`.
+Rule: per-request options go in the second argument of `create(...)`; covered by `test/openrouter-timeout.test.ts`.
+Proof: `reviewer-core/src/llm/openrouter.ts:87`
+
 ## 2026-09-17 — [Non-obvious behaviour] The engine entrypoint is `reviewPullRequest`, not `run`
 Symptom: the README calls the orchestrator "the `run` entrypoint"; there is no export named `run`.
 Cause: the file is `review/run.ts` but the exported function is `reviewPullRequest`.

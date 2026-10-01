@@ -4,6 +4,7 @@ import type {
   SkillImportCommit,
   SkillImportPreview,
   SkillImportRequest,
+  SkillSource,
   SkillVersion,
   UpdateSkillBody,
 } from '@devdigest/shared';
@@ -42,16 +43,29 @@ export class SkillsService {
   }
 
   async create(workspaceId: string, body: CreateSkillBody): Promise<Skill> {
+    return this.createWithOrigin(workspaceId, body, { source: 'manual', message: INITIAL_VERSION_MESSAGE });
+  }
+
+  /**
+   * Create with an explicit origin — e.g. L03 conventions (`extracted`, with the
+   * evidence files and a "Created from N conventions" v1 note). Same name guard.
+   */
+  async createWithOrigin(
+    workspaceId: string,
+    body: CreateSkillBody,
+    origin: { source: SkillSource; message: string; evidenceFiles?: string[] },
+  ): Promise<Skill> {
     await this.assertNameFree(workspaceId, body.name);
     const row = await this.guardName(body.name, () => this.repo.insert({
       workspaceId,
       name: body.name,
       description: body.description,
       type: body.type,
-      source: 'manual',
+      source: origin.source,
       body: body.body,
       enabled: body.enabled,
-      message: INITIAL_VERSION_MESSAGE,
+      evidenceFiles: origin.evidenceFiles ?? null,
+      message: origin.message,
     }));
     return toSkillDto(row, 0);
   }

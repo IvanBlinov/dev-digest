@@ -74,8 +74,10 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     id: 'conventions',
     label: 'Conventions',
     description: 'Extracts coding conventions from the repo.',
+    // Non-reasoning on purpose: deepseek-v4-flash spent its whole token budget on
+    // hidden reasoning and returned no conventions (L03, 2026-09-30).
     defaultProvider: 'openrouter',
-    defaultModel: 'deepseek/deepseek-v4-flash',
+    defaultModel: 'openai/gpt-4.1-mini',
   },
 ];
 
