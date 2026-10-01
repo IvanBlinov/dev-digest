@@ -1,4 +1,4 @@
-/* CandidateCard — one detected convention (req 46, 47, 49): italic rule, category chip, evidence
+/* CandidateCard — one detected convention (req 46, 47, 49): italic rule (click to rename), category chip, evidence
    block, confidence bar; right column Accept/Accepted · Reject · Edit. Edit swaps the card body
    for an inline form in place. */
 "use client";
@@ -10,6 +10,7 @@ import type { ConventionCandidate, UpdateConventionBody } from "@devdigest/share
 import { useUpdateConvention } from "@/lib/hooks/conventions";
 import { CandidateEditForm } from "./_components/CandidateEditForm";
 import { EvidenceBlock } from "./_components/EvidenceBlock";
+import { RuleTitle } from "./_components/RuleTitle";
 import { confidenceColor, confidencePercent, evidenceLabel } from "./helpers";
 import { s } from "./styles";
 
@@ -50,7 +51,7 @@ export function CandidateCard({ repoId, candidate: c }: CandidateCardProps) {
           <Badge mono>{t(`categories.${c.category}`)}</Badge>
           {c.edited && <Badge color="var(--text-muted)">{t("card.edited")}</Badge>}
         </div>
-        <p style={s.rule}>{c.rule}</p>
+        <RuleTitle rule={c.rule} disabled={update.isPending} onSave={(rule) => send({ rule })} />
         <EvidenceBlock location={evidenceLabel(c)} snippet={c.evidence_snippet} />
         <div style={s.confidence}>
           <span style={s.confidenceLabel}>{t("card.confidence")}</span>

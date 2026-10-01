@@ -60,7 +60,10 @@
     "confidence": "Confidence",
     "copy": "Copy snippet",
     "copied": "Snippet copied",
-    "copyFailed": "Could not copy the snippet"
+    "copyFailed": "Could not copy the snippet",
+    "editTitle": "Edit convention title",
+    "titleField": "Convention title",
+    "titleHint": "Enter to save · Shift+Enter for a new line · Esc to cancel"
   },
   "edit": {
     "rule": "Rule",
@@ -74,7 +77,8 @@
     "cancel": "Cancel",
     "ruleTooShort": "The rule needs at least 3 characters.",
     "pathRequired": "The evidence file is required.",
-    "linesInvalid": "Lines must be positive whole numbers, with the end line not before the start line."
+    "linesInvalid": "Lines must be positive whole numbers, with the end line not before the start line.",
+    "ruleTooLong": "The rule can be at most 300 characters."
   },
   "modal": {
     "title": "Create skill from conventions",

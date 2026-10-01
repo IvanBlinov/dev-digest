@@ -12,13 +12,6 @@ export const s = {
   }),
   main: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 10 } satisfies CSSProperties,
   meta: { display: "flex", alignItems: "center", gap: 8 } satisfies CSSProperties,
-  rule: {
-    margin: 0,
-    fontSize: 14.5,
-    fontStyle: "italic",
-    lineHeight: 1.5,
-    color: "var(--text-primary)",
-  } satisfies CSSProperties,
   confidence: { display: "flex", alignItems: "center", gap: 10 } satisfies CSSProperties,
   confidenceLabel: { fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
   bar: { width: 160 } satisfies CSSProperties,

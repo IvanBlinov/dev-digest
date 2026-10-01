@@ -142,4 +142,14 @@ describe("CandidateCard helpers", () => {
       "server/src/modules/repos/routes.ts",
     );
   });
+
+  it("clicking the convention title renames it in place (PATCH {rule})", () => {
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: /edit convention title/i }));
+    const field = screen.getByRole("textbox", { name: /convention title/i });
+    fireEvent.change(field, { target: { value: "Renamed convention title" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(updateMutate).toHaveBeenCalledTimes(1);
+    expect(updateMutate.mock.calls[0]![0]).toEqual({ id: candidate().id, patch: { rule: "Renamed convention title" } });
+  });
 });
