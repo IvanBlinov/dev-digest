@@ -16,6 +16,7 @@ import {
   languageForPath,
   normalizeRule,
   planRescan,
+  isSameConvention,
   ruleSlug,
   sortCandidates,
   toConventionPatch,
@@ -175,6 +176,76 @@ describe('re-scan merge rule', () => {
     );
     expect(plan.deleteIds).toEqual(['pen']);
     expect(plan.insert.map((c) => c.rule)).toEqual(['Pending rule', 'Brand new rule']);
+  });
+});
+
+describe('isSameConvention — re-scan dedupe beyond exact text (req 48)', () => {
+  const kept = {
+    rule: "Name database tables in plural snake_case (e.g., 'users', 'workspaces', 'repos') and use camelCase for table column property names (e.g., createdAt, workspaceId).",
+    evidencePath: 'server/src/db/schema/core.ts',
+    startLine: 6,
+    endLine: 20,
+  };
+
+  it('treats a reworded rule on the same evidence as the same convention', () => {
+    expect(
+      isSameConvention(kept, {
+        rule: 'Name database tables in plural snake_case (e.g., `users`, `workspaces`) and columns in camelCase or snake_case.',
+        evidencePath: 'server/src/db/schema/core.ts',
+        startLine: 8,
+        endLine: 22,
+      }),
+    ).toBe(true);
+  });
+
+  it('treats an edited rule (user appended text) on the same lines as the same convention', () => {
+    expect(isSameConvention({ ...kept, rule: kept.rule + ' QA-EDIT-49' }, kept)).toBe(true);
+  });
+
+  it('keeps a genuinely different convention that cites the same file', () => {
+    expect(
+      isSameConvention(kept, {
+        rule: 'Define database tables using the drizzle-orm pgTable function with explicit primary keys, foreign keys, and indexes.',
+        evidencePath: 'server/src/db/schema/core.ts',
+        startLine: 6,
+        endLine: 20,
+      }),
+    ).toBe(false);
+  });
+
+  it('matches near-identical wording even when the model cites other lines', () => {
+    expect(
+      isSameConvention(kept, { ...kept, evidencePath: 'server/src/db/schema/repos.ts', startLine: 1, endLine: 9 }),
+    ).toBe(true);
+  });
+
+  it('does not match a similar rule on a different file when wording only loosely overlaps', () => {
+    expect(
+      isSameConvention(kept, {
+        rule: 'Name exported React components in PascalCase and hooks with a use prefix.',
+        evidencePath: 'client/src/lib/hooks/agents.ts',
+        startLine: 1,
+        endLine: 10,
+      }),
+    ).toBe(false);
+  });
+
+  it('planRescan never resurrects a rejected rule that the model reworded', () => {
+    const plan = planRescan(
+      [{ id: 'rej', status: 'rejected', edited: false, ...kept }],
+      [
+        {
+          category: 'naming',
+          rule: 'Name database tables in plural snake_case (e.g., `users`) and columns in camelCase or snake_case.',
+          evidencePath: 'server/src/db/schema/core.ts',
+          startLine: 6,
+          endLine: 20,
+          snippet: 'x',
+          confidence: 0.9,
+        },
+      ],
+    );
+    expect(plan.insert).toEqual([]);
   });
 });
 

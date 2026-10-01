@@ -14,7 +14,7 @@ import { useToast } from "@/lib/toast";
 import { SKILL_BODY_MAX, SKILL_TYPES } from "@/lib/skill-helpers";
 import { BodyEditor } from "@/components/skill-body-editor";
 import { BODY_EDITOR_HEIGHT, HTTP_CONFLICT, MODAL_WIDTH, NO_AGENT } from "./constants";
-import { bodyError, defaultAgentId, fromDraft, nameError, type SkillForm } from "./helpers";
+import { bodyError, defaultAgentId, fromDraft, nameError, type SkillForm, renameBodyHeading } from "./helpers";
 import { s } from "./styles";
 
 export interface CreateConventionSkillModalProps {
@@ -48,7 +48,13 @@ export function CreateConventionSkillModal({
   }, [draft.data, form]);
 
   const agentId = agentChoice ?? defaultAgentId(agents);
-  const set = <K extends keyof SkillForm>(key: K, v: SkillForm[K]) => setForm((f) => (f ? { ...f, [key]: v } : f));
+  // Renaming also renames the body's `# <name>` heading until the user edits that heading.
+  const set = <K extends keyof SkillForm>(key: K, v: SkillForm[K]) =>
+    setForm((f) => {
+      if (!f) return f;
+      const next = { ...f, [key]: v };
+      return key === "name" ? { ...next, body: renameBodyHeading(f.body, f.name, v as string) } : next;
+    });
 
   const submit = () => {
     if (!form) return;

@@ -38,3 +38,11 @@ export function bodyError(body: string, submitted: boolean): BodyErrorKey | null
   if (!body.trim()) return submitted ? "modal.bodyRequired" : null;
   return body.length > SKILL_BODY_MAX ? "modal.bodyTooLong" : null;
 }
+
+/** Keep the body's `# <name>` heading in step with the Name field until the user edits that heading. */
+export function renameBodyHeading(body: string, prevName: string, nextName: string): string {
+  const nl = body.indexOf("\n");
+  const first = nl === -1 ? body : body.slice(0, nl);
+  if (first !== `# ${prevName}`) return body;
+  return `# ${nextName}` + (nl === -1 ? "" : body.slice(nl));
+}

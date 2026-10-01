@@ -127,22 +127,69 @@ export interface ExistingCandidate {
   status: ConventionStatus;
   edited: boolean;
   rule: string;
+  evidencePath?: string | null;
+  startLine?: number | null;
+  endLine?: number | null;
+}
+
+/** The parts of a convention that identify it across scans. */
+export interface ConventionIdentity {
+  rule: string;
+  evidencePath?: string | null;
+  startLine?: number | null;
+  endLine?: number | null;
+}
+
+/** Words that carry meaning in a rule (length ≥ 3, no filler). */
+const RULE_STOPWORDS = new Set(['the', 'and', 'for', 'use', 'with', 'all', 'any', 'are', 'not', 'from', 'into', 'that', 'this', 'each', 'when']);
+function ruleTokens(rule: string): Set<string> {
+  return new Set(normalizeRule(rule).split(' ').filter((w) => w.length >= 3 && !RULE_STOPWORDS.has(w)));
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  for (const w of a) if (b.has(w)) inter++;
+  return inter / (a.size + b.size - inter);
+}
+
+function rangesOverlap(a: ConventionIdentity, b: ConventionIdentity): boolean {
+  if (a.startLine == null || a.endLine == null || b.startLine == null || b.endLine == null) return true;
+  return a.startLine <= b.endLine && b.startLine <= a.endLine;
+}
+
+/** Same evidence + this much word overlap = the model just reworded it. */
+export const SAME_EVIDENCE_SIMILARITY = 0.3;
+/** Wording this close is the same rule wherever the model points. */
+export const SAME_RULE_SIMILARITY = 0.6;
+
+/**
+ * Is `b` the same convention as `a`? Exact normalised text, or a reworded rule on
+ * the same file with overlapping lines, or near-identical wording anywhere. Used by
+ * re-scans so a rejected/accepted/edited rule never comes back as a "new" twin.
+ */
+export function isSameConvention(a: ConventionIdentity, b: ConventionIdentity): boolean {
+  if (normalizeRule(a.rule) === normalizeRule(b.rule)) return true;
+  const sim = jaccard(ruleTokens(a.rule), ruleTokens(b.rule));
+  if (sim >= SAME_RULE_SIMILARITY) return true;
+  const samePath = !!a.evidencePath && a.evidencePath === b.evidencePath;
+  return samePath && rangesOverlap(a, b) && sim >= SAME_EVIDENCE_SIMILARITY;
 }
 
 /**
  * Re-scan rule (spec Decisions): keep accepted, rejected and edited candidates;
- * delete the other pending ones; insert fresh candidates except those whose
- * normalised rule matches a kept one — a rejected rule never comes back.
+ * delete the other pending ones; insert fresh candidates except those that are the
+ * same convention as a kept one (`isSameConvention`) — a rejected rule never comes back.
  */
 export function planRescan(
   existing: readonly ExistingCandidate[],
   fresh: readonly NewConvention[],
 ): { deleteIds: string[]; insert: NewConvention[] } {
   const isKept = (c: ExistingCandidate) => c.status !== 'pending' || c.edited;
-  const keptRules = new Set(existing.filter(isKept).map((c) => normalizeRule(c.rule)));
+  const kept = existing.filter(isKept);
   return {
     deleteIds: existing.filter((c) => !isKept(c)).map((c) => c.id),
-    insert: fresh.filter((c) => !keptRules.has(normalizeRule(c.rule))),
+    insert: fresh.filter((c) => !kept.some((k) => isSameConvention(k, c))),
   };
 }
 

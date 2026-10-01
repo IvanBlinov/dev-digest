@@ -1,6 +1,6 @@
 # L03 — Conventions → Skill
 
-Status: **decisions agreed 2026-09-30; implementation in progress on `feat/l03-conventions`** (stacked on L02 `feat/l02-review-skills`).
+Status: **implemented and verified on `feat/l03-conventions` (2026-09-30)** — stacked on L02 `feat/l02-review-skills`.
 
 ## Goal
 
@@ -77,11 +77,11 @@ As a user I can:
 | Repo for demo/tests | `IvanBlinov/dev-digest` — already cloned and indexed (312 ranked files). A repo with no repo-intel ranks (e.g. the fake `acme/payments-api`) shows a "repo is not indexed" state; Run Scan is disabled there with an explanation. |
 | Skill name + agent (req 42, 51) | Default name `repo-conventions` (editable). The modal has an **Attach to agent** select (default General Reviewer, or "Don't link"). Create = new skill (source `extracted`, type `convention`, `evidence_files` = candidate paths) + link to the chosen agent appended at the end, enabled. |
 | Req 43 | Add `breaking-change`, `response-schema`, `semver-discipline`, `deprecation-policy` (seeded, directive description, each body has a **Good** / **Bad** example) and link all four to API Contract Reviewer after `api-contract-guard`, which stays (keeps L02 req 16). |
-| Default model | `conventions` feature → `openrouter` / `deepseek/deepseek-v4-flash` (registry + client mirror). Changeable in Settings → Models (req 53). |
+| Default model | **Changed during implementation:** `conventions` → `openrouter` / `openai/gpt-4.1-mini`. The agreed `deepseek/deepseek-v4-flash` is a reasoning model: on a real scan it spent all output tokens on hidden reasoning, returned no content and timed out (> 5 min); `gpt-4.1-mini` finished the same scan in 10 s with 12 grounded candidates. Changeable in Settings → Models (req 53). |
 | Scan lifecycle | `POST /repos/:id/conventions/extract` creates a `convention_scans` row (`running`) and returns 202 with it; the work runs in the background. `GET /repos/:id/conventions` returns `{indexed, scan, candidates}` and the client polls while `running`. One running scan per repo (409 if another is running). Failures are stored on the scan (`failed`, `error`). |
 | Sampling (req 39) | Pure code, no LLM: configs first — root and one-level-deep `package.json`-adjacent `tsconfig*.json`, `.eslintrc*`, `eslint.config.*`, `.prettierrc*`, `prettier.config.*`, `.editorconfig`, `biome.json` — then `repoIntel.getConventionSamples(repoId, 12)`. Each file is read with `GitClient.readFile`, truncated (≤ 300 lines / 12 000 chars) and sent with line numbers so the model can cite lines. |
 | Model output (req 40) | Structured output validated by `ExtractedConventions` (`{category, rule, evidence: {file, start_line, end_line}, confidence}`). **Grounding:** a candidate is dropped if its file wasn't sampled or its lines are out of range; the server cuts the evidence snippet from the real file. Confidence clamped 0–1. |
-| Re-scan | ReScan keeps `accepted`, `rejected` and `edited` candidates, deletes the other `pending` ones, and inserts new candidates except those whose normalised rule matches any kept one — so a rejected rule never comes back (req 48). |
+| Re-scan | ReScan keeps `accepted`, `rejected` and `edited` candidates, deletes the other `pending` ones, and inserts new candidates except those that are **the same convention** as a kept one: same normalised text, or a reworded rule on the same file with overlapping lines (word Jaccard ≥ 0.3), or near-identical wording anywhere (≥ 0.6) — so a rejected rule never comes back even when the model rewords it (req 48). |
 | Buttons (req 45) | No scan yet → **Run Scan**. A scan exists → **ReScan**. While running, the button shows "Scanning…" and is disabled. |
 | Candidate actions (req 47, 49) | Accept / Reject / Edit on every card. Accepted cards show "Accepted" (click again = back to pending). Reject hides the card immediately and for good. Edit turns the card into an inline form (rule, category, evidence path + lines, snippet) with Save / Cancel; saving sets `edited=true`. Toolbar: "N of M accepted", **Deselect all**, **Create skill** (only when ≥ 1 accepted, req 50). |
 | Skill draft (req 41) | `POST /repos/:id/conventions/skill-draft {candidate_ids}` builds the editable draft server-side (pure helper): `# <name>`, an intro ("House conventions for `<repo>`. Flag changes that violate any rule below and cite the offending `file:line`."), then one `## <rule-slug>` section per accepted candidate with the rule and "Detected in `path:start-end`" + fenced snippet. The modal shows the banner, Name, Description, Type, Enabled, Attach to agent, and the body editor (line numbers, unsaved, ~tokens). |
@@ -109,4 +109,28 @@ model change (registry + `client/src/lib/feature-models.ts`).
 
 ## Results
 
-_To be filled after implementation._
+Recorded 2026-09-30 on the dev stack, repo `IvanBlinov/dev-digest`, model `openrouter/openai/gpt-4.1-mini`.
+
+| # | Result | Evidence |
+|---|--------|----------|
+| Gates | pass | server typecheck + 191 unit; 50 DB it-tests (9 files, none skipped); client typecheck + 218 tests + `next build`; reviewer-core 27 tests |
+| 38 | pass | ReScan in the UI → scan `done` in 6–10 s, 12 candidates persisted in `conventions`; unchanged after a full reload and from a fresh API process |
+| 39 | pass | `sample_files` = 4 `tsconfig.json` + 12 ranked files; `sampler.ts` is pure code (no LLM import) |
+| 40 | pass | `ExtractedConvention` = `{category, rule, evidence: {file, start_line, end_line}, confidence}`; stored rows carry category, path, lines, confidence |
+| 41 | pass | body edited in the modal ("unsaved" shown) → saved skill body contains the edit |
+| 42 | pass | default name `repo-conventions`; skill built from accepted candidates only; source `extracted`; linked + enabled on the chosen agent |
+| 43 | pass | 4 skills on the Skills page, each with Good/Bad examples in Preview, linked to API Contract Reviewer after `api-contract-guard` |
+| 44 | pass | Conventions under SKILLS LAB |
+| 45 | pass | "ReScan" on a scanned repo, "Scanning…" while running; "Run Scan" (disabled, with an explanation) on the unindexed `acme/payments-api`; first-run "Run Scan" on an indexed repo covered by `ConventionsView.test.tsx` |
+| 46 | pass | cards show rule, `path:start-end` + snippet, confidence bar and % |
+| 47 | pass | Accept / Reject / Edit on every card |
+| 48 | pass (after fix) | rejected candidate gone after reload and not in the skill; first QA run found a **reworded** rejected rule returning after ReScan → fixed with similarity + evidence dedupe (`isSameConvention`); re-verified live: after ReScan no twin of the rejected or the edited rule |
+| 49 | pass | Edit is inline (URL unchanged); edited rule persists after reload with an "edited" chip |
+| 50 | pass | Create skill hidden at 0 accepted, shown after 1, hidden again after Deselect all |
+| 51 | pass | modal banner "Merged from N accepted conventions in …", Name/Description (+ Type, Enabled, Attach to agent, body); Cancel creates nothing |
+| 52 | pass | new skill appears in the Skills list ("Extracted", "1 agent") |
+| 53 | pass | Settings → Models has a Conventions row with a searchable dropdown of live OpenRouter models |
+
+Fixed after QA: reworded rejected/edited rules resurrected by ReScan (req 48); renaming the skill in the modal now also renames the body's `# <name>` heading until the user edits it.
+
+Known follow-ups (not requirements): picking a repo in the sidebar switcher while on `/conventions` jumps to that repo's Pull Requests; a brief "No repo selected" flash before the active repo loads.

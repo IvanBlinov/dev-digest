@@ -159,7 +159,18 @@ export class ConventionsService {
     });
     const grounded = groundConventions(result.data.conventions, files);
     const existing = await this.repo.listAll(scan.workspaceId, scan.repoId);
-    const plan = planRescan(existing, grounded);
+    const plan = planRescan(
+      existing.map((c) => ({
+        id: c.id,
+        status: c.status,
+        edited: c.edited,
+        rule: c.rule,
+        evidencePath: c.evidencePath,
+        startLine: c.evidenceStartLine,
+        endLine: c.evidenceEndLine,
+      })),
+      grounded,
+    );
     await this.repo.completeScan(scan, plan.deleteIds, plan.insert);
   }
 
