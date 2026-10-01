@@ -214,16 +214,135 @@ export const CommunitySkill = z.object({
 });
 export type CommunitySkill = z.infer<typeof CommunitySkill>;
 
-// ---- Conventions ----
+// ---- Conventions (L03) ----
+export const ConventionCategory = z.enum([
+  'naming',
+  'structure',
+  'imports',
+  'error-handling',
+  'async',
+  'typing',
+  'testing',
+  'formatting',
+  'other',
+]);
+export type ConventionCategory = z.infer<typeof ConventionCategory>;
+
+/** pending = shown for review; accepted = goes into the skill; rejected = hidden for good. */
+export const ConventionStatus = z.enum(['pending', 'accepted', 'rejected']);
+export type ConventionStatus = z.infer<typeof ConventionStatus>;
+
+/**
+ * What the model must return per convention (req 40): category, rule, evidence
+ * (file + line range), confidence. The server grounds it against the sampled files
+ * and fills the snippet itself.
+ */
+export const ExtractedConvention = z.object({
+  category: ConventionCategory,
+  rule: z.string().min(3).max(300),
+  evidence: z.object({
+    file: z.string(),
+    start_line: z.number().int().min(1),
+    end_line: z.number().int().min(1),
+  }),
+  confidence: z.number().min(0).max(1),
+});
+export type ExtractedConvention = z.infer<typeof ExtractedConvention>;
+
+export const ExtractedConventions = z.object({ conventions: z.array(ExtractedConvention) });
+export type ExtractedConventions = z.infer<typeof ExtractedConventions>;
+
 export const ConventionCandidate = z.object({
   id: z.string(),
+  category: ConventionCategory,
   rule: z.string(),
   evidence_path: z.string(),
+  evidence_start_line: z.number().int().nullable(),
+  evidence_end_line: z.number().int().nullable(),
   evidence_snippet: z.string(),
   confidence: z.number().min(0).max(1),
+  status: ConventionStatus,
+  /** Mirror of status === 'accepted' (kept for older readers). */
   accepted: z.boolean(),
+  /** True once the user edited the card inline; re-scans never overwrite it. */
+  edited: z.boolean(),
+  created_at: z.string(),
 });
 export type ConventionCandidate = z.infer<typeof ConventionCandidate>;
+
+export const ConventionScanStatus = z.enum(['running', 'done', 'failed']);
+export type ConventionScanStatus = z.infer<typeof ConventionScanStatus>;
+
+export const ConventionScan = z.object({
+  id: z.string(),
+  repo_id: z.string(),
+  status: ConventionScanStatus,
+  /** Files sent to the model: configs first, then top-ranked samples (req 39). */
+  sample_files: z.array(z.string()),
+  provider: z.string(),
+  model: z.string(),
+  candidates_found: z.number().int().nullable(),
+  error: z.string().nullable(),
+  started_at: z.string(),
+  finished_at: z.string().nullable(),
+});
+export type ConventionScan = z.infer<typeof ConventionScan>;
+
+/** `GET /repos/:id/conventions` — rejected candidates are never returned (req 48). */
+export const ConventionsState = z.object({
+  repo_id: z.string(),
+  repo_name: z.string(),
+  /** False when repo-intel has no ranked files for the repo — scanning can't sample. */
+  indexed: z.boolean(),
+  scan: ConventionScan.nullable(),
+  candidates: z.array(ConventionCandidate),
+});
+export type ConventionsState = z.infer<typeof ConventionsState>;
+
+/** Inline edit / accept / reject of one candidate. */
+export const UpdateConventionBody = z
+  .object({
+    status: ConventionStatus.optional(),
+    rule: z.string().min(3).max(300).optional(),
+    category: ConventionCategory.optional(),
+    evidence_path: z.string().min(1).optional(),
+    evidence_start_line: z.number().int().min(1).nullable().optional(),
+    evidence_end_line: z.number().int().min(1).nullable().optional(),
+    evidence_snippet: z.string().max(4000).optional(),
+  })
+  .refine((b) => Object.keys(b).length > 0, { message: 'Nothing to update' });
+export type UpdateConventionBody = z.infer<typeof UpdateConventionBody>;
+
+/** `POST /repos/:id/conventions/skill-draft` — the editable starting point of the modal (req 41). */
+export const ConventionSkillDraftRequest = z.object({ candidate_ids: z.array(z.string().uuid()).min(1) });
+export type ConventionSkillDraftRequest = z.infer<typeof ConventionSkillDraftRequest>;
+
+export const ConventionSkillDraft = z.object({
+  name: z.string(),
+  description: z.string(),
+  type: SkillType,
+  body: z.string(),
+});
+export type ConventionSkillDraft = z.infer<typeof ConventionSkillDraft>;
+
+/** `POST /repos/:id/conventions/skill` — create the skill (req 42, 51) and optionally link it. */
+export const CreateConventionSkillBody = z.object({
+  candidate_ids: z.array(z.string().uuid()).min(1),
+  name: SkillName,
+  description: z.string().max(500).default(''),
+  type: SkillType.default('convention'),
+  enabled: z.boolean().default(true),
+  body: z.string().min(1).max(SKILL_BODY_MAX),
+  /** Agent to link the new skill to (appended, enabled); null = don't link. */
+  agent_id: z.string().uuid().nullable(),
+});
+export type CreateConventionSkillBody = z.infer<typeof CreateConventionSkillBody>;
+
+export const CreateConventionSkillResult = z.object({
+  skill: Skill,
+  linked_agent_id: z.string().nullable(),
+});
+export type CreateConventionSkillResult = z.infer<typeof CreateConventionSkillResult>;
 
 // ---- Agents ----
 // 'openrouter' routes through the OpenAI-compatible API (OpenAIProvider with a

@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, jsonb, timestamp, doublePrecision, boolean, vector, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, jsonb, timestamp, doublePrecision, boolean, integer, vector, index } from 'drizzle-orm/pg-core';
 import { now } from './_shared';
 import { workspaces } from './core';
 import { repos } from './repos';
@@ -28,15 +28,54 @@ export const memory = pgTable(
   (t) => ({ wsIdx: index('memory_ws_idx').on(t.workspaceId) }),
 );
 
-export const conventions = pgTable('conventions', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  workspaceId: uuid('workspace_id')
-    .notNull()
-    .references(() => workspaces.id, { onDelete: 'cascade' }),
-  repoId: uuid('repo_id').references(() => repos.id, { onDelete: 'cascade' }),
-  rule: text('rule').notNull(),
-  evidencePath: text('evidence_path'),
-  evidenceSnippet: text('evidence_snippet'),
-  confidence: doublePrecision('confidence'),
-  accepted: boolean('accepted').notNull().default(false),
-});
+/** One conventions analysis run per click of Run Scan / ReScan (L03). */
+export const conventionScans = pgTable(
+  'convention_scans',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    repoId: uuid('repo_id')
+      .notNull()
+      .references(() => repos.id, { onDelete: 'cascade' }),
+    status: text('status', { enum: ['running', 'done', 'failed'] }).notNull(),
+    sampleFiles: jsonb('sample_files').$type<string[]>().notNull().default([]),
+    provider: text('provider').notNull(),
+    model: text('model').notNull(),
+    candidatesFound: integer('candidates_found'),
+    error: text('error'),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+  },
+  (t) => ({ repoIdx: index('convention_scans_repo_idx').on(t.repoId, t.startedAt) }),
+);
+
+export const conventions = pgTable(
+  'conventions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    repoId: uuid('repo_id').references(() => repos.id, { onDelete: 'cascade' }),
+    rule: text('rule').notNull(),
+    evidencePath: text('evidence_path'),
+    evidenceSnippet: text('evidence_snippet'),
+    confidence: doublePrecision('confidence'),
+    accepted: boolean('accepted').notNull().default(false),
+    // ---- L03 ----
+    scanId: uuid('scan_id').references(() => conventionScans.id, { onDelete: 'set null' }),
+    category: text('category', {
+      enum: ['naming', 'structure', 'imports', 'error-handling', 'async', 'typing', 'testing', 'formatting', 'other'],
+    })
+      .notNull()
+      .default('other'),
+    status: text('status', { enum: ['pending', 'accepted', 'rejected'] }).notNull().default('pending'),
+    evidenceStartLine: integer('evidence_start_line'),
+    evidenceEndLine: integer('evidence_end_line'),
+    edited: boolean('edited').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ repoStatusIdx: index('conventions_repo_status_idx').on(t.repoId, t.status) }),
+);
