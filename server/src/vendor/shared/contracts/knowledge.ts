@@ -133,8 +133,36 @@ export const Skill = z.object({
   /** Number of agents this skill is linked to (any link, enabled or not). `GET /skills*` only. */
   agent_count: z.number().int().optional(),
   created_at: z.string().optional(),
+  /** Injection scan of the current body (`GET /skills*`). */
+  security: z.lazy(() => SkillSecurity).optional(),
 });
 export type Skill = z.infer<typeof Skill>;
+
+// ---- Skill injection analysis (L03b) ----
+/** One prompt-injection pattern found in a skill body. */
+export const SkillInjectionFinding = z.object({
+  /** Stable detector rule id, e.g. `ignore-instructions`, `verdict-forcing`. */
+  rule: z.string(),
+  /** Short human label for the rule, e.g. "Overrides previous instructions". */
+  label: z.string(),
+  severity: z.enum(['high', 'medium']),
+  /** 1-based line in the body. */
+  line: z.number().int().min(1),
+  /** The offending text, trimmed to ≤ 120 chars. */
+  excerpt: z.string(),
+});
+export type SkillInjectionFinding = z.infer<typeof SkillInjectionFinding>;
+
+/**
+ * Result of the rule-based injection scan of a skill body, computed on every read.
+ * `blocked` = at least one finding: the skill never reaches a prompt and cannot be
+ * enabled on an agent until its body is cleaned.
+ */
+export const SkillSecurity = z.object({
+  status: z.enum(['clean', 'blocked']),
+  findings: z.array(SkillInjectionFinding),
+});
+export type SkillSecurity = z.infer<typeof SkillSecurity>;
 
 /** Skill names are kebab-case slugs: they label prompt blocks and trace entries. */
 export const SkillName = z
@@ -194,6 +222,8 @@ export const SkillImportPreview = z.object({
   /** Archive entries that were ignored — skills are text only, nothing else is used. */
   ignored_files: z.array(z.string()),
   warnings: z.array(z.string()),
+  /** Injection scan of the parsed body — a blocked file can still be imported, but stays blocked. */
+  security: z.lazy(() => SkillSecurity).optional(),
 });
 export type SkillImportPreview = z.infer<typeof SkillImportPreview>;
 
