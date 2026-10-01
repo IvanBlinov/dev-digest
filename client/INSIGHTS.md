@@ -2,6 +2,18 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-09-30 — [Pitfall] A flex chip next to a `minWidth: 0` name squeezes the name to nothing
+Symptom: blocked skill cards showed the "Injection detected" chip but no skill name.
+Cause: the name was `flex: 1; minWidth: 0` while the badge doesn't shrink, so the name got 0 px on narrow cards.
+Rule: give the primary label a real `minWidth` and wrap secondary chips in a shrinkable slot (`flex: 0 1 auto; minWidth: 0; overflow: hidden`).
+Proof: `client/src/app/skills/_components/SkillsLabView/_components/SkillCard/styles.ts:24`
+
+## 2026-09-30 — [Pitfall] Never run `next build` while `next dev` serves the same folder
+Symptom: the dev app turned unstyled and stopped hydrating (404 for main-app.js / layout.css).
+Cause: `next build` overwrites `.next`, which the running dev server is using.
+Rule: stop the dev server, build, then `rm -rf .next` and start dev again.
+Proof: `client/package.json:1`
+
 ## 2026-09-30 — [Non-obvious behaviour] Mutation errors are already toasted globally
 Symptom: a component's own `onError` toast for a failed mutation shows twice or the custom one seems never to win.
 Cause: the app's `MutationCache` has a global `onError` that toasts every mutation error.

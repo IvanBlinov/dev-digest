@@ -1,5 +1,7 @@
 /* SkillCard — one skill in the Skills Lab list: name, enabled toggle, 2-line description,
-   type + source chips, `v<N> · <agent_count> agents`, and delete (with confirmation). */
+   type + source chips, `v<N> · <agent_count> agents`, and delete (with confirmation).
+   A skill whose body failed the injection scan gets a red border, an "Injection detected" chip
+   and a "blocked" footer (L03b). */
 "use client";
 
 import React from "react";
@@ -7,8 +9,10 @@ import { useTranslations } from "next-intl";
 import { Badge, Icon, IconBtn, Toggle } from "@devdigest/ui";
 import type { Skill } from "@devdigest/shared";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { InjectionChip } from "@/components/injection-chip";
 import { SkillTypeChip } from "@/components/skill-type-chip";
 import { useDeleteSkill, useUpdateSkill } from "@/lib/hooks/skills";
+import { isSkillBlocked } from "@/lib/skill-helpers";
 import { useToast } from "@/lib/toast";
 import { s } from "./styles";
 
@@ -29,6 +33,7 @@ export function SkillCard({ skill, active, onSelect, onDeleted }: SkillCardProps
   const del = useDeleteSkill();
   const [confirming, setConfirming] = React.useState(false);
   const agentCount = skill.agent_count ?? 0;
+  const blocked = isSkillBlocked(skill.security);
 
   const toggle = (enabled: boolean) =>
     update.mutate({ id: skill.id, patch: { enabled } }, { onError: (e) => toast.error(e.message) });
@@ -49,7 +54,7 @@ export function SkillCard({ skill, active, onSelect, onDeleted }: SkillCardProps
         role="listitem"
         aria-current={active ? "true" : undefined}
         onClick={() => onSelect(skill.id)}
-        style={s.card(!!active, skill.enabled)}
+        style={s.card({ active: !!active, enabled: skill.enabled, blocked })}
       >
         <div style={s.headerRow}>
           <div style={s.iconBox}>
@@ -58,6 +63,11 @@ export function SkillCard({ skill, active, onSelect, onDeleted }: SkillCardProps
           <span className="mono" style={s.name} title={skill.name}>
             {skill.name}
           </span>
+          {blocked && (
+            <span style={s.chipSlot}>
+              <InjectionChip />
+            </span>
+          )}
           <span style={s.stop} onClick={stop} title={t("card.toggle", { name: skill.name })}>
             <Toggle on={skill.enabled} onChange={toggle} size={14} />
           </span>
@@ -73,6 +83,7 @@ export function SkillCard({ skill, active, onSelect, onDeleted }: SkillCardProps
         <div className="tnum" style={s.meta}>
           {t("card.meta", { version: skill.version, count: agentCount })}
         </div>
+        {blocked && <div style={s.blocked}>{t("card.blocked")}</div>}
       </div>
       {confirming && (
         <ConfirmDialog

@@ -1,6 +1,7 @@
 import type { Skill, SkillSource, SkillType, SkillVersion } from '@devdigest/shared';
 import { SKILL_NAME_MAX, SKILL_NAME_MIN } from './constants.js';
 import type { SkillRow, SkillVersionRow, SkillContentPatch } from './repository.js';
+import { scanSkillBody } from './injection.js';
 
 /**
  * Pure helpers for the skills module — row ⇄ DTO mapping, the version-bump
@@ -20,6 +21,7 @@ export function toSkillDto(row: SkillRow, agentCount: number): Skill {
     evidence_files: row.evidenceFiles ?? null,
     agent_count: agentCount,
     created_at: row.createdAt.toISOString(),
+    security: scanSkillBody(row.body),
   };
 }
 

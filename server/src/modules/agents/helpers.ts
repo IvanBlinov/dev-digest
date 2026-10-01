@@ -1,6 +1,7 @@
 import type { Agent, AgentVersion, CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
 import { AgentVersionConfig } from '@devdigest/shared';
 import type { AgentRow, AgentVersionRow } from './repository.js';
+import { isSkillBlocked } from '../skills/injection.js';
 
 /**
  * Pure helpers for the agents module — DB row ⇄ DTO mapping and the
@@ -83,4 +84,28 @@ export function isConfigChange(
     (patch.repoIntel !== undefined && patch.repoIntel !== existing.repoIntel) ||
     patch.outputSchema !== undefined
   );
+}
+
+/**
+ * L03b — `skill_count` per agent: enabled links whose skill body scans clean.
+ * A blocked skill never reaches a prompt, so it is not counted.
+ */
+export function countUsableSkills(links: ReadonlyArray<{ agentId: string; body: string }>): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const l of links) {
+    if (!isSkillBlocked(l.body)) counts.set(l.agentId, (counts.get(l.agentId) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** L03b — the skills (of those about to be enabled) whose body has injection findings. */
+export function blockedSkillsOf<T extends { body: string }>(skills: readonly T[]): T[] {
+  return skills.filter((s) => isSkillBlocked(s.body));
+}
+
+export function skillBlockedMessage(names: readonly string[]): string {
+  const list = names.map((n) => `"${n}"`).join(', ');
+  return names.length === 1
+    ? `Skill ${list} has prompt-injection findings and cannot be enabled`
+    : `Skills ${list} have prompt-injection findings and cannot be enabled`;
 }

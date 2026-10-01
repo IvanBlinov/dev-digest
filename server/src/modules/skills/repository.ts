@@ -105,6 +105,15 @@ export class SkillsRepository {
     return new Set(rows.map((r) => r.id));
   }
 
+  /** Name + body of the given skills that belong to the workspace (L03b enable guard). */
+  async bodiesByIds(workspaceId: string, ids: string[]): Promise<Array<{ id: string; name: string; body: string }>> {
+    if (ids.length === 0) return [];
+    return this.db
+      .select({ id: t.skills.id, name: t.skills.name, body: t.skills.body })
+      .from(t.skills)
+      .where(and(eq(t.skills.workspaceId, workspaceId), inArray(t.skills.id, ids)));
+  }
+
   /** Number of agent links (enabled or not) per skill id. */
   async agentCounts(skillIds: string[]): Promise<Map<string, number>> {
     if (skillIds.length === 0) return new Map();

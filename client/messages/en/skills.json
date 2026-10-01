@@ -32,7 +32,8 @@
       "imported_url": "URL",
       "extracted": "Extracted",
       "community": "Community"
-    }
+    },
+    "blocked": "blocked — injection detected"
   },
   "delete": {
     "title": "Delete skill?",
@@ -91,7 +92,11 @@
     "saving": "Saving…",
     "success": "Imported “{name}”.",
     "failed": "Could not import the skill: {message}",
-    "tooLarge": "The file is larger than 1 MB."
+    "tooLarge": "The file is larger than 1 MB.",
+    "injection": {
+      "title": "Prompt injection detected",
+      "body": "This file will be imported as blocked — it can't be enabled on an agent until the injected lines are removed."
+    }
   },
   "detail": {
     "loadError": "Could not load this skill.",
@@ -105,7 +110,11 @@
       "preview": "Preview",
       "versioning": "Versioning"
     },
-    "tabsLabel": "Skill sections"
+    "tabsLabel": "Skill sections",
+    "injection": {
+      "title": "INJECTION DETECTED — DO NOT ENABLE",
+      "body": "This skill contains prompt injection patterns. It has been automatically blocked."
+    }
   },
   "config": {
     "unsaved": "unsaved",
@@ -135,5 +144,9 @@
     "noChanges": "No differences from the current body.",
     "loadError": "Could not load the version history.",
     "empty": "No versions yet."
+  },
+  "injectionFindings": {
+    "label": "Injection findings",
+    "line": "Line {line} · {label}"
   }
 }

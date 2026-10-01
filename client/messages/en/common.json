@@ -22,5 +22,8 @@
   "skillBodyEditor": {
     "unsaved": "unsaved",
     "tokens": "~{count} tokens"
+  },
+  "injectionChip": {
+    "label": "Injection detected"
   }
 }

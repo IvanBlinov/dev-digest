@@ -46,3 +46,6 @@ export const SKILL_NAME_MAX = 64;
 export const INITIAL_VERSION_MESSAGE = 'Initial version';
 export const restoredMessage = (version: number): string => `Restored from v${version}`;
 export const importedMessage = (filename: string): string => `Imported from ${filename}`;
+
+/** L03b — max chars of an injection finding's excerpt (mirrors the contract doc). */
+export const MAX_INJECTION_EXCERPT_CHARS = 120;

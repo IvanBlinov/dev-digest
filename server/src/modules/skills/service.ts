@@ -13,6 +13,7 @@ import { BadRequestError, ConflictError, NotFoundError } from '../../platform/er
 import type { SkillRow, SkillsRepository } from './repository.js';
 import { isContentChange, isUniqueViolation, toSkillDto, toSkillVersionDto } from './helpers.js';
 import { decodeUpload, parseSkillUpload, SkillImportError } from './import.js';
+import { scanSkillBody } from './injection.js';
 import {
   INITIAL_VERSION_MESSAGE,
   SKILL_NAME_UNIQUE_CONSTRAINT,
@@ -106,10 +107,11 @@ export class SkillsService {
     return (await this.get(workspaceId, id))!;
   }
 
-  /** Parse an upload without saving anything. */
+  /** Parse an upload without saving anything; the preview carries the injection scan. */
   previewImport(req: SkillImportRequest): SkillImportPreview {
     try {
-      return parseSkillUpload(req.filename, decodeUpload(req.content_base64));
+      const parsed = parseSkillUpload(req.filename, decodeUpload(req.content_base64));
+      return { ...parsed, security: scanSkillBody(parsed.body) };
     } catch (err) {
       if (err instanceof SkillImportError) throw new BadRequestError(err.message);
       throw err;

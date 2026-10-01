@@ -2,6 +2,18 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-09-30 — [Security] Skill injection status is computed on read, never stored
+Context: imported skills can carry prompt-injection text; a stored flag would go stale on edit and miss new detector rules.
+Decision: `scanSkillBody` (pure, rule-based) runs whenever a skill is returned, previewed or injected; any finding = `blocked`. Enforcement is layered: `POST /agents/:id/skills` rejects enabling a blocked skill (400 `skill_blocked`), `skill_count` ignores it, and the review executor drops it even if a link is already enabled.
+Consequence: cleaning the body and saving unblocks immediately; adding a rule blocks existing skills without a migration. Keep detector rules high-precision — a test asserts every seeded skill scans clean.
+Proof: `server/src/modules/skills/injection.ts`, `server/src/modules/agents/service.ts:247`, `server/src/modules/reviews/run-executor.ts:201`
+
+## 2026-09-30 — [Pitfall] Writing `\uXXXX` escapes through heredoc/Write tools can embed the raw invisible character
+Symptom: the hidden-unicode regex silently matched nothing / everything after a file edit.
+Cause: the escape was converted to the literal zero-width character on write.
+Rule: generate such source with an explicit backslash (e.g. perl `chr(92)`) and check with `od -c`.
+Proof: `server/src/modules/skills/injection.ts:128`
+
 ## 2026-09-30 — [Performance] Reasoning models are a bad default for structured LLM features
 Symptom: a conventions scan with `deepseek/deepseek-v4-flash` used all 4 000 output tokens on hidden reasoning, returned empty content and timed out; `openai/gpt-4.1-mini` finished the same scan in 10 s with 12 grounded candidates.
 Cause: reasoning tokens count against `max_tokens` and are produced before any visible answer.

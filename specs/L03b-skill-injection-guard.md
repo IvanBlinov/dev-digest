@@ -1,6 +1,6 @@
 # L03b — Prompt-injection guard for skills
 
-Status: **decisions agreed 2026-09-30; implementation in progress on `feat/l03-conventions`.**
+Status: **implemented and verified on `feat/l03-conventions` (2026-09-30).**
 Extends L02 (Skills Lab). Reference screenshot (2026-09-30): skill detail with a red banner
 "INJECTION DETECTED — DO NOT ENABLE · This skill contains prompt injection patterns. It has been
 automatically blocked.", an "Injection detected" chip next to the name, and a list card with the
@@ -59,4 +59,15 @@ Foundation (done): `SkillInjectionFinding`, `SkillSecurity`, `Skill.security`,
 
 ## Results
 
-_To be filled after implementation._
+Verified 2026-09-30 on the dev stack.
+
+| Check | Result |
+|-------|--------|
+| Gates | server typecheck + 251 unit (60 detector tests) + DB it-tests (skills-injection 3, skills 10, agents-versions 7, reviews-skills 2, conventions 8 — none skipped); client typecheck + 250 tests + `next build` |
+| False positives | every seeded skill and the conventions draft scan **clean** (test); 22 benign phrases clean |
+| Screenshot body | import preview → `blocked`, 10 findings on lines 1, 6, 9, 10, 11 (ignore-instructions, role-reassignment, prompt-exfiltration, fake-role-marker, verdict-forcing, suppress-findings) |
+| UI | red banner "INJECTION DETECTED — DO NOT ENABLE" with findings by line, header chip, list card chip + red border + "blocked — injection detected"; agent Skills tab: chip, disabled checkbox, "Clean the skill body to enable it" |
+| API | enabling a blocked skill → 400 `skill_blocked`; disabled link allowed; `skill_count` excludes it |
+| Unblock | PUT with a clean body → `security.status = clean`, all labels gone in the UI, enabling → 200 |
+
+Fixed during verification: on narrow list cards the injection chip squeezed the skill name to zero width.

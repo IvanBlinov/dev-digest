@@ -10,6 +10,7 @@
 import type { SkillPromptBlock } from '@devdigest/shared';
 import type { Tokenizer } from '../../adapters/tokenizer/index.js';
 import type { EffectiveSkill } from '../skills/repository.js';
+import { isSkillBlocked } from '../skills/injection.js';
 
 /** Defined once by its owner (the skills repository); re-exported for callers of this module. */
 export type { EffectiveSkill };
@@ -97,4 +98,22 @@ export function buildSkillsPrompt(skills: readonly EffectiveSkill[], tokenizer: 
 export function skillsLogLine(plan: SkillsPromptPlan): string {
   if (plan.blocks.length === 0) return 'skills: none enabled for this agent';
   return `skills: ${plan.blocks.length} injected (${plan.totalTokens} tokens)`;
+}
+
+/**
+ * L03b — split effective skills into those that may reach the prompt and those
+ * whose body has an injection finding. Order is preserved. Pure.
+ */
+export function partitionBlockedSkills<T extends Pick<EffectiveSkill, 'name' | 'body'>>(
+  skills: readonly T[],
+): { allowed: T[]; blocked: T[] } {
+  const allowed = skills.filter((s) => !isSkillBlocked(s.body));
+  const blocked = skills.filter((s) => isSkillBlocked(s.body));
+  return { allowed, blocked };
+}
+
+/** Run-log line for skipped skills, or null when none was skipped. */
+export function blockedSkillsLogLine(blocked: ReadonlyArray<Pick<EffectiveSkill, 'name'>>): string | null {
+  if (blocked.length === 0) return null;
+  return `skills: ${blocked.length} skipped — injection detected (${blocked.map((s) => s.name).join(', ')})`;
 }

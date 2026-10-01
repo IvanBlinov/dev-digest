@@ -51,3 +51,10 @@ export class BadRequestError extends AppError {
     super('bad_request', message, 400, details);
   }
 }
+
+/** L03b — a skill whose body has prompt-injection findings cannot be enabled on an agent. */
+export class SkillBlockedError extends AppError {
+  constructor(message: string, details?: unknown) {
+    super('skill_blocked', message, 400, details);
+  }
+}

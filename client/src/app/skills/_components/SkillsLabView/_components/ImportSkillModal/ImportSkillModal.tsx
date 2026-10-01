@@ -1,16 +1,18 @@
 /* ImportSkillModal — import a skill from a .md or .zip (req 15). The file is parsed server-side
-   (POST /skills/import/preview), the core is previewed and editable, then saved (POST /skills/import). */
+   (POST /skills/import/preview), the core is previewed and editable, then saved (POST /skills/import).
+   A body that fails the injection scan (L03b) is warned about but can still be saved — as blocked. */
 "use client";
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Button, FormField, Markdown, Modal } from "@devdigest/ui";
+import { Button, FormField, Icon, Markdown, Modal } from "@devdigest/ui";
 import type { Skill, SkillImportPreview, SkillImportRequest } from "@devdigest/shared";
 import { ApiError } from "@/lib/api";
 import { useImportSkill, usePreviewSkillImport } from "@/lib/hooks/skills";
 import { useToast } from "@/lib/toast";
-import { importKind, readFileAsBase64, type SkillMeta } from "@/lib/skill-helpers";
+import { importKind, isSkillBlocked, readFileAsBase64, type SkillMeta } from "@/lib/skill-helpers";
 import { SkillFields, nameErrorKey } from "@/app/skills/_components/SkillFields";
+import { InjectionFindings } from "@/app/skills/_components/InjectionFindings";
 import { ACCEPT, HTTP_CONFLICT, MAX_UPLOAD_BYTES, MODAL_WIDTH } from "./constants";
 import { s } from "./styles";
 
@@ -119,6 +121,16 @@ export function ImportSkillModal({ onClose, onImported }: ImportSkillModalProps)
         {preview && meta && (
           <>
             <div style={s.divider} />
+            {isSkillBlocked(preview.security) && (
+              <section aria-label={t("import.injection.title")} style={s.injection}>
+                <div style={s.injectionTitle}>
+                  <Icon.AlertTriangle size={15} />
+                  {t("import.injection.title")}
+                </div>
+                <p style={s.injectionBody}>{t("import.injection.body")}</p>
+                <InjectionFindings findings={preview.security?.findings ?? []} />
+              </section>
+            )}
             <SkillFields value={meta} onChange={setMeta} nameError={nameKey ? t(nameKey) : null} />
             <FormField label={t("import.sourceFile")}>
               <span className="mono" style={s.sourceFile}>

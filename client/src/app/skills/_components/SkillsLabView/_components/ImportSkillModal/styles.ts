@@ -7,6 +7,22 @@ export const s = {
   error: { fontSize: 12.5, color: "var(--crit)", marginTop: 8, lineHeight: 1.45 } satisfies CSSProperties,
   muted: { fontSize: 13, color: "var(--text-muted)" } satisfies CSSProperties,
   divider: { height: 1, background: "var(--border)", margin: "4px 0 20px" } satisfies CSSProperties,
+  injection: {
+    marginBottom: 20,
+    padding: "12px 14px",
+    borderRadius: 8,
+    border: "1px solid var(--crit)",
+    background: "var(--crit-bg)",
+  } satisfies CSSProperties,
+  injectionTitle: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 13.5,
+    fontWeight: 700,
+    color: "var(--crit)",
+  } satisfies CSSProperties,
+  injectionBody: { fontSize: 13, color: "var(--text-secondary)", margin: "6px 0 10px", lineHeight: 1.45 } satisfies CSSProperties,
   sourceFile: { fontSize: 13, color: "var(--text-secondary)" } satisfies CSSProperties,
   previewBox: {
     maxHeight: 260,
