@@ -2,7 +2,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import type {
   ConventionCandidate,
   ConventionScan,
@@ -91,6 +91,11 @@ export interface UpdateConventionInput {
   patch: UpdateConventionBody;
 }
 
+/** A PATCH that 404s: the candidate no longer exists (replaced by a re-scan). */
+export function isGoneConventionError(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 404;
+}
+
 /** Accept / un-accept / reject / inline-edit one candidate. Optimistic, rolled back on error
  *  (the error toast comes from the global MutationCache in providers.tsx). */
 export function useUpdateConvention(repoId: string | null | undefined) {
@@ -99,7 +104,12 @@ export function useUpdateConvention(repoId: string | null | undefined) {
     mutationFn: ({ id, patch }: UpdateConventionInput) =>
       api.patch<ConventionCandidate>(`/conventions/${id}`, patch),
     onMutate: ({ id, patch }) => snapshotAndApply(qc, repoId, (st) => applyConventionPatch(st, id, patch)),
-    onError: (_e, _v, ctx) => rollback(qc, repoId, ctx),
+    onError: (err, _v, ctx) => {
+      rollback(qc, repoId, ctx);
+      // The candidate vanished (a re-scan replaced it while its card was open) — reload the list
+      // so the stale card is swapped for the current candidates instead of failing again.
+      if (isGoneConventionError(err)) void qc.invalidateQueries({ queryKey: conventionsKey(repoId) });
+    },
     onSuccess: (saved) => {
       // Keep the card where it is (no re-sort mid-review); just take the server's version.
       qc.setQueryData<ConventionsState>(conventionsKey(repoId), (prev) =>

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { ConventionCandidate, ConventionScan, ConventionsState } from "@devdigest/shared";
-import { applyConventionPatch, isScanRunning } from "./conventions";
+import { applyConventionPatch, isGoneConventionError, isScanRunning } from "./conventions";
+import { ApiError } from "../api";
 
 const cand = (id: string, over: Partial<ConventionCandidate> = {}): ConventionCandidate => ({
   id,
@@ -52,5 +53,15 @@ describe("isScanRunning", () => {
     const scan: ConventionScan = { id: "s", repo_id: "r1", status: "running", sample_files: [], provider: "openrouter", model: "m", candidates_found: null, error: null, started_at: "", finished_at: null };
     expect(isScanRunning({ ...STATE, scan })).toBe(true);
     expect(isScanRunning({ ...STATE, scan: { ...scan, status: "done" } })).toBe(false);
+  });
+});
+
+describe("isGoneConventionError", () => {
+  it("is true for a 404 (the candidate was replaced by a re-scan)", () => {
+    expect(isGoneConventionError(new ApiError("Convention not found", 404, "not_found"))).toBe(true);
+  });
+  it("is false for other failures", () => {
+    expect(isGoneConventionError(new ApiError("bad", 422))).toBe(false);
+    expect(isGoneConventionError(new Error("network"))).toBe(false);
   });
 });
