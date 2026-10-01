@@ -116,7 +116,8 @@ export type MemoryItem = z.infer<typeof MemoryItem>;
 export const SkillType = z.enum(['rubric', 'convention', 'security', 'custom']);
 export type SkillType = z.infer<typeof SkillType>;
 
-export const SkillSource = z.enum(['manual', 'imported_url', 'extracted', 'community']);
+// 'imported' = created from an uploaded .md / .zip file (L02 import flow).
+export const SkillSource = z.enum(['manual', 'imported', 'imported_url', 'extracted', 'community']);
 export type SkillSource = z.infer<typeof SkillSource>;
 
 export const Skill = z.object({
@@ -129,8 +130,80 @@ export const Skill = z.object({
   enabled: z.boolean(),
   version: z.number().int(),
   evidence_files: z.array(z.string()).nullish(),
+  /** Number of agents this skill is linked to (any link, enabled or not). `GET /skills*` only. */
+  agent_count: z.number().int().optional(),
+  created_at: z.string().optional(),
 });
 export type Skill = z.infer<typeof Skill>;
+
+/** Skill names are kebab-case slugs: they label prompt blocks and trace entries. */
+export const SkillName = z
+  .string()
+  .min(2)
+  .max(64)
+  .regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lowercase letters, digits and dashes (kebab-case)');
+
+/** Max skill body size (chars). Skills are prompt text; keep them small. */
+export const SKILL_BODY_MAX = 20_000;
+
+export const CreateSkillBody = z.object({
+  name: SkillName,
+  description: z.string().max(500).default(''),
+  type: SkillType,
+  body: z.string().min(1).max(SKILL_BODY_MAX),
+  enabled: z.boolean().optional(),
+});
+export type CreateSkillBody = z.infer<typeof CreateSkillBody>;
+
+/** Partial update. A change to name/description/type/body creates a new version. */
+export const UpdateSkillBody = z.object({
+  name: SkillName.optional(),
+  description: z.string().max(500).optional(),
+  type: SkillType.optional(),
+  body: z.string().min(1).max(SKILL_BODY_MAX).optional(),
+  enabled: z.boolean().optional(),
+  /** Optional version note shown in the Versioning tab. */
+  message: z.string().max(200).optional(),
+});
+export type UpdateSkillBody = z.infer<typeof UpdateSkillBody>;
+
+/** One immutable snapshot in `skill_versions`. */
+export const SkillVersion = z.object({
+  version: z.number().int(),
+  body: z.string(),
+  message: z.string().nullable(),
+  created_at: z.string(),
+});
+export type SkillVersion = z.infer<typeof SkillVersion>;
+
+/** Import upload: a single `.md` or `.zip` file, base64-encoded (JSON, no multipart). */
+export const SkillImportRequest = z.object({
+  filename: z.string().min(1).max(255),
+  content_base64: z.string().min(1),
+});
+export type SkillImportRequest = z.infer<typeof SkillImportRequest>;
+
+/** Parsed "core" of an imported file, returned before anything is saved. */
+export const SkillImportPreview = z.object({
+  name: z.string(),
+  description: z.string(),
+  type: SkillType,
+  body: z.string(),
+  /** Path of the markdown file the core came from (the file itself, or SKILL.md inside the zip). */
+  source_file: z.string(),
+  /** Archive entries that were ignored — skills are text only, nothing else is used. */
+  ignored_files: z.array(z.string()),
+  warnings: z.array(z.string()),
+});
+export type SkillImportPreview = z.infer<typeof SkillImportPreview>;
+
+/** Commit an import: same upload plus optional edits made in the preview. Saved with source='imported'. */
+export const SkillImportCommit = SkillImportRequest.extend({
+  name: SkillName.optional(),
+  description: z.string().max(500).optional(),
+  type: SkillType.optional(),
+});
+export type SkillImportCommit = z.infer<typeof SkillImportCommit>;
 
 export const CommunitySkill = z.object({
   name: z.string(),
@@ -192,6 +265,8 @@ export const Agent = z.object({
   // Active findings by severity across the workspace (latest review per PR for
   // this agent, dismissed excluded); null = no reviews yet. `GET /agents` only.
   findings: SeverityCounts.nullish(),
+  /** Linked skills with the per-agent switch on. `GET /agents` / `GET /agents/:id`. */
+  skill_count: z.number().int().optional(),
 });
 export type Agent = z.infer<typeof Agent>;
 
@@ -199,6 +274,8 @@ export const AgentSkillLink = z.object({
   agent_id: z.string(),
   skill_id: z.string(),
   order: z.number().int(),
+  /** Per-agent switch. A skill reaches the prompt only if this AND `Skill.enabled` are true. */
+  enabled: z.boolean().default(true),
 });
 export type AgentSkillLink = z.infer<typeof AgentSkillLink>;
 

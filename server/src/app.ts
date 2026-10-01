@@ -77,11 +77,15 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   // between listening and an async reaper finishing.
   // NOTE: assumes a SINGLE API instance per DB. With multiple replicas this
   // would need per-instance scoping / heartbeats (not this app's deployment).
-  try {
-    const reaped = await new ReviewService(container).reapStaleRuns();
-    if (reaped > 0) app.log.info({ reaped }, 'reaped stale running agent_runs on boot');
-  } catch (err) {
-    app.log.warn({ err: (err as Error).message }, 'stale-run reaping failed (non-fatal)');
+  // Skipped under NODE_ENV=test: hermetic tests build the app against the default
+  // DATABASE_URL (the dev DB), and reaping there would fail a live dev review run.
+  if (config.nodeEnv !== 'test') {
+    try {
+      const reaped = await new ReviewService(container).reapStaleRuns();
+      if (reaped > 0) app.log.info({ reaped }, 'reaped stale running agent_runs on boot');
+    } catch (err) {
+      app.log.warn({ err: (err as Error).message }, 'stale-run reaping failed (non-fatal)');
+    }
   }
 
   // Security headers (X-Content-Type-Options, X-Frame-Options, …). The API

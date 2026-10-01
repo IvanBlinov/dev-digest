@@ -2,6 +2,30 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-09-29 — [Pitfall] Runtime (non-type) imports from `@devdigest/shared` break `next build`
+Symptom: `pnpm test` and `pnpm typecheck` pass, but `next build` fails to resolve `./contracts/knowledge.js`.
+Cause: the shared barrel re-exports with `.js` extensions that webpack can't map to `.ts`; vitest and tsc accept them. `import type` is erased, so only value imports (schemas, constants) hit it.
+Rule: import only types from `@devdigest/shared` in client code; mirror needed constants locally with a test asserting they equal the contract (see `skill-helpers.ts`). Run `pnpm build` when adding a shared import.
+Proof: `client/src/vendor/shared/index.ts:20`, `client/src/lib/skill-helpers.ts:10`
+
+## 2026-09-29 — [Non-obvious behaviour] A modal rendered inside a clickable card triggers the card's onClick
+Symptom: clicking Cancel in the delete confirm also opened the agent.
+Cause: `Modal` is not a portal, and React synthetic events bubble through the component tree even when the DOM is positioned elsewhere.
+Rule: wrap a dialog rendered inside a clickable parent in an element that calls `e.stopPropagation()`.
+Proof: `client/src/app/agents/_components/AgentCard/AgentCard.tsx:57`
+
+## 2026-09-29 — [Pitfall] `beforeEach(() => mock.mockReset())` — the returned value becomes a teardown
+Symptom: a mock receives a stray call with no arguments between tests.
+Cause: vitest treats a function returned from `beforeEach` as a cleanup and calls it; `mockReset()` returns the mock itself.
+Rule: use a block body `beforeEach(() => { mock.mockReset(); })`; for `vi.mock` factories that need shared consts, create them with `vi.hoisted`.
+Proof: `client/src/app/skills/_components/SkillsLabView/_components/CreateSkillModal/CreateSkillModal.test.tsx:17`, `client/src/app/agents/[id]/_components/AgentEditor/AgentEditor.test.tsx:9`
+
+## 2026-09-29 — [Architectural decision] Skills Lab master/detail lives in `app/skills/layout.tsx`
+Context: req 10 wants a side-panel preview, req 25 a `/skills/:id` page with tabs.
+Decision: the list is rendered by the route layout, `/skills` and `/skills/[id]` only fill the right panel — the list never unmounts and the URL stays shareable.
+Consequence: new skill sub-routes render inside the same layout; don't fetch the list again in pages.
+Proof: `client/src/app/skills/layout.tsx:5`
+
 ## 2026-09-29 — [Non-obvious behaviour] `api.ts` is generic — new endpoints need only a hook
 Symptom: client/AGENTS.md told agents to add a per-endpoint function to `src/lib/api.ts`, which has none to extend.
 Cause: `api` exposes only `get/post/put/patch/del`; every hook calls them directly with the path and a `@devdigest/shared` type.
