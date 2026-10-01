@@ -224,6 +224,8 @@ export const SkillImportPreview = z.object({
   warnings: z.array(z.string()),
   /** Injection scan of the parsed body — a blocked file can still be imported, but stays blocked. */
   security: z.lazy(() => SkillSecurity).optional(),
+  /** URL imports only: the final URL the file was fetched from (after GitHub blob → raw rewrite). */
+  source_url: z.string().optional(),
 });
 export type SkillImportPreview = z.infer<typeof SkillImportPreview>;
 
@@ -234,6 +236,20 @@ export const SkillImportCommit = SkillImportRequest.extend({
   type: SkillType.optional(),
 });
 export type SkillImportCommit = z.infer<typeof SkillImportCommit>;
+
+/** Import from a URL (L03c): a raw `.md` / `.markdown` / `.txt` file fetched by the server. */
+export const SkillUrlImportRequest = z.object({
+  url: z.string().url().max(2048),
+});
+export type SkillUrlImportRequest = z.infer<typeof SkillUrlImportRequest>;
+
+/** Commit a URL import with optional edits from the preview. Saved with source='imported_url'. */
+export const SkillUrlImportCommit = SkillUrlImportRequest.extend({
+  name: SkillName.optional(),
+  description: z.string().max(500).optional(),
+  type: SkillType.optional(),
+});
+export type SkillUrlImportCommit = z.infer<typeof SkillUrlImportCommit>;
 
 export const CommunitySkill = z.object({
   name: z.string(),
