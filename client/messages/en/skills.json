@@ -8,6 +8,7 @@
     "loadError": "Could not load skills.",
     "menu": {
       "create": "Create skill",
+      "fromUrl": "Import from URL",
       "fromFile": "Import from file"
     },
     "empty": {
@@ -29,7 +30,7 @@
     "source": {
       "manual": "Manual",
       "imported": "Imported",
-      "imported_url": "URL",
+      "imported_url": "Imported (URL)",
       "extracted": "Extracted",
       "community": "Community"
     },
@@ -97,6 +98,21 @@
       "title": "Prompt injection detected",
       "body": "This file will be imported as blocked — it can't be enabled on an agent until the injected lines are removed."
     }
+  },
+  "importUrl": {
+    "title": "Import skill from URL",
+    "subtitle": "Fetch a raw markdown or text file. Only the text is kept; nothing is saved until you import.",
+    "urlLabel": "Skill URL",
+    "urlPlaceholder": "https://raw.githubusercontent.com/org/repo/main/SKILL.md",
+    "urlHint": "Paste a link to a raw .md or .txt file",
+    "invalidUrl": "Enter a valid http(s) URL.",
+    "fetch": "Fetch",
+    "fetching": "Fetching…",
+    "sourceUrl": "Source",
+    "cancel": "Cancel",
+    "save": "Import",
+    "saving": "Importing…",
+    "success": "Imported “{name}”."
   },
   "detail": {
     "loadError": "Could not load this skill.",

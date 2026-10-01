@@ -2,6 +2,12 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-09-30 — [Security] Skill import from URL is an SSRF boundary — the guard lives in the adapter
+Context: `POST /skills/import-url*` makes the server fetch a user-supplied URL.
+Decision: `HttpUrlFetcher` (port `UrlFetcher`, built in `container.ts`) allows only http(s), refuses credentials in URLs, resolves the host and rejects loopback / private / link-local (incl. 169.254.169.254) / CGNAT / unspecified / multicast / reserved addresses — also IPv4 embedded in IPv6 and decimal/hex IP forms (normalised by `new URL`) — re-validates every redirect (max 3), caps the body at 1 MB while streaming and times out after 10 s. Only `.md`/`.markdown`/`.txt` or `text/plain|markdown` bodies are parsed; HTML is rejected.
+Consequence: residual risk = DNS rebinding between our lookup and fetch's own lookup; closing it needs an undici Agent pinned to the checked IP. Never call `fetch` on user URLs anywhere else.
+Proof: `server/src/adapters/http/url-fetcher.ts:22`, `server/src/adapters/http/ip-guard.ts:90`
+
 ## 2026-09-30 — [Security] Skill injection status is computed on read, never stored
 Context: imported skills can carry prompt-injection text; a stored flag would go stale on edit and miss new detector rules.
 Decision: `scanSkillBody` (pure, rule-based) runs whenever a skill is returned, previewed or injected; any finding = `blocked`. Enforcement is layered: `POST /agents/:id/skills` rejects enabling a blocked skill (400 `skill_blocked`), `skill_count` ignores it, and the review executor drops it even if a link is already enabled.

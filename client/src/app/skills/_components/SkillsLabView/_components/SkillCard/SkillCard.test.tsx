@@ -62,6 +62,11 @@ describe("SkillCard", () => {
     expect(screen.getByRole("switch")).toHaveAttribute("aria-checked", "true");
   });
 
+  it("labels a URL-imported skill as Imported (URL)", () => {
+    setup({ skill: { ...SKILL, source: "imported_url" } });
+    expect(screen.getByText("Imported (URL)")).toBeInTheDocument();
+  });
+
   it("clicking the card selects it", () => {
     const { onSelect } = setup();
     fireEvent.click(screen.getByText("api-contract-guard"));

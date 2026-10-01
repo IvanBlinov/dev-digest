@@ -5,14 +5,14 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Button, FormField, Icon, Markdown, Modal } from "@devdigest/ui";
+import { Button, FormField, Modal } from "@devdigest/ui";
 import type { Skill, SkillImportPreview, SkillImportRequest } from "@devdigest/shared";
 import { ApiError } from "@/lib/api";
 import { useImportSkill, usePreviewSkillImport } from "@/lib/hooks/skills";
 import { useToast } from "@/lib/toast";
-import { importKind, isSkillBlocked, readFileAsBase64, type SkillMeta } from "@/lib/skill-helpers";
-import { SkillFields, nameErrorKey } from "@/app/skills/_components/SkillFields";
-import { InjectionFindings } from "@/app/skills/_components/InjectionFindings";
+import { importKind, readFileAsBase64, type SkillMeta } from "@/lib/skill-helpers";
+import { nameErrorKey } from "@/app/skills/_components/SkillFields";
+import { ImportPreview } from "../ImportPreview";
 import { ACCEPT, HTTP_CONFLICT, MAX_UPLOAD_BYTES, MODAL_WIDTH } from "./constants";
 import { s } from "./styles";
 
@@ -119,48 +119,14 @@ export function ImportSkillModal({ onClose, onImported }: ImportSkillModalProps)
         </FormField>
 
         {preview && meta && (
-          <>
-            <div style={s.divider} />
-            {isSkillBlocked(preview.security) && (
-              <section aria-label={t("import.injection.title")} style={s.injection}>
-                <div style={s.injectionTitle}>
-                  <Icon.AlertTriangle size={15} />
-                  {t("import.injection.title")}
-                </div>
-                <p style={s.injectionBody}>{t("import.injection.body")}</p>
-                <InjectionFindings findings={preview.security?.findings ?? []} />
-              </section>
-            )}
-            <SkillFields value={meta} onChange={setMeta} nameError={nameKey ? t(nameKey) : null} />
-            <FormField label={t("import.sourceFile")}>
-              <span className="mono" style={s.sourceFile}>
-                {preview.source_file}
-              </span>
-            </FormField>
-            <FormField label={t("import.bodyPreview")}>
-              <div style={s.previewBox}>
-                <Markdown>{preview.body}</Markdown>
-              </div>
-            </FormField>
-            {preview.ignored_files.length > 0 && (
-              <FormField label={t("import.ignoredFiles", { count: preview.ignored_files.length })} hint={t("import.ignoredHint")}>
-                <ul className="mono" style={s.list}>
-                  {preview.ignored_files.map((f) => (
-                    <li key={f}>{f}</li>
-                  ))}
-                </ul>
-              </FormField>
-            )}
-            {preview.warnings.length > 0 && (
-              <FormField label={t("import.warnings")}>
-                <ul style={s.warnings}>
-                  {preview.warnings.map((w) => (
-                    <li key={w}>{w}</li>
-                  ))}
-                </ul>
-              </FormField>
-            )}
-          </>
+          <ImportPreview
+            preview={preview}
+            meta={meta}
+            onMetaChange={setMeta}
+            nameError={nameKey ? t(nameKey) : null}
+            sourceLabel={t("import.sourceFile")}
+            sourceValue={preview.source_file}
+          />
         )}
       </div>
     </Modal>

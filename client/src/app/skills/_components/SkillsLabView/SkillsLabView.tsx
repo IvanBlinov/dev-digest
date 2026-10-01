@@ -14,10 +14,11 @@ import { filterSkills } from "@/lib/skill-helpers";
 import { SkillCard } from "./_components/SkillCard";
 import { CreateSkillModal } from "./_components/CreateSkillModal";
 import { ImportSkillModal } from "./_components/ImportSkillModal";
+import { ImportUrlSkillModal } from "./_components/ImportUrlSkillModal";
 import { SKELETON_ROWS } from "./constants";
 import { s } from "./styles";
 
-type ModalKind = "create" | "import" | null;
+type ModalKind = "create" | "import" | "importUrl" | null;
 
 export function SkillsLabView({ children }: { children: React.ReactNode }) {
   const t = useTranslations("skills");
@@ -51,6 +52,7 @@ export function SkillsLabView({ children }: { children: React.ReactNode }) {
     <AppShell crumb={crumb}>
       {modal === "create" && <CreateSkillModal onClose={() => setModal(null)} onCreated={onSaved} />}
       {modal === "import" && <ImportSkillModal onClose={() => setModal(null)} onImported={onSaved} />}
+      {modal === "importUrl" && <ImportUrlSkillModal onClose={() => setModal(null)} onImported={onSaved} />}
       <div style={s.root}>
         <aside style={s.left}>
           <div style={s.leftHeader}>
@@ -66,6 +68,7 @@ export function SkillsLabView({ children }: { children: React.ReactNode }) {
                 }
                 items={[
                   { label: t("page.menu.create"), icon: "Edit", onClick: () => setModal("create") },
+                  { label: t("page.menu.fromUrl"), icon: "Link", onClick: () => setModal("importUrl") },
                   { label: t("page.menu.fromFile"), icon: "Upload", onClick: () => setModal("import") },
                 ]}
               />

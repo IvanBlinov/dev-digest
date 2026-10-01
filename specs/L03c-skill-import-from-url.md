@@ -1,6 +1,6 @@
 # L03c — Import a skill from a URL
 
-Status: **in progress on `feat/l03-conventions` (2026-09-30).** Extends L02 import (file / zip)
+Status: **implemented and verified on `feat/l03-conventions` (2026-09-30).** Extends L02 import (file / zip)
 and L03b (injection guard).
 
 ## Goal
@@ -48,4 +48,14 @@ the server are shown inline under the URL field.
 
 ## Results
 
-_To be filled after implementation._
+Verified 2026-09-30 on the dev stack.
+
+| Check | Result |
+|-------|--------|
+| Gates | server typecheck + 373 unit (ip-guard 59, url-fetcher 32, helpers 31) + it-tests (skills-url-import 9, skills 10, skills-injection 3 — none skipped); client typecheck + 268 tests + `next build` |
+| GitHub blob link | `github.com/…/blob/main/.claude/skills/onion-architecture/SKILL.md` → fetched from `raw.githubusercontent.com/…`, frontmatter name/description parsed, `security: clean` |
+| SSRF | `http://169.254.169.254/latest/meta-data/` → 400 "blocked address (link-local)"; `http://localhost:3001/health` → 400 "(loopback)"; `ftp://…` → 400 "Only http and https" |
+| Not a text file | `https://github.com/IvanBlinov/dev-digest` (HTML) → 400 "use the raw file link" |
+| UI | Add Skill ▾ → Import from URL → paste → Fetch (Enter) → preview (name, description, type, source URL, rendered body) → Import → toast + card "Imported (URL)" |
+
+Fixed during verification: the URL field wasn't focused when the modal opened (now `autoFocus`, with a test).

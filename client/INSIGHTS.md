@@ -2,6 +2,11 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-09-30 — [Pitfall] Async previews can land after the input changed
+Symptom: an import preview for an old URL could appear under a newly typed URL.
+Rule: remember the requested value (ref) and drop responses that don't match the current input; clear the preview on every input change.
+Proof: `client/src/app/skills/_components/SkillsLabView/_components/ImportUrlSkillModal/ImportUrlSkillModal.tsx`
+
 ## 2026-09-30 — [Pitfall] A flex chip next to a `minWidth: 0` name squeezes the name to nothing
 Symptom: blocked skill cards showed the "Injection detected" chip but no skill name.
 Cause: the name was `flex: 1; minWidth: 0` while the badge doesn't shrink, so the name got 0 px on narrow cards.

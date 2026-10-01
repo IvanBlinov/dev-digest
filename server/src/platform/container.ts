@@ -6,6 +6,7 @@ import type {
   CodeIndex,
   Embedder,
   LLMProvider,
+  UrlFetcher,
 } from '@devdigest/shared';
 import type { AppConfig } from './config.js';
 import type { Db } from '../db/client.js';
@@ -19,6 +20,7 @@ import { RipgrepCodeIndex } from '../adapters/codeindex/ripgrep.js';
 import { OpenAIProvider } from '../adapters/llm/openai.js';
 import { AnthropicProvider } from '../adapters/llm/anthropic.js';
 import { OpenAIEmbedder } from '../adapters/embedder/openai.js';
+import { HttpUrlFetcher } from '../adapters/http/url-fetcher.js';
 import { OpenRouterProvider } from '@devdigest/reviewer-core';
 import { estimateCost } from '../adapters/llm/pricing.js';
 import { PriceBook } from './price-book.js';
@@ -52,6 +54,8 @@ export interface ContainerOverrides {
   /** repo-intel T3 adapters — only the indexer pipeline reads these. */
   depgraph?: DepGraph;
   tokenizer?: Tokenizer;
+  /** L03c — SSRF-guarded fetcher for user-supplied URLs (skill import). */
+  urlFetcher?: UrlFetcher;
 }
 
 export class Container {
@@ -78,6 +82,7 @@ export class Container {
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
   private _priceBook?: PriceBook;
+  private _urlFetcher?: UrlFetcher;
 
   constructor(config: AppConfig, db: Db, private overrides: ContainerOverrides = {}) {
     this.config = config;
@@ -136,6 +141,13 @@ export class Container {
     if (this.overrides.tokenizer) return this.overrides.tokenizer;
     this._tokenizer ??= new TiktokenTokenizer();
     return this._tokenizer;
+  }
+
+  /** L03c — the ONLY way services fetch user-supplied URLs (SSRF guard lives in the adapter). */
+  get urlFetcher(): UrlFetcher {
+    if (this.overrides.urlFetcher) return this.overrides.urlFetcher;
+    this._urlFetcher ??= new HttpUrlFetcher();
+    return this._urlFetcher;
   }
 
   /**

@@ -5,6 +5,8 @@ import {
   CreateSkillBody,
   SkillImportCommit,
   SkillImportRequest,
+  SkillUrlImportCommit,
+  SkillUrlImportRequest,
   UpdateSkillBody,
 } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
@@ -22,6 +24,9 @@ const VersionParams = z.object({
 /** Parsing zips is CPU work — cap it tighter than the global limit. */
 const IMPORT_RATE_LIMIT = { max: 30, timeWindow: '1 minute' };
 
+/** URL import makes the server fetch a remote file — cap it tighter still. */
+const URL_IMPORT_RATE_LIMIT = { max: 20, timeWindow: '1 minute' };
+
 /**
  * L02 — skills module.
  *   GET    /skills                              → list (name asc, with agent_count)
@@ -33,6 +38,8 @@ const IMPORT_RATE_LIMIT = { max: 30, timeWindow: '1 minute' };
  *   POST   /skills/:id/versions/:version/restore → new version with the old body
  *   POST   /skills/import/preview               → parse an upload (nothing saved)
  *   POST   /skills/import                       → parse + save (source imported) — 201
+ *   POST   /skills/import-url/preview           → fetch + parse a URL (nothing saved) — L03c
+ *   POST   /skills/import-url                   → fetch + parse + save (source imported_url) — 201
  */
 export default async function skillsRoutes(appBase: FastifyInstance) {
   const app = appBase.withTypeProvider<ZodTypeProvider>();
@@ -66,6 +73,26 @@ export default async function skillsRoutes(appBase: FastifyInstance) {
     async (req, reply) => {
       const { workspaceId } = await getContext(app.container, req);
       const skill = await service.commitImport(workspaceId, req.body);
+      reply.status(201);
+      return skill;
+    },
+  );
+
+  app.post(
+    '/skills/import-url/preview',
+    { schema: { body: SkillUrlImportRequest }, config: { rateLimit: URL_IMPORT_RATE_LIMIT } },
+    async (req) => {
+      await getContext(app.container, req);
+      return service.previewUrlImport(req.body);
+    },
+  );
+
+  app.post(
+    '/skills/import-url',
+    { schema: { body: SkillUrlImportCommit }, config: { rateLimit: URL_IMPORT_RATE_LIMIT } },
+    async (req, reply) => {
+      const { workspaceId } = await getContext(app.container, req);
+      const skill = await service.commitUrlImport(workspaceId, req.body);
       reply.status(201);
       return skill;
     },

@@ -95,3 +95,75 @@ export function isUniqueViolation(err: unknown, constraint?: string): boolean {
   }
   return isUniqueViolation(e.cause, constraint);
 }
+
+// ---- L03c: import from a URL ------------------------------------------------
+
+const GITHUB_HOSTS = new Set(['github.com', 'www.github.com']);
+const TEXT_EXTENSIONS = ['.md', '.markdown', '.txt'];
+const TEXT_MIME_TYPES = new Set(['text/markdown', 'text/plain']);
+const HTML_MIME_TYPES = new Set(['text/html', 'application/xhtml+xml']);
+
+/**
+ * Trim, and rewrite a GitHub file view (`github.com/<o>/<r>/blob|raw/<ref>/<path>`)
+ * to `raw.githubusercontent.com/<o>/<r>/<ref>/<path>` (query + hash dropped).
+ * Everything else — including unparseable input — is returned trimmed; the
+ * fetcher is the one that validates scheme and host.
+ */
+export function normalizeSkillUrl(input: string): string {
+  const trimmed = input.trim();
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return trimmed;
+  }
+  if (!GITHUB_HOSTS.has(url.hostname.toLowerCase())) return trimmed;
+  const m = /^\/([^/]+)\/([^/]+)\/(?:blob|raw)\/(.+)$/.exec(url.pathname);
+  if (!m) return trimmed;
+  return `https://raw.githubusercontent.com/${m[1]}/${m[2]}/${m[3]}`;
+}
+
+/** Last path segment of a URL, percent-decoded when possible ('' for `/`). */
+export function urlFileName(url: string): string {
+  let pathname: string;
+  try {
+    pathname = new URL(url).pathname;
+  } catch {
+    return '';
+  }
+  const last = pathname.split('/').pop() ?? '';
+  try {
+    return decodeURIComponent(last);
+  } catch {
+    return last;
+  }
+}
+
+/**
+ * Why a fetched URL is not an importable text file, or null when it is:
+ * content type `text/markdown` / `text/plain`, or a `.md` / `.markdown` / `.txt`
+ * path served as `text/*`, `application/octet-stream` or without a type.
+ * HTML pages (a GitHub blob view, a docs site) get a hint to use the raw link.
+ */
+export function textFileRejection(url: string, contentType: string | null): string | null {
+  const mime = contentType?.split(';')[0]?.trim().toLowerCase() || null;
+  if (mime && HTML_MIME_TYPES.has(mime)) {
+    return 'The URL points to an HTML page, not a text file — use the raw file link (e.g. "Raw" on GitHub)';
+  }
+  if (mime && TEXT_MIME_TYPES.has(mime)) return null;
+  const path = (() => {
+    try {
+      return new URL(url).pathname.toLowerCase();
+    } catch {
+      return '';
+    }
+  })();
+  const hasTextExtension = TEXT_EXTENSIONS.some((ext) => path.endsWith(ext));
+  const textish = mime === null || mime.startsWith('text/') || mime === 'application/octet-stream';
+  if (hasTextExtension && textish) return null;
+  return `The URL is not a text file — link a .md, .markdown or .txt file (content type: ${mime ?? 'none'})`;
+}
+
+export function isAcceptedTextFile(url: string, contentType: string | null): boolean {
+  return textFileRejection(url, contentType) === null;
+}

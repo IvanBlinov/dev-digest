@@ -5,18 +5,31 @@ import type {
   SkillImportPreview,
   SkillImportRequest,
   SkillSource,
+  SkillUrlImportCommit,
+  SkillUrlImportRequest,
   SkillVersion,
   UpdateSkillBody,
 } from '@devdigest/shared';
 import type { Container } from '../../platform/container.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../../platform/errors.js';
 import type { SkillRow, SkillsRepository } from './repository.js';
-import { isContentChange, isUniqueViolation, toSkillDto, toSkillVersionDto } from './helpers.js';
-import { decodeUpload, parseSkillUpload, SkillImportError } from './import.js';
+import {
+  isContentChange,
+  isUniqueViolation,
+  normalizeSkillUrl,
+  textFileRejection,
+  toSkillDto,
+  toSkillVersionDto,
+  urlFileName,
+} from './helpers.js';
+import { decodeUpload, parseSkillMarkdownText, parseSkillUpload, SkillImportError } from './import.js';
 import { scanSkillBody } from './injection.js';
 import {
   INITIAL_VERSION_MESSAGE,
   SKILL_NAME_UNIQUE_CONSTRAINT,
+  URL_IMPORT_FALLBACK_FILE,
+  URL_IMPORT_MAX_BYTES,
+  URL_IMPORT_TIMEOUT_MS,
   importedMessage,
   restoredMessage,
 } from './constants.js';
@@ -29,7 +42,7 @@ import {
 export class SkillsService {
   private repo: SkillsRepository;
 
-  constructor(container: Container) {
+  constructor(private container: Container) {
     this.repo = container.skillsRepo;
   }
 
@@ -121,18 +134,64 @@ export class SkillsService {
   /** Parse again (never trust a client-side preview), apply edits, save as `imported`. */
   async commitImport(workspaceId: string, commit: SkillImportCommit): Promise<Skill> {
     const parsed = this.previewImport(commit);
-    const name = commit.name ?? parsed.name;
+    return this.saveImported(workspaceId, parsed, commit, 'imported', importedMessage(commit.filename));
+  }
+
+  /**
+   * L03c — fetch a public `.md` / `.markdown` / `.txt` through the SSRF-guarded
+   * `UrlFetcher` port, parse it like an uploaded `.md`, scan it. Nothing saved.
+   */
+  async previewUrlImport(req: SkillUrlImportRequest): Promise<SkillImportPreview> {
+    const file = await this.fetchSkillFile(normalizeSkillUrl(req.url));
+    const rejection = textFileRejection(file.url, file.contentType);
+    if (rejection) throw new BadRequestError(rejection);
+    try {
+      const parsed = parseSkillMarkdownText(file.text, urlFileName(file.url) || URL_IMPORT_FALLBACK_FILE);
+      return { ...parsed, security: scanSkillBody(parsed.body), source_url: file.url };
+    } catch (err) {
+      if (err instanceof SkillImportError) throw new BadRequestError(err.message);
+      throw err;
+    }
+  }
+
+  /** Fetch + parse again (never trust the client's preview), apply edits, save as `imported_url`. */
+  async commitUrlImport(workspaceId: string, commit: SkillUrlImportCommit): Promise<Skill> {
+    const parsed = await this.previewUrlImport(commit);
+    const sourceUrl = parsed.source_url ?? normalizeSkillUrl(commit.url);
+    return this.saveImported(workspaceId, parsed, commit, 'imported_url', importedMessage(sourceUrl));
+  }
+
+  private async saveImported(
+    workspaceId: string,
+    parsed: SkillImportPreview,
+    edits: Pick<SkillImportCommit, 'name' | 'description' | 'type'>,
+    source: SkillSource,
+    message: string,
+  ): Promise<Skill> {
+    const name = edits.name ?? parsed.name;
     await this.assertNameFree(workspaceId, name);
     const row = await this.guardName(name, () => this.repo.insert({
       workspaceId,
       name,
-      description: commit.description ?? parsed.description,
-      type: commit.type ?? parsed.type,
-      source: 'imported',
+      description: edits.description ?? parsed.description,
+      type: edits.type ?? parsed.type,
+      source,
       body: parsed.body,
-      message: importedMessage(commit.filename),
+      message,
     }));
     return toSkillDto(row, 0);
+  }
+
+  /** The port's errors are user-facing by contract (scheme, blocked address, size, timeout, status) → 400. */
+  private async fetchSkillFile(url: string) {
+    try {
+      return await this.container.urlFetcher.fetchText(url, {
+        maxBytes: URL_IMPORT_MAX_BYTES,
+        timeoutMs: URL_IMPORT_TIMEOUT_MS,
+      });
+    } catch (err) {
+      throw new BadRequestError(err instanceof Error ? err.message : 'Could not fetch the URL');
+    }
   }
 
   /**
