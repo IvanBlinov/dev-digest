@@ -1,23 +1,19 @@
-/* RunStatus — live SSE status for in-flight review runs. Subscribes to the
-   run event streams and renders the shared LiveLogStream. */
+/* RunStatus — live SSE status for in-flight review runs. One collapsible section per agent
+   (expand to see that agent's own log) plus a "Preparation" section for the lines shared by
+   every agent (diff loading). A single-agent run is expanded by default. */
 "use client";
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { LiveLogStream, type LogLine } from "@devdigest/ui";
 import { useRunEvents } from "../../../../../../../lib/hooks/reviews";
-import { LOG_HEIGHT } from "./constants";
+import { LogSection } from "./_components/LogSection";
+import { groupRunLog, type LiveRun } from "./helpers";
 import { s } from "./styles";
 
-export function RunStatus({
-  runIds,
-  onDone,
-}: {
-  runIds: string[];
-  onDone?: () => void;
-}) {
+export function RunStatus({ runs, onDone }: { runs: LiveRun[]; onDone?: () => void }) {
   const t = useTranslations("prReview");
-  const { events, running } = useRunEvents(runIds);
+  const runIds = React.useMemo(() => runs.map((r) => r.runId), [runs]);
+  const { events, running, openRunIds } = useRunEvents(runIds);
   const wasRunning = React.useRef(false);
 
   React.useEffect(() => {
@@ -25,22 +21,27 @@ export function RunStatus({
     if (!running && wasRunning.current) onDone?.();
   }, [running, onDone]);
 
-  if (runIds.length === 0) return null;
+  if (runs.length === 0) return null;
 
-  const log: LogLine[] = events.map((e) => ({
-    t: e.t,
-    k: e.kind as LogLine["k"],
-    m: e.msg,
-  }));
+  const { shared, agents } = groupRunLog(events, runs, new Set(openRunIds ?? []));
+  const single = agents.length === 1;
 
   return (
     <div style={s.wrap}>
-      <LiveLogStream
-        log={log}
-        running={running}
-        height={LOG_HEIGHT}
-        elapsedLabel={running ? t("runStatus.elapsed", { count: runIds.length }) : undefined}
-      />
+      {running && <div style={s.summary}>{t("runStatus.elapsed", { count: runs.length })}</div>}
+      {shared.length > 0 && (
+        <LogSection title={t("runStatus.section.preparation")} lines={shared} last={shared.at(-1) ?? null} />
+      )}
+      {agents.map((a) => (
+        <LogSection
+          key={a.runId}
+          title={a.agentName}
+          lines={a.lines}
+          status={a.status}
+          last={a.last}
+          defaultOpen={single}
+        />
+      ))}
     </div>
   );
 }

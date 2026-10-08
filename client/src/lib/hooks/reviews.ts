@@ -178,12 +178,15 @@ export function appendRunEvent(prev: RunEvent[], ev: RunEvent): RunEvent[] {
 export function useRunEvents(runIds: string[]) {
   const [events, setEvents] = React.useState<RunEvent[]>([]);
   const [running, setRunning] = React.useState(false);
+  /** Runs whose stream is still open — lets the UI show a status per agent. */
+  const [openRunIds, setOpenRunIds] = React.useState<string[]>([]);
   const key = runIds.join(",");
 
   React.useEffect(() => {
     if (runIds.length === 0) return;
     setEvents([]);
     setRunning(true);
+    setOpenRunIds(runIds);
     const sources: EventSource[] = [];
     let open = runIds.length;
 
@@ -209,6 +212,7 @@ export function useRunEvents(runIds: string[]) {
       }
       es.onerror = () => {
         es.close();
+        setOpenRunIds((ids) => ids.filter((id) => id !== runId));
         open -= 1;
         if (open <= 0) setRunning(false);
       };
@@ -218,11 +222,12 @@ export function useRunEvents(runIds: string[]) {
     return () => {
       for (const es of sources) es.close();
       setRunning(false);
+      setOpenRunIds([]);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  return { events, running };
+  return { events, running, openRunIds };
 }
 
 /** Warm the reviews cache for a PR (hover on the PR list → instant popover). */

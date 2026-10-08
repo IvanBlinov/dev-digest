@@ -47,6 +47,7 @@ export default function PRDetailPage() {
   const { data: prRuns } = usePrRuns(prId);
   const deleteRun = useDeleteRun(prId);
   const liveRunIds = (activeRuns ?? []).map((r) => r.run_id);
+  const liveRuns = (activeRuns ?? []).map((r) => ({ runId: r.run_id, agentName: r.agent_name }));
   const reviewRunning = liveRunIds.length > 0;
   const cancel = useCancelRun();
   const invalidateActiveRuns = () => {
@@ -157,6 +158,7 @@ export default function PRDetailPage() {
           <FindingsTab
             prId={prId}
             liveRunIds={liveRunIds}
+            liveRuns={liveRuns}
             reviewRunning={reviewRunning}
             lethalTrifecta={lethalTrifecta}
             runs={runs}

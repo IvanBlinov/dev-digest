@@ -13,6 +13,8 @@ import type { UseMutationResult } from "@tanstack/react-query";
 interface FindingsTabProps {
   prId: string | null;
   liveRunIds: string[];
+  /** Live runs with agent names — one log section per agent. */
+  liveRuns?: { runId: string; agentName: string | null }[];
   reviewRunning: boolean;
   lethalTrifecta: FindingRecord[];
   runs: ReviewRecord[];
@@ -34,6 +36,7 @@ interface FindingsTabProps {
 export function FindingsTab({
   prId,
   liveRunIds,
+  liveRuns,
   reviewRunning,
   lethalTrifecta,
   runs,
@@ -111,7 +114,7 @@ export function FindingsTab({
           >
             Live review
           </SectionLabel>
-          <RunStatus runIds={liveRunIds} onDone={onRunDone} />
+          <RunStatus runs={liveRuns ?? liveRunIds.map((runId) => ({ runId, agentName: null }))} onDone={onRunDone} />
         </div>
       )}
 

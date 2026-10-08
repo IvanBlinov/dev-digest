@@ -113,3 +113,9 @@ Symptom: `messages/en/` has `blast.json`, `brief.json`, `ci.json`, `conventions.
 Cause: the starter ships the full message catalog; screens are added lesson by lesson.
 Rule: reuse the existing JSON for a lesson's screen instead of creating a new namespace.
 Proof: `client/messages/en/blast.json:1`, `client/messages/en/brief.json:1`
+
+## 2026-10-07 — [Non-obvious behaviour] An open run stream with no lines means "queued", not "running"
+Symptom: with 5 agents and `REVIEW_AGENT_CONCURRENCY=4`, the fifth agent's section showed "running · 0 lines" for minutes.
+Cause: every run's SSE stream opens at once, but the server only starts an agent when a p-queue slot frees up; until then it emits nothing.
+Rule: derive per-agent status from the events (open + 0 lines → queued; any error event → failed), not from "stream open".
+Proof: `client/src/app/repos/[repoId]/pulls/[number]/_components/RunStatus/helpers.ts:41`
