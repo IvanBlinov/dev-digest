@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { RunEventKind, RunLogLine } from '@devdigest/shared';
 import type { RunBus } from './sse.js';
 
@@ -48,7 +49,9 @@ export class RunLogger {
 
   /** Publish one event to every target run's stream + mirror to stdout. */
   event(kind: RunEventKind, msg: string, data?: unknown): void {
-    for (const runId of this.runIds) this.bus.publish(runId, kind, msg, data);
+    // One id for all copies of a fanned-out event, so merged live logs can show it once.
+    const shared = this.runIds.length > 1 ? randomUUID() : undefined;
+    for (const runId of this.runIds) this.bus.publish(runId, kind, msg, data, shared);
     this.base?.[LEVEL[kind]]({ ...this.ctx, runIds: this.runIds, kind, ...(data !== undefined ? { data } : {}) }, msg);
   }
 

@@ -8,6 +8,7 @@ import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './reposit
 import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
+import { runAgentsConcurrently } from './concurrency.js';
 import {
   blockedSkillsLogLine,
   buildSkillsPrompt,
@@ -113,7 +114,9 @@ export class ReviewRunExecutor {
     }
     runLog.info(`Diff ready — ${diff.files.length} changed file(s); starting ${jobs.length} agent run(s)`);
 
-    for (const { agent, runId } of jobs) {
+    // Agents of one review run concurrently (bounded by REVIEW_AGENT_CONCURRENCY);
+    // each run logs to its own stream and persists its own failure.
+    await runAgentsConcurrently(jobs, this.container.config.reviewAgentConcurrency, async ({ agent, runId }) => {
       const agentStart = Date.now();
       logger?.info(
         { runId, agent: agent.name, provider: agent.provider, model: agent.model, prId: pull.id },
@@ -140,7 +143,7 @@ export class ReviewRunExecutor {
           `review: agent "${agent.name}" ${cancelled ? 'cancelled' : 'failed'}`,
         );
       }
-    }
+    });
   }
 
   /** Execute a single agent's review against a PR, streaming progress. */

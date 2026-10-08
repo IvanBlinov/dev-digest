@@ -161,6 +161,16 @@ export function useFindingAction() {
 }
 
 /**
+ * Append one live event to a merged multi-run log. An event fanned out to several runs
+ * (same `shared` id — e.g. the "Loading PR diff…" prelude of a run-all) is kept once;
+ * per-run events are always kept, even with identical text.
+ */
+export function appendRunEvent(prev: RunEvent[], ev: RunEvent): RunEvent[] {
+  if (ev.shared && prev.some((p) => p.shared === ev.shared)) return prev;
+  return [...prev, ev];
+}
+
+/**
  * Subscribe to a run's SSE event stream. Returns the accumulated RunEvents and a
  * `running` flag (true until the stream closes). Live status for the
  * RunReviewDropdown / Live Log. Multiple runIds are subscribed in parallel.
@@ -182,7 +192,7 @@ export function useRunEvents(runIds: string[]) {
       const onMsg = (ev: MessageEvent) => {
         try {
           const parsed = JSON.parse(ev.data) as RunEvent;
-          setEvents((prev) => [...prev, parsed]);
+          setEvents((prev) => appendRunEvent(prev, parsed));
           // Runtime agent failures arrive as SSE `error` events (not as a
           // mutation/query error), so the global error toast never sees them —
           // surface them here so the user gets a notification without a reload.

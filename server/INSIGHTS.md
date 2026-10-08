@@ -2,6 +2,18 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-07 — [Performance] A review's agents run in parallel (bounded), not one after another
+Symptom: on a big PR "Run all" showed all 5 agents `running` for 10+ min — agents 2–5 were just queued behind agent 1's slow LLM call.
+Decision: `runAgentsConcurrently` (p-queue) runs the agents of one review at most `REVIEW_AGENT_CONCURRENCY` (default 4) at a time; each run keeps its own log stream and persists its own failure, so one failing agent never stops the others. `1` restores the old sequential behaviour.
+Consequence: provider rate limits now see N concurrent calls per review — lower the setting if a provider throttles.
+Proof: `server/src/modules/reviews/concurrency.ts:1`, `server/src/modules/reviews/run-executor.ts:119`
+
+## 2026-10-07 — [Non-obvious behaviour] Fanned-out run events carry a `shared` id
+Symptom: the merged live log of a run-all showed "Loading PR diff… / Diff ready" once per agent (5×).
+Cause: `RunLogger` publishes pre-work events into every run's stream (each run's own log must be complete), and the client merges all streams.
+Rule: copies of one fanned-out event share `RunEvent.shared`; `appendRunEvent` keeps the first. Per-run events never get it.
+Proof: `server/src/platform/run-logger.ts:52`, `client/src/lib/hooks/reviews.ts:168`
+
 ## 2026-09-30 — [Security] Skill import from URL is an SSRF boundary — the guard lives in the adapter
 Context: `POST /skills/import-url*` makes the server fetch a user-supplied URL.
 Decision: `HttpUrlFetcher` (port `UrlFetcher`, built in `container.ts`) allows only http(s), refuses credentials in URLs, resolves the host and rejects loopback / private / link-local (incl. 169.254.169.254) / CGNAT / unspecified / multicast / reserved addresses — also IPv4 embedded in IPv6 and decimal/hex IP forms (normalised by `new URL`) — re-validates every redirect (max 3), caps the body at 1 MB while streaming and times out after 10 s. Only `.md`/`.markdown`/`.txt` or `text/plain|markdown` bodies are parsed; HTML is rejected.

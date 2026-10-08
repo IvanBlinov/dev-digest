@@ -25,6 +25,11 @@ export const RunEvent = z.object({
   msg: z.string(),
   t: z.string(),
   data: z.unknown().optional(),
+  /**
+   * Same id on every copy of one event fanned out to several runs (e.g. the shared
+   * "Loading PR diff…" prelude of a run-all). Lets a merged multi-run live log show it once.
+   */
+  shared: z.string().optional(),
 });
 export type RunEvent = z.infer<typeof RunEvent>;
 
