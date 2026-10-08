@@ -49,11 +49,11 @@ export class RunBus {
   }
 
   /** Publish a live event for a run. Returns the constructed RunEvent. */
-  publish(runId: string, kind: RunEventKind, msg: string, data?: unknown): RunEvent {
+  publish(runId: string, kind: RunEventKind, msg: string, data?: unknown, shared?: string): RunEvent {
     const e = this.emitterFor(runId);
     const next = (this.seq.get(runId) ?? 0) + 1;
     this.seq.set(runId, next);
-    const event: RunEvent = { runId, seq: next, kind, msg, t: clockTime(), data };
+    const event: RunEvent = { runId, seq: next, kind, msg, t: clockTime(), data, ...(shared ? { shared } : {}) };
     this.buffers.get(runId)!.push(event);
     e.emit('event', event);
     return event;

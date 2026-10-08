@@ -161,6 +161,16 @@ export function useFindingAction() {
 }
 
 /**
+ * Append one live event to a merged multi-run log. An event fanned out to several runs
+ * (same `shared` id — e.g. the "Loading PR diff…" prelude of a run-all) is kept once;
+ * per-run events are always kept, even with identical text.
+ */
+export function appendRunEvent(prev: RunEvent[], ev: RunEvent): RunEvent[] {
+  if (ev.shared && prev.some((p) => p.shared === ev.shared)) return prev;
+  return [...prev, ev];
+}
+
+/**
  * Subscribe to a run's SSE event stream. Returns the accumulated RunEvents and a
  * `running` flag (true until the stream closes). Live status for the
  * RunReviewDropdown / Live Log. Multiple runIds are subscribed in parallel.
@@ -168,12 +178,15 @@ export function useFindingAction() {
 export function useRunEvents(runIds: string[]) {
   const [events, setEvents] = React.useState<RunEvent[]>([]);
   const [running, setRunning] = React.useState(false);
+  /** Runs whose stream is still open — lets the UI show a status per agent. */
+  const [openRunIds, setOpenRunIds] = React.useState<string[]>([]);
   const key = runIds.join(",");
 
   React.useEffect(() => {
     if (runIds.length === 0) return;
     setEvents([]);
     setRunning(true);
+    setOpenRunIds(runIds);
     const sources: EventSource[] = [];
     let open = runIds.length;
 
@@ -182,7 +195,7 @@ export function useRunEvents(runIds: string[]) {
       const onMsg = (ev: MessageEvent) => {
         try {
           const parsed = JSON.parse(ev.data) as RunEvent;
-          setEvents((prev) => [...prev, parsed]);
+          setEvents((prev) => appendRunEvent(prev, parsed));
           // Runtime agent failures arrive as SSE `error` events (not as a
           // mutation/query error), so the global error toast never sees them —
           // surface them here so the user gets a notification without a reload.
@@ -199,6 +212,7 @@ export function useRunEvents(runIds: string[]) {
       }
       es.onerror = () => {
         es.close();
+        setOpenRunIds((ids) => ids.filter((id) => id !== runId));
         open -= 1;
         if (open <= 0) setRunning(false);
       };
@@ -208,11 +222,12 @@ export function useRunEvents(runIds: string[]) {
     return () => {
       for (const es of sources) es.close();
       setRunning(false);
+      setOpenRunIds([]);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  return { events, running };
+  return { events, running, openRunIds };
 }
 
 /** Warm the reviews cache for a PR (hover on the PR list → instant popover). */

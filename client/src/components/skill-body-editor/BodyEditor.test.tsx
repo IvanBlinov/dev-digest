@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import skills from "../../../../../messages/en/skills.json";
+import common from "../../../messages/en/common.json";
 import { BodyEditor } from "./BodyEditor";
 
 afterEach(cleanup);
@@ -9,7 +9,7 @@ afterEach(cleanup);
 function setup(props: Partial<React.ComponentProps<typeof BodyEditor>> = {}) {
   const onChange = vi.fn();
   render(
-    <NextIntlClientProvider locale="en" messages={{ skills }}>
+    <NextIntlClientProvider locale="en" messages={{ common }}>
       <BodyEditor value={"# a\nb\nc"} onChange={onChange} label="Body" fileName="my-skill" {...props} />
     </NextIntlClientProvider>,
   );

@@ -3,6 +3,7 @@ import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { Skill } from "@devdigest/shared";
 import skills from "../../../../../../../../messages/en/skills.json";
+import common from "../../../../../../../../messages/en/common.json";
 import { ToastProvider } from "@/lib/toast";
 
 const updateMutate = vi.fn();
@@ -30,7 +31,7 @@ const SKILL: Skill = {
 
 function setup() {
   render(
-    <NextIntlClientProvider locale="en" messages={{ skills }}>
+    <NextIntlClientProvider locale="en" messages={{ skills, common }}>
       <ToastProvider>
         <ConfigTab skill={SKILL} />
       </ToastProvider>

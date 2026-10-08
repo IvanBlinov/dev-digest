@@ -27,6 +27,8 @@ vi.mock("@/lib/hooks/skills", () => ({
   useCreateSkill: () => ({ mutate: vi.fn(), isPending: false }),
   usePreviewSkillImport: () => ({ mutate: vi.fn(), isPending: false }),
   useImportSkill: () => ({ mutate: vi.fn(), isPending: false }),
+  useSkillUrlImportPreview: () => ({ mutate: vi.fn(), isPending: false }),
+  useImportSkillFromUrl: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 import { SkillsLabView } from "./SkillsLabView";
@@ -90,5 +92,24 @@ describe("SkillsLabView", () => {
     fireEvent.click(screen.getByRole("button", { name: /Add Skill/ }));
     fireEvent.click(screen.getByRole("button", { name: "Import from file" }));
     expect(screen.getByLabelText("Skill file (.md or .zip)")).toBeInTheDocument();
+  });
+
+  it("Add Skill lists Import from URL between Create and Import from file", () => {
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: /Add Skill/ }));
+    const create = screen.getByRole("button", { name: "Create skill" });
+    const fromUrl = screen.getByRole("button", { name: "Import from URL" });
+    const fromFile = screen.getByRole("button", { name: "Import from file" });
+    const follows = (a: HTMLElement, b: HTMLElement) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(create, fromUrl)).toBe(true);
+    expect(follows(fromUrl, fromFile)).toBe(true);
+  });
+
+  it("Import from URL opens the URL import modal", () => {
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: /Add Skill/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Import from URL" }));
+    expect(screen.getByLabelText("Skill URL")).toBeInTheDocument();
   });
 });

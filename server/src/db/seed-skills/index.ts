@@ -33,6 +33,11 @@ const SKILL_FIXTURES: readonly SkillFixture[] = [
   { file: 'secret-leakage-gate.md', source: 'manual' },
   { file: 'test-quality-rubric.md', source: 'manual' },
   { file: 'api-contract-guard.md', source: 'imported' },
+  // L03 req 43 — the API Contract Reviewer's contract skills (Good / Bad example each).
+  { file: 'breaking-change.md', source: 'manual' },
+  { file: 'response-schema.md', source: 'manual' },
+  { file: 'semver-discipline.md', source: 'manual' },
+  { file: 'deprecation-policy.md', source: 'manual' },
 ];
 
 /**
@@ -47,6 +52,7 @@ const SKILLED_AGENTS = [
     systemPrompt:
       'You are a senior engineer reviewing a pull-request diff. Report only concrete, actionable problems in the changed lines, each cited by file and line. If the change looks fine, return no findings.',
     skill: 'test-quality-rubric',
+    extraSkills: [],
   },
   {
     name: 'API Contract Reviewer',
@@ -54,6 +60,8 @@ const SKILLED_AGENTS = [
     systemPrompt:
       'You are a senior backend engineer reviewing a pull-request diff. Report only concrete, actionable problems in the changed lines, each cited by file and line. If the change looks fine, return no findings.',
     skill: 'api-contract-guard',
+    // L03 req 43 — appended after api-contract-guard (which stays, L02 req 16).
+    extraSkills: ['breaking-change', 'response-schema', 'semver-discipline', 'deprecation-policy'],
   },
 ] as const;
 
@@ -116,11 +124,32 @@ async function seedAgents(
         systemPrompt: spec.systemPrompt,
         createdBy: input.userId,
       }));
-    const skillId = skillIds.get(spec.skill);
-    if (!skillId) throw new Error(`Seed skill ${spec.skill} is missing`);
+    const skillId = requireSkill(skillIds, spec.skill);
     // Only link when the agent has no links yet, so a user's edits survive a re-seed.
     const links = await agents.linkedSkills(agent.id);
     if (links.length === 0) await agents.replaceSkillLinks(agent.id, [{ skill_id: skillId, enabled: true }]);
+    await appendMissingLinks(agents, agent.id, spec.extraSkills.map((name) => requireSkill(skillIds, name)));
+  }
+}
+
+function requireSkill(skillIds: Map<string, string>, name: string): string {
+  const id = skillIds.get(name);
+  if (!id) throw new Error(`Seed skill ${name} is missing`);
+  return id;
+}
+
+/**
+ * Append each skill the agent is not linked to yet, enabled, after its current
+ * links (in the given order). Already-linked skills keep their position and
+ * switch, so a re-seed is a no-op.
+ */
+async function appendMissingLinks(agents: AgentsRepository, agentId: string, skillIds: readonly string[]): Promise<void> {
+  const links = await agents.linkedSkills(agentId);
+  const linked = new Set(links.map((l) => l.skill.id));
+  let order = links.reduce((max, l) => Math.max(max, l.order + 1), 0);
+  for (const skillId of skillIds) {
+    if (linked.has(skillId)) continue;
+    await agents.linkSkill(agentId, skillId, order++);
   }
 }
 

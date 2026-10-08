@@ -3,6 +3,7 @@ import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { Skill } from "@devdigest/shared";
 import skills from "../../../../../../../messages/en/skills.json";
+import common from "../../../../../../../messages/en/common.json";
 import { ToastProvider } from "@/lib/toast";
 import { ApiError } from "@/lib/api";
 
@@ -23,7 +24,7 @@ function setup() {
   const onClose = vi.fn();
   const onCreated = vi.fn();
   render(
-    <NextIntlClientProvider locale="en" messages={{ skills }}>
+    <NextIntlClientProvider locale="en" messages={{ skills, common }}>
       <ToastProvider>
         <CreateSkillModal onClose={onClose} onCreated={onCreated} />
       </ToastProvider>

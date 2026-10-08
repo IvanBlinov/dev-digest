@@ -10,6 +10,7 @@ import {
   filterRows,
   countEffective,
   canCheck,
+  demoteBlocked,
 } from "./helpers";
 
 function skill(id: string, name: string, enabled = true): Skill {
@@ -178,5 +179,61 @@ describe("filterRows / countEffective", () => {
 
   it("counts only skills that reach the prompt (per-agent AND global enabled)", () => {
     expect(countEffective(rows)).toBe(1);
+  });
+});
+
+describe("blocked skills (injection detected)", () => {
+  const BLOCKED_SEC = {
+    status: "blocked" as const,
+    findings: [{ rule: "ignore-instructions", label: "Overrides", severity: "high" as const, line: 1, excerpt: "ignore" }],
+  };
+  const evil = { ...skill("s6", "evil-skill"), security: BLOCKED_SEC };
+  const clean = { ...skill("s7", "clean-skill"), security: { status: "clean" as const, findings: [] } };
+  const ALL = [...SKILLS, evil, clean];
+
+  it("canCheck is false for a blocked skill even when it is globally enabled; missing scan = clean", () => {
+    expect(canCheck(evil)).toBe(false);
+    expect(canCheck(clean)).toBe(true);
+    expect(canCheck(skill("x", "no-scan"))).toBe(true);
+  });
+
+  it("an enabled link to a blocked skill renders as an unchecked, non-draggable, blocked row in the alphabetical tail", () => {
+    const rows = buildRows(ALL, [
+      { skill_id: "s6", enabled: true },
+      { skill_id: "s1", enabled: true },
+    ]);
+    expect(rows[0]!.skill.id).toBe("s1");
+    const row = rows.find((r) => r.skill.id === "s6")!;
+    expect(row).toMatchObject({ checked: false, draggable: false, blocked: true });
+    expect(rows.find((r) => r.skill.id === "s7")!.blocked).toBe(false);
+  });
+
+  it("is never counted as enabled", () => {
+    const rows = buildRows(ALL, [
+      { skill_id: "s6", enabled: true },
+      { skill_id: "s1", enabled: true },
+    ]);
+    expect(countEffective(rows)).toBe(1);
+  });
+
+  it("demoteBlocked turns enabled links to blocked skills into disabled ones, keeping the rest in order", () => {
+    const items = [
+      { skill_id: "s1", enabled: true },
+      { skill_id: "s6", enabled: true },
+      { skill_id: "s3", enabled: true },
+      { skill_id: "s2", enabled: false },
+    ];
+    expect(demoteBlocked(items, ALL)).toEqual([
+      { skill_id: "s1", enabled: true },
+      { skill_id: "s3", enabled: true },
+      { skill_id: "s6", enabled: false },
+      { skill_id: "s2", enabled: false },
+    ]);
+    expect(items[1]).toEqual({ skill_id: "s6", enabled: true });
+  });
+
+  it("demoteBlocked keeps links whose skill is unknown untouched", () => {
+    const items = [{ skill_id: "gone", enabled: true }];
+    expect(demoteBlocked(items, ALL)).toEqual(items);
   });
 });

@@ -9,11 +9,11 @@ import type {
   ReviewStrategy,
 } from '@devdigest/shared';
 import { AgentsRepository } from './repository.js';
-import { toAgentDto, toAgentVersionDto } from './helpers.js';
+import { blockedSkillsOf, countUsableSkills, skillBlockedMessage, toAgentDto, toAgentVersionDto } from './helpers.js';
 import { ReviewRepository } from '../reviews/repository.js';
 import { countActiveFindingsForAgent, groupBy, pickLatestBy } from '../reviews/severity.js';
 import { validateLinkItems } from '../skills/helpers.js';
-import { BadRequestError } from '../../platform/errors.js';
+import { BadRequestError, SkillBlockedError } from '../../platform/errors.js';
 import type { FindingPreview } from '@devdigest/shared';
 
 /**
@@ -68,7 +68,7 @@ export class AgentsService {
    */
   async list(workspaceId: string): Promise<Agent[]> {
     const rows = await this.repo.list(workspaceId);
-    const skillCounts = await this.repo.enabledSkillCounts(rows.map((r) => r.id));
+    const skillCounts = countUsableSkills(await this.repo.enabledSkillLinks(rows.map((r) => r.id)));
     const summary = await this.reviews.severitySummaryForWorkspace(workspaceId);
     const reviewsByAgent = groupBy(summary.reviews, (r) => r.agentId ?? '');
     const findingsByReview = groupBy(summary.findings, (f) => f.reviewId);
@@ -96,7 +96,7 @@ export class AgentsService {
   async get(workspaceId: string, id: string): Promise<Agent | undefined> {
     const row = await this.repo.getById(workspaceId, id);
     if (!row) return undefined;
-    const counts = await this.repo.enabledSkillCounts([row.id]);
+    const counts = countUsableSkills(await this.repo.enabledSkillLinks([row.id]));
     return { ...toAgentDto(row), skill_count: counts.get(row.id) ?? 0 };
   }
 
@@ -192,6 +192,7 @@ export class AgentsService {
   ): Promise<AgentSkillLink[] | undefined> {
     const agent = await this.repo.getById(workspaceId, agentId);
     if (!agent) return undefined;
+    await this.assertNoneBlocked(workspaceId, skillIds);
     await this.repo.setSkills(agentId, skillIds);
     return this.skillLinks(agentId);
   }
@@ -214,6 +215,10 @@ export class AgentsService {
     );
     const error = validateLinkItems(items, known);
     if (error) throw new BadRequestError(error);
+    await this.assertNoneBlocked(
+      workspaceId,
+      items.filter((i) => i.enabled).map((i) => i.skill_id),
+    );
     await this.repo.replaceSkillLinks(agentId, items);
     return this.skillLinks(agentId);
   }
@@ -227,10 +232,25 @@ export class AgentsService {
   ): Promise<AgentSkillLink[] | undefined> {
     const agent = await this.repo.getById(workspaceId, agentId);
     if (!agent) return undefined;
+    await this.assertNoneBlocked(workspaceId, [skillId]);
     const existing = await this.repo.linkedSkills(agentId);
     const resolvedOrder = order ?? existing.length;
     await this.repo.linkSkill(agentId, skillId, resolvedOrder);
     return this.skillLinks(agentId);
+  }
+
+  /**
+   * L03b — 400 `skill_blocked` when any skill about to be ENABLED has injection
+   * findings. Disabled links to a blocked skill stay allowed (the user can keep
+   * it unchecked until its body is cleaned).
+   */
+  private async assertNoneBlocked(workspaceId: string, enabledSkillIds: string[]): Promise<void> {
+    const skills = await this.container.skillsRepo.bodiesByIds(workspaceId, enabledSkillIds);
+    const blocked = blockedSkillsOf(skills);
+    if (blocked.length === 0) return;
+    throw new SkillBlockedError(skillBlockedMessage(blocked.map((s) => s.name)), {
+      skills: blocked.map((s) => ({ id: s.id, name: s.name })),
+    });
   }
 
   /**

@@ -105,7 +105,8 @@
     "disabledGloballyHint": "This skill is turned off in Skills Lab, so it never reaches the prompt. Enable it there first.",
     "empty": "No skills yet — create or import one in Skills Lab.",
     "noMatch": "No skills match “{query}”.",
-    "loadError": "Could not load skills."
+    "loadError": "Could not load skills.",
+    "blockedHint": "Blocked — injection detected. Clean the skill body to enable it."
   },
   "mount": {
     "body": "Mount point for {owner}. The Agent Editor shell + tab routing are wired by A2 — {owner} renders this tab."

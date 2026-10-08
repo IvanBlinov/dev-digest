@@ -1,11 +1,13 @@
 /* SkillsTab — L02 agent editor tab: every workspace skill with a per-agent checkbox.
    Enabled links come first in prompt order (drag & drop or ↑/↓), the rest alphabetically.
-   Every change persists immediately as a full ordered replacement (optimistic, rolled back on error). */
+   Every change persists immediately as a full ordered replacement (optimistic, rolled back on error).
+   Skills blocked by the injection scan (L03b) can't be checked and are always sent as disabled. */
 "use client";
 
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Checkbox, ErrorState, Icon, IconBtn, Skeleton, TextInput } from "@devdigest/ui";
+import { InjectionChip } from "@/components/injection-chip";
 import { SkillTypeChip } from "@/components/skill-type-chip";
 import { useAgentSkills, useSetAgentSkills } from "@/lib/hooks/agents";
 import { useSkills } from "@/lib/hooks/skills";
@@ -13,6 +15,7 @@ import {
   buildRows,
   canCheck,
   countEffective,
+  demoteBlocked,
   filterRows,
   linksToItems,
   moveSkill,
@@ -36,8 +39,9 @@ export function SkillsTab({ agentId }: { agentId: string }) {
   if (skillsQ.isLoading || linksQ.isLoading) return <Skeleton height={200} />;
   if (skillsQ.isError || linksQ.isError) return <ErrorState body={t("skills.loadError")} />;
 
-  const items = linksToItems(linksQ.data ?? []);
-  const rows = buildRows(skillsQ.data ?? [], items);
+  const allSkills = skillsQ.data ?? [];
+  const items = demoteBlocked(linksToItems(linksQ.data ?? []), allSkills);
+  const rows = buildRows(allSkills, items);
   const visible = filterRows(rows, query);
   const filtering = query.trim().length > 0;
 
@@ -114,6 +118,7 @@ function SkillListRow({
 }) {
   const t = useTranslations("agents");
   const checkable = canCheck(row.skill);
+  const hint = row.blocked ? t("skills.blockedHint") : row.globallyDisabled ? t("skills.disabledGloballyHint") : undefined;
   const dndProps = draggable
     ? {
         draggable: true,
@@ -137,7 +142,7 @@ function SkillListRow({
     <li
       aria-label={row.skill.name}
       style={s.row({ dimmed: row.globallyDisabled, dragging, dropTarget })}
-      title={row.globallyDisabled ? t("skills.disabledGloballyHint") : undefined}
+      title={hint}
       {...dndProps}
     >
       {draggable ? (
@@ -150,10 +155,14 @@ function SkillListRow({
       <span aria-disabled={!checkable || undefined} style={checkable ? undefined : s.checkboxOff}>
         <Checkbox checked={row.checked} onChange={checkable ? onToggle : undefined} />
       </span>
-      <span className="mono" style={s.name}>
-        {row.skill.name}
+      <span style={s.nameCell}>
+        <span className="mono" style={s.name}>
+          {row.skill.name}
+        </span>
+        {row.blocked && <span style={s.blockedHint}>{t("skills.blockedHint")}</span>}
       </span>
       {row.globallyDisabled && <span style={s.offHint}>{t("skills.disabledGlobally")}</span>}
+      {row.blocked && <InjectionChip />}
       <SkillTypeChip type={row.skill.type} />
       {draggable && (
         <span style={s.moveBtns}>

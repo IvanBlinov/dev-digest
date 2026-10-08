@@ -56,7 +56,15 @@
     "cancelled": "cancelled",
     "running": "running",
     "findings": "{count} finding(s)",
-    "blockers": " · {count} blockers"
+    "blockers": " · {count} blockers",
+    "section": {
+      "preparation": "Preparation",
+      "running": "running",
+      "done": "done",
+      "failed": "failed",
+      "lines": "{count, plural, one {# line} other {# lines}}",
+      "queued": "queued"
+    }
   },
   "smartDiff": {
     "coreLabel": "Core",

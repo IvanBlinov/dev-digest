@@ -8,7 +8,14 @@ import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './reposit
 import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
-import { buildSkillsPrompt, skillsLogLine, type EffectiveSkillsSource } from './skills-prompt.js';
+import { runAgentsConcurrently } from './concurrency.js';
+import {
+  blockedSkillsLogLine,
+  buildSkillsPrompt,
+  partitionBlockedSkills,
+  skillsLogLine,
+  type EffectiveSkillsSource,
+} from './skills-prompt.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -107,7 +114,9 @@ export class ReviewRunExecutor {
     }
     runLog.info(`Diff ready — ${diff.files.length} changed file(s); starting ${jobs.length} agent run(s)`);
 
-    for (const { agent, runId } of jobs) {
+    // Agents of one review run concurrently (bounded by REVIEW_AGENT_CONCURRENCY);
+    // each run logs to its own stream and persists its own failure.
+    await runAgentsConcurrently(jobs, this.container.config.reviewAgentConcurrency, async ({ agent, runId }) => {
       const agentStart = Date.now();
       logger?.info(
         { runId, agent: agent.name, provider: agent.provider, model: agent.model, prId: pull.id },
@@ -134,7 +143,7 @@ export class ReviewRunExecutor {
           `review: agent "${agent.name}" ${cancelled ? 'cancelled' : 'failed'}`,
         );
       }
-    }
+    });
   }
 
   /** Execute a single agent's review against a PR, streaming progress. */
@@ -190,10 +199,14 @@ export class ReviewRunExecutor {
       // link order) become `### Skill:` blocks in the prompt, in that order.
       // A lookup failure fails the run: a review silently missing its rules
       // would look valid but answer a different question.
-      const skillsPlan = buildSkillsPrompt(
+      // L03b — skills with prompt-injection findings never reach the prompt,
+      // even when their link is enabled; the run log names them.
+      const { allowed: usableSkills, blocked: blockedSkills } = partitionBlockedSkills(
         await this.skills.effectiveSkillsForAgent(agent.id),
-        this.container.tokenizer,
       );
+      const blockedLine = blockedSkillsLogLine(blockedSkills);
+      if (blockedLine) runLog.info(blockedLine);
+      const skillsPlan = buildSkillsPrompt(usableSkills, this.container.tokenizer);
       runLog.info(skillsLogLine(skillsPlan));
 
       // ---- Engine: assemble → single-pass → grounding -----------------------

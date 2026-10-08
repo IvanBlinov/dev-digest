@@ -53,6 +53,17 @@ export function parseSkillUpload(filename: string, bytes: Uint8Array): SkillImpo
   throw new SkillImportError('Unsupported file type: upload a .md or .zip file');
 }
 
+/**
+ * L03c — parse already-decoded text (a file fetched from a URL) through the
+ * same markdown path as an uploaded `.md`. `.markdown` / `.txt` are treated as
+ * markdown; `filename` (the URL's last path segment) is the name fallback.
+ */
+export function parseSkillMarkdownText(text: string, filename: string): SkillImportPreview {
+  const normalized = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  const fallback = filename.replace(/\.(markdown|txt)$/i, '.md');
+  return parseMarkdown(normalized, filename, fallback, []);
+}
+
 // ---- zip ------------------------------------------------------------------
 
 function parseZip(bytes: Uint8Array): SkillImportPreview {

@@ -1,4 +1,5 @@
 import type { AgentSkillLink, Skill } from "@devdigest/shared";
+import { isSkillBlocked } from "@/lib/skill-helpers";
 
 /** One agent→skill link in prompt order (the `POST /agents/:id/skills` item shape). */
 export interface LinkItem {
@@ -15,6 +16,8 @@ export interface SkillRow {
   globallyDisabled: boolean;
   /** Only enabled links can be reordered. */
   draggable: boolean;
+  /** Body failed the injection scan (L03b) — never checked, never counted, checkbox disabled. */
+  blocked: boolean;
 }
 
 const enabledOf = (items: readonly LinkItem[]) => items.filter((i) => i.enabled);
@@ -28,24 +31,38 @@ export function linksToItems(links: readonly AgentSkillLink[]): LinkItem[] {
   return [...enabledOf(sorted), ...disabledOf(sorted)];
 }
 
-/** A skill can be checked only while its global toggle is on. */
+/** A skill can be checked only while its global toggle is on and its body scans clean. */
 export function canCheck(skill: Skill): boolean {
-  return skill.enabled;
+  return skill.enabled && !isSkillBlocked(skill.security);
 }
 
-/** Enabled links in link order (draggable), then every other skill alphabetically. */
+/**
+ * Enabled links to blocked skills become disabled links (moved after the enabled ones), so the
+ * payload of any later change never asks the server to enable a blocked skill. Unknown ids are kept.
+ */
+export function demoteBlocked(items: readonly LinkItem[], skills: readonly Skill[]): LinkItem[] {
+  const blockedIds = new Set(skills.filter((sk) => isSkillBlocked(sk.security)).map((sk) => sk.id));
+  const mapped = items.map((i) => (i.enabled && blockedIds.has(i.skill_id) ? { ...i, enabled: false } : { ...i }));
+  return [...enabledOf(mapped), ...disabledOf(mapped)];
+}
+
+/** Enabled links in link order (draggable), then every other skill alphabetically. Blocked skills are never in the head. */
 export function buildRows(skills: readonly Skill[], items: readonly LinkItem[]): SkillRow[] {
   const byId = new Map(skills.map((sk) => [sk.id, sk]));
   const enabledIds = enabledOf(items)
     .map((i) => i.skill_id)
-    .filter((id) => byId.has(id));
+    .filter((id) => byId.has(id) && !isSkillBlocked(byId.get(id)!.security));
   const enabledSet = new Set(enabledIds);
   const head = enabledIds.map((id) => byId.get(id)!);
   const tail = skills.filter((sk) => !enabledSet.has(sk.id)).sort((a, b) => a.name.localeCompare(b.name));
-  return [
-    ...head.map((skill) => ({ skill, checked: true, globallyDisabled: !skill.enabled, draggable: true })),
-    ...tail.map((skill) => ({ skill, checked: false, globallyDisabled: !skill.enabled, draggable: false })),
-  ];
+  const row = (skill: Skill, linked: boolean): SkillRow => ({
+    skill,
+    checked: linked,
+    globallyDisabled: !skill.enabled,
+    draggable: linked,
+    blocked: isSkillBlocked(skill.security),
+  });
+  return [...head.map((skill) => row(skill, true)), ...tail.map((skill) => row(skill, false))];
 }
 
 /** Check → append to the end of the enabled list; uncheck → keep the link with enabled=false. */
@@ -96,7 +113,7 @@ export function filterRows(rows: readonly SkillRow[], query: string): SkillRow[]
   return rows.filter((r) => r.skill.name.toLowerCase().includes(q));
 }
 
-/** Skills that actually reach the prompt: checked here AND globally enabled. */
+/** Skills that actually reach the prompt: checked here AND globally enabled AND not blocked. */
 export function countEffective(rows: readonly SkillRow[]): number {
-  return rows.filter((r) => r.checked && !r.globallyDisabled).length;
+  return rows.filter((r) => r.checked && !r.globallyDisabled && !r.blocked).length;
 }

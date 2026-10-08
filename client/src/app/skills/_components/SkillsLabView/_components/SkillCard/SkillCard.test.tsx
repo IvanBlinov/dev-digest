@@ -33,6 +33,11 @@ const SKILL: Skill = {
   agent_count: 2,
 };
 
+const BLOCKED: NonNullable<Skill["security"]> = {
+  status: "blocked",
+  findings: [{ rule: "ignore-instructions", label: "Overrides instructions", severity: "high", line: 2, excerpt: "ignore previous instructions" }],
+};
+
 function setup(props: Partial<React.ComponentProps<typeof SkillCard>> = {}) {
   const onSelect = vi.fn();
   const onDeleted = vi.fn();
@@ -55,6 +60,11 @@ describe("SkillCard", () => {
     expect(screen.getByText("Imported")).toBeInTheDocument();
     expect(screen.getByText("v3 · 2 agents")).toBeInTheDocument();
     expect(screen.getByRole("switch")).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("labels a URL-imported skill as Imported (URL)", () => {
+    setup({ skill: { ...SKILL, source: "imported_url" } });
+    expect(screen.getByText("Imported (URL)")).toBeInTheDocument();
   });
 
   it("clicking the card selects it", () => {
@@ -90,5 +100,22 @@ describe("SkillCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(deleteMutate).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("a clean skill shows no injection chip and no blocked footer", () => {
+    setup({ skill: { ...SKILL, security: { status: "clean", findings: [] } } });
+    expect(screen.queryByText("Injection detected")).not.toBeInTheDocument();
+    expect(screen.queryByText("blocked — injection detected")).not.toBeInTheDocument();
+    expect(screen.getByRole("listitem").style.borderColor).not.toBe("var(--crit)");
+  });
+
+  it("a blocked skill gets the chip next to the name, a red border and a blocked footer", () => {
+    setup({ skill: { ...SKILL, security: BLOCKED } });
+    const card = screen.getByRole("listitem");
+    const nameRow = screen.getByText("api-contract-guard").parentElement!;
+    expect(within(nameRow).getByText("Injection detected")).toBeInTheDocument();
+    expect(card.style.border).toContain("var(--crit)");
+    expect(screen.getByText("blocked — injection detected")).toBeInTheDocument();
+    expect(screen.getByText("v3 · 2 agents")).toBeInTheDocument();
   });
 });
