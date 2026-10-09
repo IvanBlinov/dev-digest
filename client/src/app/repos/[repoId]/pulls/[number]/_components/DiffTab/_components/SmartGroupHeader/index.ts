@@ -1,0 +1,1 @@
+export { SmartGroupHeader } from "./SmartGroupHeader";

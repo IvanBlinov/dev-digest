@@ -2,6 +2,24 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-08 — [Non-obvious behaviour] Seed patches feed `diff-loader`, and rule order puts `e2e/README.md` in "tests"
+Symptom: seeded `pr_files` patches change what review/intent code sees when git has no diff; a doc under `e2e/` classifies as tests, not docs.
+Cause: `diff-loader` falls back to `pr_files.patch`; the classifier checks directory segments before the `.md` rule.
+Rule: when editing seed patches re-run the DB lane; do not expect docs under test dirs to land in the docs group.
+Proof: `server/src/db/seed.ts:162`, `server/src/modules/smart-diff/constants.ts:25`
+
+## 2026-10-08 — [Non-obvious behaviour] Smart-diff role = first matching rule; `e2e/README.md` is "tests", the PR "latest" excludes summaries
+Symptom: a markdown file under `e2e/` is grouped with tests, not docs; a `kind='summary'` review adds no finding lines.
+Cause: `CLASSIFY_RULES` is ordered boilerplate, tests, wiring, docs (the `e2e` segment fires before the `.md` suffix); the service filters `kind==='review'` before `pickLatestPerAgent`.
+Rule: change role behaviour by editing rule data/order in `constants.ts`, not the matcher; keep the `kind` filter in step with the client's `latestPerAgent`.
+Proof: `server/src/modules/smart-diff/constants.ts:37`, `server/src/modules/smart-diff/service.ts:25`
+
+## 2026-10-08 — [Pitfall] Seeded `pr_files` patches feed `diff-loader`, so seed edits change what review `.it` tests see for PR #482
+Symptom: adding patches to the PR #482 seed rows changes the diff DB-backed review tests get when git has no diff.
+Cause: `loadDiff` falls back to `diffFromPrFiles`, which uses every `pr_files.patch`; the seed insert only runs when the PR is new, so existing dev DBs keep old rows.
+Rule: after touching the PR #482 seed, run the whole `.it` lane; use a fresh DB (never `down -v`) to see new rows.
+Proof: `server/src/modules/reviews/diff-loader.ts:33`, `server/src/db/seed.ts:167`
+
 ## 2026-10-08 — [Security] `prompt.assembled` carries a manifest, never text; structured data must bypass `runLog`
 Symptom: it is tempting to log the prompt event through `runLog.info(msg, data)` so it shows in the Live Log.
 Cause: `RunLogger.event` publishes `data` to the SSE bus (and the persisted trace log) AND pino, so anything structured placed there is exposed to the client and stored.

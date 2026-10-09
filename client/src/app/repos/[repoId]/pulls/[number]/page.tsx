@@ -19,6 +19,7 @@ import RunTraceDrawer from "./_components/RunTraceDrawer";
 import { usePullDetail, usePulls } from "../../../../../lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePrReviews, useCancelRun, usePrActiveRuns, usePrRuns, useDeleteRun } from "../../../../../lib/hooks/reviews";
+import { smartDiffKey } from "../../../../../lib/hooks/smart-diff";
 import { useActiveRepo, useRepoNotFound } from "../../../../../lib/repo-context";
 import { ApiError } from "../../../../../lib/api";
 import { githubPrUrl } from "../../../../../lib/github-urls";
@@ -69,6 +70,8 @@ export default function PRDetailPage() {
     router.replace(`/repos/${repoId}/pulls/${number}${sp.toString() ? `?${sp.toString()}` : ""}`);
   };
   const setTab = (t: string) => setParam("tab", t);
+  // Files changed: smart (reviewer-ordered) by default; ?order=original = GitHub order.
+  const order = search.get("order") === "original" ? "original" : "smart";
   // L01 — severity filter lives in the URL (?severity=CRITICAL); clicking the
   // active level clears it.
   const rawSeverity = search.get("severity");
@@ -185,6 +188,8 @@ export default function PRDetailPage() {
               refetchReviews();
               // A review auto-classifies the PR's intent when none was stored.
               if (prId) qc.invalidateQueries({ queryKey: ["pr-intent", prId] });
+              // New findings change the smart diff's per-file flags.
+              if (prId) qc.invalidateQueries({ queryKey: smartDiffKey(prId) });
             }}
           />
         )}
@@ -195,6 +200,10 @@ export default function PRDetailPage() {
             filesCount={pr.files_count}
             files={pr.files}
             canComment={pr.status === "open"}
+            order={order}
+            onOrderChange={(o) => setParam("order", o === "original" ? "original" : null)}
+            repoFullName={repoFullName}
+            headSha={pr.head_sha}
           />
         )}
       </div>

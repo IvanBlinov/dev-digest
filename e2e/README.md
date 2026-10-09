@@ -101,3 +101,4 @@ a CI artifact by `.github/workflows/e2e-web.yml`).
 | `06-onboarding` | `/onboarding` → add-repository form renders (no submit) |
 | `07-settings` | `/settings/api-keys` + `/settings/models` → section titles render |
 | `08-pr-intent` | PR #482 → the seeded Intent card renders above Overview and Agent runs |
+| `09-smart-diff` | PR #482 → Files changed → smart order default, seeded finding under its line, Boilerplate group expands to the lock file, Original order writes `order=original` |
