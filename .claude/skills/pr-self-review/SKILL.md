@@ -39,11 +39,12 @@ matching skill **before** judging that file. Load each skill once.
 | `client/**/*.test.tsx`, `client/src/**/*.test.ts` | `react-testing-library` |
 | `client/messages/**` | `frontend-architecture` (i18n section) |
 | `server/src/modules/**`, `server/src/adapters/**`, `server/src/platform/**` | `onion-architecture`, `fastify-best-practices` |
-| `server/src/db/**` | `drizzle-orm-patterns`, `postgresql-table-design` |
-| `*/src/vendor/shared/**` | `zod` |
+| `server/src/db/**` | `db-schema-change`, `drizzle-orm-patterns`, `postgresql-table-design` |
+| `*/src/vendor/shared/**` | `shared-contracts`, `zod` |
 | server routes, auth, secrets, env/config, file or shell input, LLM prompt text (`server/src/prompts/**`, `reviewer-core/src/**`) | `security` |
 | `reviewer-core/src/**` | `typescript-expert`; read `reviewer-core/AGENTS.md` Boundaries |
-| `e2e/**` | read `e2e/AGENTS.md` |
+| `e2e/**` | `e2e-flows`; read `e2e/AGENTS.md` |
+| any new or changed test file | `test-strategy` |
 | `.claude/skills/**`, `**/AGENTS.md`, `**/INSIGHTS.md`, `docs/**`, `specs/**` | none — run the **fact check** below |
 | any change at all | `engineering-insights` |
 

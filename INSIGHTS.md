@@ -38,3 +38,9 @@ Symptom: looking for `pnpm lint` before finishing a task.
 Cause: none of the four `package.json` files define lint, and there is no ESLint/Biome/Prettier config in the repo.
 Rule: `typecheck` + tests are the only static gates; do not claim "lint passed".
 Proof: `server/package.json:1`, `client/package.json:1`, `reviewer-core/package.json:1`, `e2e/package.json:1`
+
+## 2026-10-07 — [Architectural decision] One skill-routing table for planner, implementer and pr-self-review
+Context: three agents/skills must agree on which project skills apply to which paths; three copies would drift.
+Decision: the path → skill table lives only in `pr-self-review` Step 2; `planner` and `implementer` read it instead of keeping their own copy. "Do not touch" for the implementer is enforced by a PreToolUse hook, not only by prompt text.
+Consequence: adding a skill = one row in that table; a new protected path = one case in `.claude/hooks/guard-protected-paths.sh`.
+Proof: `.claude/skills/pr-self-review/SKILL.md:31`, `.claude/agents/implementer.md:12`

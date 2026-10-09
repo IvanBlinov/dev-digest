@@ -109,11 +109,13 @@ In Claude Code a Stop hook (`.claude/hooks/insights-reminder.sh`) also enforces 
 - [docs/](docs/README.md) — cross-module design; today: [docs/agent-prompts/](docs/agent-prompts/README.md)
 - [specs/](specs/README.md) — feature specs spanning more than one package
 - [INSIGHTS.md](INSIGHTS.md) — project-wide lessons learned; read before non-trivial changes
+- [.claude/agents/](.claude/agents/README.md) — project subagents: `researcher` (read-only research reports), `planner` (Development Plan), `implementer` (executes a plan, test-first); approved plans live in [specs/plans/](specs/plans/README.md)
 - Each module: `README.md` (what/how to run) · `docs/` (why) · `specs/` (what to build) · `INSIGHTS.md` (lessons)
 
 ## Workflow
 
 1. Write or update a spec in the relevant `specs/` folder (module-level, or root for cross-module).
+   For multi-step work: `planner` agent → user approves → plan saved to `specs/plans/` → `implementer` agent.
 2. Tests first, then implementation (see [TESTING.md](TESTING.md) for which suite).
 3. Record insights as you go (see above), then run the check commands for every package you touched.
 4. Update the module `README.md` only when the "what is it / how to run" story changes.
