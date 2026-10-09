@@ -32,6 +32,27 @@ describe('mock adapters (no network)', () => {
     expect(url).toContain('github.com');
   });
 
+  it('MockGitHubClient.getFileContent returns mapped content and records the ref', async () => {
+    const gh = new MockGitHubClient({ files: { 'specs/a.md': '# spec' } });
+    const repo = { owner: 'a', name: 'b' };
+    const f = await gh.getFileContent(repo, 'specs/a.md', 'abc123');
+    expect(f.content).toBe('# spec');
+    expect(gh.fileCalls).toEqual([{ path: 'specs/a.md', ref: 'abc123' }]);
+    await expect(gh.getFileContent(repo, 'nope.md', 'abc123')).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('MockGitHubClient.getIssue supports mapped issues and failures, default unchanged', async () => {
+    const gh = new MockGitHubClient({
+      issues: { 7: { status: 403 }, 8: { number: 8, title: 'T', body: 'B', state: 'open' } },
+    });
+    const repo = { owner: 'a', name: 'b' };
+    await expect(gh.getIssue(repo, 7)).rejects.toMatchObject({ status: 403 });
+    expect((await gh.getIssue(repo, 8)).title).toBe('T');
+    expect(gh.issueCalls).toEqual([7, 8]);
+    const plain = new MockGitHubClient();
+    expect((await plain.getIssue(repo, 5)).title).toBe('Issue #5');
+  });
+
   it('MockCodeIndex + MockEmbedder return deterministic shapes', async () => {
     const ci = new MockCodeIndex();
     expect((await ci.symbols({ owner: 'a', name: 'b' }))[0]!.name).toBe('rateLimit');

@@ -3,6 +3,7 @@ import {
   Review,
   Finding,
   Intent,
+  PromptAssembly,
   BlastRadius,
   Risks,
   PrHistory,
@@ -71,8 +72,27 @@ describe('AI contracts parse fixtures', () => {
 
   it('Intent / BlastRadius / Risks / PrHistory', () => {
     expect(() =>
-      Intent.parse({ intent: 'x', in_scope: ['a'], out_of_scope: ['b'] }),
+      Intent.parse({
+        summary: 'x',
+        in_scope: ['a'],
+        out_of_scope: ['b'],
+        confidence: 'medium',
+        sources: [{ kind: 'issue', ref: '#471', status: 'ok' }],
+        missing_context: [],
+      }),
     ).not.toThrow();
+    // old shape (`intent:` field, no confidence/sources) is rejected
+    expect(() => Intent.parse({ intent: 'x', in_scope: ['a'], out_of_scope: ['b'] })).toThrow();
+    expect(() =>
+      Intent.parse({
+        summary: 'x',
+        in_scope: [],
+        out_of_scope: [],
+        confidence: 'high',
+        sources: [{ kind: 'issue', ref: '#1', status: 'maybe' }],
+        missing_context: [],
+      }),
+    ).toThrow();
     expect(() =>
       BlastRadius.parse({
         changed_symbols: [{ name: 'rateLimit', file: 'a.ts', kind: 'function' }],
@@ -172,6 +192,22 @@ describe('AI contracts parse fixtures', () => {
     expect(trace.tool_calls).toHaveLength(1);
   });
 
+  it('L03d RunTrace.config.correlation_id is nullish and typed string', () => {
+    const base = {
+      config: { agent: 'a', model: 'm' },
+      stats: { duration_ms: 1, tokens_in: 1, tokens_out: 1, findings: 0, grounding: '0/0 passed' },
+      prompt_assembly: { system: 's', user: 'u' },
+      tool_calls: [],
+      raw_output: '{}',
+      memory_pulled: [],
+      specs_read: [],
+      log: [],
+    };
+    expect(RunTrace.parse(base).config.correlation_id).toBeUndefined();
+    expect(RunTrace.parse({ ...base, config: { ...base.config, correlation_id: 'abc' } }).config.correlation_id).toBe('abc');
+    expect(() => RunTrace.parse({ ...base, config: { ...base.config, correlation_id: 5 } })).toThrow();
+  });
+
   it('L01 cost_usd: optional on RunStats (pre-L01 traces), required-nullable on run/review rows', () => {
     const stats = { duration_ms: 1, tokens_in: 1, tokens_out: 1, findings: 0, grounding: '0/0 passed' };
     expect(RunStats.parse(stats).cost_usd).toBeUndefined();
@@ -233,5 +269,29 @@ describe('platform DTOs', () => {
         commits: [],
       }),
     ).not.toThrow();
+  });
+});
+
+describe('intent layer contracts', () => {
+  const base = {
+    id: 'f1',
+    severity: 'WARNING',
+    category: 'bug',
+    title: 't',
+    file: 'a.ts',
+    start_line: 1,
+    end_line: 2,
+    rationale: 'r',
+    confidence: 0.5,
+  };
+  it('Finding.scope is optional and limited to in|out', () => {
+    expect(() => Finding.parse(base)).not.toThrow();
+    expect(Finding.parse({ ...base, scope: 'out' }).scope).toBe('out');
+    expect(Finding.parse({ ...base, scope: null }).scope).toBeNull();
+    expect(() => Finding.parse({ ...base, scope: 'both' })).toThrow();
+  });
+  it('PromptAssembly parses without intent', () => {
+    expect(PromptAssembly.parse({ system: 's', user: 'u' }).intent).toBeUndefined();
+    expect(PromptAssembly.parse({ system: 's', user: 'u', intent: 'x' }).intent).toBe('x');
   });
 });

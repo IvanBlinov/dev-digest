@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { pgTable, uuid, text, integer, jsonb, timestamp, doublePrecision } from 'drizzle-orm/pg-core';
+import type { IntentSource } from '@devdigest/shared';
 import { now } from './_shared';
 import { workspaces } from './core';
 import { pullRequests } from './pulls';
@@ -41,6 +42,8 @@ export const findings = pgTable('findings', {
   confidence: doublePrecision('confidence').notNull(),
   kind: text('kind').notNull().default('finding'),
   trifectaComponents: jsonb('trifecta_components').$type<string[]>(),
+  /** 'in' | 'out' relative to the PR intent; null when no intent was available. */
+  scope: text('scope'),
   acceptedAt: timestamp('accepted_at', { withTimezone: true }),
   dismissedAt: timestamp('dismissed_at', { withTimezone: true }),
 });
@@ -49,9 +52,24 @@ export const prIntent = pgTable('pr_intent', {
   prId: uuid('pr_id')
     .primaryKey()
     .references(() => pullRequests.id, { onDelete: 'cascade' }),
-  intent: text('intent').notNull(),
+  /** SQL column stays `intent` (a rename makes drizzle-kit interactive); TS key is `summary`. */
+  summary: text('intent').notNull(),
   inScope: jsonb('in_scope').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   outOfScope: jsonb('out_of_scope').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  confidence: text('confidence', { enum: ['low', 'medium', 'high'] }).notNull().default('low'),
+  sources: jsonb('sources').$type<IntentSource[]>().notNull().default(sql`'[]'::jsonb`),
+  missingContext: jsonb('missing_context').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  headSha: text('head_sha'),
+  /** Hash of prompt version + title + body at detection time (staleness check). */
+  inputHash: text('input_hash'),
+  provider: text('provider'),
+  model: text('model'),
+  promptVersion: text('prompt_version'),
+  tokensIn: integer('tokens_in'),
+  tokensOut: integer('tokens_out'),
+  durationMs: integer('duration_ms'),
+  costUsd: doublePrecision('cost_usd'),
+  detectedAt: timestamp('detected_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const prBrief = pgTable('pr_brief', {

@@ -16,8 +16,19 @@ export {
   assemblePrompt,
   wrapUntrusted,
   type PromptParts,
+  type ReviewIntent,
   type AssembledPrompt,
 } from './prompt.js';
+
+// Prompt manifest (content-free description of an assembled prompt).
+export {
+  measure,
+  PREVIEW_MAX_CHARS,
+  type PromptSection,
+  type PromptSectionTrust,
+  type SectionMeter,
+  type PromptAssembledInfo,
+} from './prompt-manifest.js';
 
 // Citation grounding — the mandatory mechanical gate for diff findings.
 export { groundFindings, groundingSummary, type GroundingResult } from './grounding.js';
@@ -57,3 +68,25 @@ export {
 // The single OpenAI-compatible structured provider (OpenRouter), shared by the
 // CI runner and the server's openrouter path. Owns session grouping + guards.
 export { OpenRouterProvider, type OpenRouterProviderOptions } from './llm/openrouter.js';
+
+// Intent classifier: prompt builder (hunk headers only) + deterministic confidence.
+export {
+  buildIntentMessages,
+  INTENT_PROMPT_VERSION,
+  type IntentClassifierInput,
+  type IntentPromptFile,
+  type IntentPromptSource,
+  type IntentComponent,
+} from './intent/prompt.js';
+export {
+  computeIntentConfidence,
+  minConfidence,
+  MIN_BODY_CHARS,
+} from './intent/confidence.js';
+
+// Scope helpers: per-agent partition that never drops serious findings.
+export {
+  partitionByScope,
+  isProtectedFromScopeFilter,
+  type ScopePartition,
+} from './review/scope.js';

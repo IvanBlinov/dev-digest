@@ -3,6 +3,36 @@
 Dated entries, newest first. Format and rubrics: [.claude/skills/engineering-insights/SKILL.md](.claude/skills/engineering-insights/SKILL.md).
 Module-specific lessons go into the module's own `INSIGHTS.md` (`server/`, `client/`, `reviewer-core/`, `e2e/`).
 
+## 2026-10-08 — [Architectural decision] The verifier may trust an implementer gate only through a tree fingerprint
+Context: plan-verifier re-ran every gate the implementer had just run (6.5 min, most of its tokens), because an implementer's prose report is a claim, not evidence.
+Decision: the implementer logs each gate to `.claude/handoff/<slug>/evidence.jsonl` with `scripts/tree-fingerprint.sh` (sha256 of HEAD + `git diff HEAD --binary` + hashes of untracked, non-ignored files). The verifier still re-runs typechecks, unit lanes and every test file the diff added or modified; it accepts a log line only for untouched suites, and only when the fingerprint equals the current tree.
+Consequence: any edit after the implementer's final matrix (even a comment) invalidates every logged line, so the verifier falls back to a full re-run; the fingerprint ignores git-ignored files, so the log itself and build output never change it.
+Proof: `scripts/tree-fingerprint.sh:10`, `.claude/agents/plan-verifier.md` Step 2, `.claude/agents/implementer.md` "Evidence log"
+
+## 2026-10-08 — [Pitfall] Hunk-header line numbers: don't split `@@ -a,b +c,d @@` on `[ +,]`
+Symptom: the first draft of `scripts/diff-digest.sh` printed `file::` (empty line number) for every new file.
+Cause: `split("@@ -0,0 +1,40 @@", h, /[ +,]/)` yields an empty field between the space and `+`, so `h[4]` is `""`, not the new-file start line.
+Rule: take the new-side start with `match($0, /\+[0-9]+/)` and read `substr` after the `+`.
+Proof: `scripts/diff-digest.sh:32`
+
+## 2026-10-08 — [Security] A path allowlist hook must check every path component for symlinks
+Symptom: `guard-allowed-paths.sh` checked only `[ -L "$root/$rel" ]`, so a write through a symlinked parent directory (e.g. the documented `.cursor/skills -> ../.claude/skills`) or into `client/node_modules/**/README.md` passed the doc-writer allowlist.
+Cause: string matching on the requested path says nothing about where the bytes land; only the final component was tested for a link, and `*/README.md` / `*/docs/*` also match inside `node_modules`.
+Rule: walk every existing component of the path and block on any symlink; deny `node_modules` before the allow patterns; cover both with harness cases that create a real link.
+Proof: `.claude/hooks/guard-allowed-paths.sh:50`, `.claude/hooks/tests/hooks.test.sh` (cases "symlinked parent", "node_modules")
+
+## 2026-10-08 — [Architectural decision] Writer subagents are path-limited by one profile-based allowlist hook
+Context: two new subagents (`test-writer`, `doc-writer`) each need write access, but only to a
+narrow, different set of paths — a tool denylist cannot express "Edit/Write, but only here".
+Decision: one script, `guard-allowed-paths.sh <profile>`, does root/`..`/symlink normalisation
+once and keeps per-agent policy as a single `case "$profile"` block, instead of one hook script
+per writer agent.
+Consequence: adding a third path-limited writer costs one profile plus a few rows in
+`.claude/hooks/tests/hooks.test.sh`, not a new script; `guard-protected-paths.sh` stays the
+separate denylist for Bash-capable agents (implementer, test-writer, plan-verifier,
+architecture-reviewer) and is unaffected.
+Proof: `.claude/hooks/guard-allowed-paths.sh:43`, `.claude/agents/doc-writer.md:15`
+
 ## 2026-09-29 — [Pitfall] `vendor/shared` copies already differ on `main`
 Symptom: `diff -rq server/src/vendor/shared client/src/vendor/shared` reports 5 differing files although AGENTS.md says the copies must stay identical.
 Cause: server-side contract additions (`sessionId`, `'openrouter'` provider id, `CommitFile`, eval-ci/knowledge fields) were never mirrored to the client.
@@ -38,3 +68,9 @@ Symptom: looking for `pnpm lint` before finishing a task.
 Cause: none of the four `package.json` files define lint, and there is no ESLint/Biome/Prettier config in the repo.
 Rule: `typecheck` + tests are the only static gates; do not claim "lint passed".
 Proof: `server/package.json:1`, `client/package.json:1`, `reviewer-core/package.json:1`, `e2e/package.json:1`
+
+## 2026-10-07 — [Architectural decision] One skill-routing table for planner, implementer and pr-self-review
+Context: three agents/skills must agree on which project skills apply to which paths; three copies would drift.
+Decision: the path → skill table lives only in `pr-self-review` Step 2; `planner` and `implementer` read it instead of keeping their own copy. "Do not touch" for the implementer is enforced by a PreToolUse hook, not only by prompt text.
+Consequence: adding a skill = one row in that table; a new protected path = one case in `.claude/hooks/guard-protected-paths.sh`.
+Proof: `.claude/skills/pr-self-review/SKILL.md:31`, `.claude/agents/implementer.md:12`

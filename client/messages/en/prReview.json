@@ -9,7 +9,8 @@
     "replyToAuthor": "Reply to author",
     "replyPlaceholder": "Reply to the author about this finding…",
     "sendReply": "Send reply",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "outOfScope": "Outside PR scope"
   },
   "trifecta": {
     "lethal": "LETHAL TRIFECTA — ALL 3 PRESENT",
@@ -128,5 +129,54 @@
   "preview": {
     "pr": "{count, plural, one {# finding} other {# findings}}",
     "run": "{count, plural, one {# finding in this run} other {# findings in this run}}"
+  },
+  "intent": {
+    "title": "PR intent",
+    "loading": "Loading PR intent",
+    "inScope": "In scope",
+    "outOfScope": "Out of scope",
+    "none": "Nothing listed",
+    "confidence": {
+      "low": "Low confidence",
+      "medium": "Medium confidence",
+      "high": "High confidence"
+    },
+    "lowConfidenceHint": "Low confidence — the scope filter is off for reviews of this PR until more context is available.",
+    "sources": "Sources",
+    "sourceKind": {
+      "pr_title": "Title",
+      "pr_body": "Description",
+      "branch": "Branch",
+      "commits": "Commits",
+      "files": "Files",
+      "issue": "Issue",
+      "spec": "Spec",
+      "plan": "Plan",
+      "link": "Link"
+    },
+    "sourceStatus": {
+      "ok": "read",
+      "not_found": "not found",
+      "forbidden": "no access",
+      "timeout": "timed out",
+      "not_allowlisted": "not allowed",
+      "too_large": "too large",
+      "unsupported": "unsupported",
+      "unavailable": "unavailable"
+    },
+    "sourceTruncated": "truncated",
+    "missingContext": "Missing context",
+    "stale": {
+      "badge": "Stale",
+      "head_moved": "The PR has new commits since this intent was detected.",
+      "description_changed": "The title or description changed since this intent was detected.",
+      "prompt_updated": "The intent prompt was updated since this was detected."
+    },
+    "redetect": "Re-detect intent",
+    "detect": "Detect intent",
+    "detecting": "Detecting…",
+    "empty": "No intent detected yet",
+    "emptyBody": "Detect what this PR is trying to do so reviews can tell in-scope findings from unrelated ones.",
+    "error": "Couldn't load the PR intent"
   }
 }
