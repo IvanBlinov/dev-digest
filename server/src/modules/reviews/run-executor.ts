@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Container } from '../../platform/container.js';
 import type { Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
 import {
@@ -7,6 +8,12 @@ import {
   type ReviewOutcome,
 } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
+import {
+  PROMPT_ASSEMBLED_MSG,
+  buildPromptAssembledEvent,
+  makeMeter,
+  promptSummaryLine,
+} from '../../platform/prompt-log.js';
 import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
 import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './repository.js';
@@ -59,6 +66,8 @@ interface ExecCtx {
   scopeFilter: boolean;
   runLog: RunLogger;
   logger: Logger | undefined;
+  /** One ID per review execution: ties every `prompt.assembled` event + each run trace together. */
+  correlationId: string;
 }
 
 /** One agent's in-memory result between compute and finalize. */
@@ -106,11 +115,12 @@ export class ReviewRunExecutor {
     // ONE logger fanned out over every queued run: shared pre-work (diff +
     // intent) is streamed into each target agent's Live Log and persisted into
     // each run's trace. Per-agent work below narrows it to a single run.
+    const correlationId = randomUUID();
     const runLog = new RunLogger(
       this.container.runBus,
       jobs.map((j) => j.runId),
       logger,
-      { prId: pull.id },
+      { prId: pull.id, correlationId },
     );
 
     // Pre-work failure (e.g. diff load) fails EVERY queued run. The error was
@@ -131,7 +141,7 @@ export class ReviewRunExecutor {
           })
           .catch(() => undefined);
         await this.repo
-          .saveRunTrace(runId, this.traceFromBuffer(runId, pull, agent, '0/0 passed'))
+          .saveRunTrace(runId, this.traceFromBuffer(runId, pull, agent, '0/0 passed', 0, correlationId))
           .catch(() => undefined);
         this.container.runBus.complete(runId);
       }
@@ -152,12 +162,16 @@ export class ReviewRunExecutor {
     // the whole execution. Never fails the run — see IntentService.forReview.
     const { intent, scopeFilter } = await runLog.step(
       'Loading PR intent',
-      () => new IntentService(this.container).forReview(workspaceId, pull, repo, diff, (m, d) => runLog.info(m, d)),
+      () =>
+        new IntentService(this.container).forReview(workspaceId, pull, repo, diff, (m, d) => runLog.info(m, d), {
+          logger,
+          correlationId,
+        }),
       { kind: 'tool' },
     );
     runLog.info(`Diff ready — ${diff.files.length} changed file(s); starting ${jobs.length} agent run(s)`);
 
-    const ctx: ExecCtx = { workspaceId, pull, repo, diff, intent, scopeFilter, runLog, logger };
+    const ctx: ExecCtx = { workspaceId, pull, repo, diff, intent, scopeFilter, runLog, logger, correlationId };
     const concurrency = this.container.config.reviewAgentConcurrency;
 
     // Each run finishes (and persists) on its own, as soon as its agent is done.
@@ -176,7 +190,7 @@ export class ReviewRunExecutor {
 
   private logAgentStart(ctx: ExecCtx, { agent, runId }: { agent: AgentRow; runId: string }): number {
     ctx.logger?.info(
-      { runId, agent: agent.name, provider: agent.provider, model: agent.model, prId: ctx.pull.id },
+      { runId, agent: agent.name, provider: agent.provider, model: agent.model, prId: ctx.pull.id, correlationId: ctx.correlationId },
       `review: agent "${agent.name}" started (${agent.provider}/${agent.model})`,
     );
     return Date.now();
@@ -186,6 +200,7 @@ export class ReviewRunExecutor {
     ctx.logger?.info(
       {
         runId: comp.runId,
+        correlationId: ctx.correlationId,
         agent: comp.agent.name,
         findings: outcome.findings.length,
         grounding: outcome.grounding,
@@ -206,6 +221,7 @@ export class ReviewRunExecutor {
     start: number,
   ): Promise<AgentComputation> {
     const { pull, repo, diff, intent } = ctx;
+    const verbose = this.container.config.promptLogVerbose;
     // Narrow the fanned-out pre-work logger to THIS run; the shared diff/intent
     // events are already in this run's buffer, so the persisted trace
     // (built from the buffer) includes them too.
@@ -282,6 +298,31 @@ export class ReviewRunExecutor {
       ...(intent ? { intent } : {}),
       ...(intent && ctx.scopeFilter ? { scopeFilter: true } : {}),
       task,
+      // Prompt-assembly logging: counting is injected (the core stays pure).
+      // The structured event goes to pino ONLY (runLog publishes data to SSE);
+      // the Live Log gets one short summary line.
+      promptMeter: makeMeter(this.container.tokenizer, verbose),
+      onPromptAssembled: (info) => {
+        const event = buildPromptAssembledEvent(
+          {
+            correlationId: ctx.correlationId,
+            runId,
+            prId: pull.id,
+            agent: agent.name,
+            provider: agent.provider,
+            model: agent.model,
+            promptKind: 'review',
+            mode: info.mode,
+            chunk: info.chunk,
+            sections: info.sections,
+            diff,
+            skillBlocks: skillsPlan.blocks.map((b) => ({ name: b.name, version: b.version, tokens: b.tokens })),
+          },
+          { verbose },
+        );
+        ctx.logger?.info(event, PROMPT_ASSEMBLED_MSG);
+        runLog.info(promptSummaryLine(event));
+      },
       sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
       onEvent: (e) => runLog.event(e.kind, e.msg, e.data),
       checkCancelled: () => {
@@ -354,6 +395,7 @@ export class ReviewRunExecutor {
         model: agent.model,
         pr: pull.number,
         source: 'local',
+        correlation_id: ctx.correlationId,
       },
       stats: {
         duration_ms: durationMs,
@@ -416,7 +458,7 @@ export class ReviewRunExecutor {
       })
       .catch(() => undefined);
     await this.repo
-      .saveRunTrace(runId, this.traceFromBuffer(runId, ctx.pull, agent, '0/0 passed', Date.now() - start))
+      .saveRunTrace(runId, this.traceFromBuffer(runId, ctx.pull, agent, '0/0 passed', Date.now() - start, ctx.correlationId))
       .catch(() => undefined);
     this.container.runBus.complete(runId);
     ctx.logger?.[cancelled ? 'info' : 'error'](
@@ -523,6 +565,7 @@ export class ReviewRunExecutor {
     agent: AgentRow,
     grounding: string,
     durationMs = 0,
+    correlationId?: string,
   ): RunTrace {
     return {
       config: {
@@ -532,6 +575,7 @@ export class ReviewRunExecutor {
         model: agent.model,
         pr: pull.number,
         source: 'local',
+        ...(correlationId ? { correlation_id: correlationId } : {}),
       },
       stats: { duration_ms: durationMs, tokens_in: 0, tokens_out: 0, findings: 0, grounding, cost_usd: null },
       prompt_assembly: {

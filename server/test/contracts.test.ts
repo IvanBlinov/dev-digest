@@ -192,6 +192,22 @@ describe('AI contracts parse fixtures', () => {
     expect(trace.tool_calls).toHaveLength(1);
   });
 
+  it('L03d RunTrace.config.correlation_id is nullish and typed string', () => {
+    const base = {
+      config: { agent: 'a', model: 'm' },
+      stats: { duration_ms: 1, tokens_in: 1, tokens_out: 1, findings: 0, grounding: '0/0 passed' },
+      prompt_assembly: { system: 's', user: 'u' },
+      tool_calls: [],
+      raw_output: '{}',
+      memory_pulled: [],
+      specs_read: [],
+      log: [],
+    };
+    expect(RunTrace.parse(base).config.correlation_id).toBeUndefined();
+    expect(RunTrace.parse({ ...base, config: { ...base.config, correlation_id: 'abc' } }).config.correlation_id).toBe('abc');
+    expect(() => RunTrace.parse({ ...base, config: { ...base.config, correlation_id: 5 } })).toThrow();
+  });
+
   it('L01 cost_usd: optional on RunStats (pre-L01 traces), required-nullable on run/review rows', () => {
     const stats = { duration_ms: 1, tokens_in: 1, tokens_out: 1, findings: 0, grounding: '0/0 passed' };
     expect(RunStats.parse(stats).cost_usd).toBeUndefined();

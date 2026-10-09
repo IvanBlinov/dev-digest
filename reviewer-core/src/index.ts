@@ -20,6 +20,16 @@ export {
   type AssembledPrompt,
 } from './prompt.js';
 
+// Prompt manifest (content-free description of an assembled prompt).
+export {
+  measure,
+  PREVIEW_MAX_CHARS,
+  type PromptSection,
+  type PromptSectionTrust,
+  type SectionMeter,
+  type PromptAssembledInfo,
+} from './prompt-manifest.js';
+
 // Citation grounding — the mandatory mechanical gate for diff findings.
 export { groundFindings, groundingSummary, type GroundingResult } from './grounding.js';
 

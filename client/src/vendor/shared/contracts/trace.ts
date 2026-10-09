@@ -101,6 +101,8 @@ export const RunTrace = z.object({
     model: z.string(),
     pr: z.number().int().nullish(),
     source: z.enum(['local', 'ci']).default('local'),
+    /** Correlates this run's `prompt.assembled` log events. Absent on older traces. */
+    correlation_id: z.string().nullish(),
   }),
   stats: RunStats,
   prompt_assembly: PromptAssembly,

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { LLMProvider, StructuredResult } from '@devdigest/shared';
 import { MockLLMProvider, MockGitClient } from '../../server/src/adapters/mocks.js';
-import { reviewPullRequest } from '../src/index.js';
+import { reviewPullRequest, type PromptAssembledInfo } from '../src/index.js';
 import { scoreFromFindings } from '../src/review/reduce.js';
 
 /**
@@ -243,5 +243,62 @@ describe('reviewPullRequest — scope filter', () => {
     const b = await reviewPullRequest({ systemPrompt: 's', model: 'm', diff, llm: new MockLLMProvider('openai', { structured: f }), scopeFilter: true });
     expect(b.review.findings).toHaveLength(1);
     expect(b.assembly.intent ?? null).toBeNull();
+  });
+});
+
+describe('reviewPullRequest — onPromptAssembled', () => {
+  const empty = { verdict: 'approve', summary: 's', score: 100, findings: [] };
+  const mkDiff = (paths: string[]) => ({
+    raw: paths.map((p) => `diff --git a/${p} b/${p}\n--- a/${p}\n+++ b/${p}\n@@ -1 +1 @@\n+x`).join('\n'),
+    files: paths.map((path) => ({ path, additions: 500, deletions: 0, hunks: [] })),
+  });
+
+  it('single-pass: fires once, before the LLM call, without chunk', async () => {
+    const order: string[] = [];
+    const llm = new MockLLMProvider('openai', { structured: empty });
+    const orig = llm.completeStructured.bind(llm);
+    llm.completeStructured = (async (req: never) => {
+      order.push('llm');
+      return orig(req);
+    }) as typeof llm.completeStructured;
+    const calls: PromptAssembledInfo[] = [];
+    await reviewPullRequest({
+      systemPrompt: 's',
+      model: 'm',
+      diff: await new MockGitClient().diff(),
+      llm,
+      strategy: 'single-pass',
+      onPromptAssembled: (i) => {
+        order.push('hook');
+        calls.push(i);
+      },
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.mode).toBe('single-pass');
+    expect(calls[0]!.chunk).toBeUndefined();
+    expect(calls[0]!.sections.some((s) => s.name === 'diff')).toBe(true);
+    expect(order).toEqual(['hook', 'llm']);
+  });
+
+  it('map-reduce: fires once per file with chunk index/total/file; passes the meter', async () => {
+    const llm = new MockLLMProvider('openai', { structured: empty });
+    const calls: PromptAssembledInfo[] = [];
+    await reviewPullRequest({
+      systemPrompt: 's',
+      model: 'm',
+      diff: mkDiff(['a.ts', 'b.ts', 'c.ts']),
+      llm,
+      strategy: 'map-reduce',
+      promptMeter: { tokens: () => 7 },
+      onPromptAssembled: (i) => calls.push(i),
+    });
+    expect(calls).toHaveLength(3);
+    expect(calls.map((c) => c.chunk)).toEqual([
+      { index: 0, total: 3, file: 'a.ts' },
+      { index: 1, total: 3, file: 'b.ts' },
+      { index: 2, total: 3, file: 'c.ts' },
+    ]);
+    expect(calls.every((c) => c.mode === 'map-reduce')).toBe(true);
+    expect(calls[0]!.sections.every((s) => s.tokens === 7)).toBe(true);
   });
 });

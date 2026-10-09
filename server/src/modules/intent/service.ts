@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { IntentSource, PrIntentResponse } from '@devdigest/shared';
 import { IntentClassification } from '@devdigest/shared';
 import {
@@ -9,6 +10,12 @@ import {
   type ReviewIntent,
 } from '@devdigest/reviewer-core';
 import type { Container } from '../../platform/container.js';
+import {
+  PROMPT_ASSEMBLED_MSG,
+  buildPromptAssembledEvent,
+  makeMeter,
+  promptSummaryLine,
+} from '../../platform/prompt-log.js';
 import { AppError, ExternalServiceError, NotFoundError } from '../../platform/errors.js';
 import type { PullRow } from '../../db/rows.js';
 import * as schema from '../../db/schema.js';
@@ -35,6 +42,12 @@ import {
 import { IntentRepository } from './repository.js';
 import { missingContextLines, resolveSources } from './source-resolver.js';
 import type { UnifiedDiff } from '@devdigest/shared';
+
+/** Where `prompt.assembled` goes: pino only, tagged with the execution's correlation ID. */
+interface IntentObs {
+  logger?: PinoLike;
+  correlationId: string;
+}
 
 type RepoRow = typeof schema.repos.$inferSelect;
 
@@ -94,14 +107,19 @@ export class IntentService {
   }
 
   /** POST: classify now (always), store, return the fresh record. */
-  async detect(workspaceId: string, prId: string, logger?: PinoLike): Promise<PrIntentResponse> {
+  async detect(
+    workspaceId: string,
+    prId: string,
+    logger?: PinoLike,
+    correlationId: string = randomUUID(),
+  ): Promise<PrIntentResponse> {
     const { pull, repo } = await this.requirePull(workspaceId, prId);
     const diff = await loadDiff(this.container, this.reviews, workspaceId, pull, repo);
     const log: IntentLog = (msg, data) => logger?.info({ prId, ...data }, msg);
     try {
-      await this.classify(workspaceId, pull, repo, diff, log);
+      await this.classify(workspaceId, pull, repo, diff, log, { logger, correlationId });
     } catch (err) {
-      logger?.error({ prId, err: safeErrorLabel(err) }, 'intent: classification failed');
+      logger?.error({ prId, correlationId, err: safeErrorLabel(err) }, 'intent: classification failed');
       throw err;
     }
     return this.respond(pull);
@@ -118,12 +136,13 @@ export class IntentService {
     repo: RepoRow,
     diff: UnifiedDiff,
     log: IntentLog,
+    obs?: IntentObs,
   ): Promise<{ intent: ReviewIntent | null; scopeFilter: boolean }> {
     try {
       let row = await this.repo.get(pull.id);
       if (!row) {
         log('No stored intent — classifying before the agents run');
-        await this.classify(workspaceId, pull, repo, diff, log);
+        await this.classify(workspaceId, pull, repo, diff, log, obs);
         row = await this.repo.get(pull.id);
       }
       if (!row) return { intent: null, scopeFilter: false };
@@ -184,6 +203,7 @@ export class IntentService {
     repo: RepoRow,
     diff: UnifiedDiff,
     log: IntentLog,
+    obs: IntentObs = { correlationId: randomUUID() },
   ): Promise<void> {
     const started = Date.now();
     const body = pull.body ?? '';
@@ -206,19 +226,39 @@ export class IntentService {
     ];
     const sources: IntentSource[] = [...fixed, ...resolved.sources];
 
-    const { messages, components } = buildIntentMessages({
-      title: pull.title,
-      body,
-      branch: pull.branch ?? '',
-      commits,
-      sources: resolved.promptSources,
-      files,
-    });
-
     const model = await resolveFeatureModel(this.container, workspaceId, 'review_intent');
+    const verbose = this.container.config.promptLogVerbose;
+    const { messages, components, sections } = buildIntentMessages(
+      {
+        title: pull.title,
+        body,
+        branch: pull.branch ?? '',
+        commits,
+        sources: resolved.promptSources,
+        files,
+      },
+      makeMeter(this.container.tokenizer, verbose),
+    );
     const tokenEstimate = this.container.tokenizer.count(messages[1]!.content);
     const totalChars = Math.max(1, components.reduce((n, c) => n + c.chars, 0));
+    // Canonical structured event: pino only (never the SSE-bound `log`), manifest only.
+    const event = buildPromptAssembledEvent(
+      {
+        correlationId: obs.correlationId,
+        prId: pull.id,
+        provider: model.provider,
+        model: model.model,
+        promptKind: 'intent',
+        promptVersion: INTENT_PROMPT_VERSION,
+        sections,
+        diff,
+      },
+      { verbose },
+    );
+    obs.logger?.info(event, PROMPT_ASSEMBLED_MSG);
+    log(promptSummaryLine(event));
     log('intent: classifying', {
+      correlationId: obs.correlationId,
       provider: model.provider,
       model: model.model,
       promptVersion: INTENT_PROMPT_VERSION,

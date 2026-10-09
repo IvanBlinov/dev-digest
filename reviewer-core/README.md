@@ -48,7 +48,7 @@ has no field for hunk bodies).
 
 ## Public API
 
-Exported from `src/index.ts`: `assemblePrompt` / `wrapUntrusted` (prompt),
+Exported from `src/index.ts`: prompt-manifest types (`PromptSection`, `SectionMeter`, `PromptAssembledInfo`, `measure`) and the `onPromptAssembled` / `promptMeter` review hooks (content-free section manifest for logging); `assemblePrompt` / `wrapUntrusted` (prompt),
 `groundFindings` / `groundingSummary` (grounding), `toJsonSchema` / `extractJson`
 / `parseWithRepair` (structured output), plus the `run` entrypoint and
 `reduce`, plus `buildIntentMessages`, `partitionByScope`,

@@ -1,5 +1,6 @@
 import type { ChatMessage, IntentSourceKind, IntentSourceStatus } from '@devdigest/shared';
 import { wrapUntrusted } from '../prompt.js';
+import { measure, type PromptSection, type PromptSectionTrust, type SectionMeter } from '../prompt-manifest.js';
 
 /**
  * Intent classifier prompt. The input type has NO field for hunk bodies: files
@@ -75,40 +76,61 @@ function fileLines(files: IntentPromptFile[]): string {
     .join('\n');
 }
 
-export function buildIntentMessages(input: IntentClassifierInput): {
+export function buildIntentMessages(
+  input: IntentClassifierInput,
+  meter?: SectionMeter,
+): {
   messages: ChatMessage[];
   components: IntentComponent[];
+  /** Manifest of every section incl. the system message (no text). */
+  sections: PromptSection[];
 } {
-  const sections: { name: string; text: string }[] = [];
-  const add = (name: string, text: string) => sections.push({ name, text: `${text}\n\n` });
+  const sections: { name: string; text: string; manifest: string; source: string; trust: PromptSectionTrust }[] = [];
+  const add = (
+    name: string,
+    text: string,
+    opts: { manifest?: string; source?: string; trust?: PromptSectionTrust } = {},
+  ) =>
+    sections.push({
+      name,
+      text: `${text}\n\n`,
+      manifest: opts.manifest ?? name,
+      source: opts.source ?? name,
+      trust: opts.trust ?? 'untrusted',
+    });
 
-  add('task', 'Classify the intent of this pull request.');
-  add('pr-title', `## PR title\n${wrapUntrusted('pr-title', clip(input.title, MAX_TITLE))}`);
+  add('task', 'Classify the intent of this pull request.', { source: 'reviewer-core', trust: 'trusted' });
+  add('pr-title', `## PR title\n${wrapUntrusted('pr-title', clip(input.title, MAX_TITLE))}`, { source: 'pr' });
   const body = input.body.trim();
   add(
     'pr-description',
     `## PR description\n${wrapUntrusted('pr-description', body ? clip(body, MAX_BODY) : '(empty)')}`,
+    { source: 'pr' },
   );
   if (input.branch) {
-    add('branch', `## Branch\n${wrapUntrusted('branch', clip(input.branch, MAX_BRANCH))}`);
+    add('branch', `## Branch\n${wrapUntrusted('branch', clip(input.branch, MAX_BRANCH))}`, { source: 'pr' });
   }
   if (input.commits.length > 0) {
     const lines = input.commits
       .slice(0, MAX_COMMITS)
       .map((c) => `- ${clip(c.replace(/[\r\n]+/g, ' '), MAX_COMMIT_CHARS)}`)
       .join('\n');
-    add('commits', `## Commit messages\n${wrapUntrusted('commits', lines)}`);
+    add('commits', `## Commit messages\n${wrapUntrusted('commits', lines)}`, { source: 'commits' });
   }
   for (const s of input.sources) {
     if (s.status !== 'ok' || !s.text) continue;
     const isIssue = s.kind === 'issue';
     const label = isIssue ? `issue-${s.ref}` : `doc:${s.ref}`;
     const cap = isIssue ? MAX_ISSUE_CHARS : MAX_DOC_CHARS;
-    add(label, `## ${isIssue ? 'Linked issue' : 'Linked document'} ${s.ref}\n${wrapUntrusted(label, clip(s.text, cap))}`);
+    add(label, `## ${isIssue ? 'Linked issue' : 'Linked document'} ${s.ref}\n${wrapUntrusted(label, clip(s.text, cap))}`, {
+      manifest: isIssue ? `issue:${s.ref}` : label,
+      source: isIssue ? 'issue' : 'doc',
+    });
   }
   add(
     'changed-files',
     `## Changed files (paths and hunk headers only — no code)\n${wrapUntrusted('changed-files', fileLines(input.files) || '(none)')}`,
+    { source: 'diff-headers' },
   );
   const unavailable = input.sources.filter((s) => s.status !== 'ok');
   if (unavailable.length > 0) {
@@ -116,6 +138,7 @@ export function buildIntentMessages(input: IntentClassifierInput): {
     add(
       'unavailable-sources',
       `## Unavailable sources — do not guess their content\n${wrapUntrusted('unavailable-sources', lines)}`,
+      { source: 'intent-sources' },
     );
   }
 
@@ -126,5 +149,9 @@ export function buildIntentMessages(input: IntentClassifierInput): {
       { role: 'user', content: user },
     ],
     components: sections.map((s) => ({ name: s.name, chars: s.text.length })),
+    sections: [
+      measure('system:intent', 'reviewer-core', 'trusted', SYSTEM, meter, SYSTEM),
+      ...sections.map((s) => measure(s.manifest, s.source, s.trust, s.text, meter)),
+    ],
   };
 }

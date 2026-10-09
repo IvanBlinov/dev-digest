@@ -129,6 +129,45 @@ describe('buildIntentMessages', () => {
   });
 });
 
+describe('buildIntentMessages — sections manifest', () => {
+  const withSources: IntentClassifierInput = {
+    ...base,
+    sources: [
+      { kind: 'issue', ref: '#471', status: 'ok', text: 'ISSUE-SECRET-TEXT' },
+      { kind: 'spec', ref: 'docs/a.md', status: 'ok', text: 'DOC-SECRET-TEXT' },
+      { kind: 'issue', ref: '#9', status: 'unavailable' },
+    ],
+  };
+
+  it('names issue/doc sources, keeps content out, sums to both messages', () => {
+    const { sections, messages } = buildIntentMessages(withSources);
+    const names = sections.map((s) => s.name);
+    expect(names).toContain('issue:#471');
+    expect(names).toContain('doc:docs/a.md');
+    expect(names).toContain('unavailable-sources');
+    expect(sections.find((s) => s.name === 'changed-files')!.source).toBe('diff-headers');
+    const json = JSON.stringify(sections);
+    for (const m of ['ISSUE-SECRET-TEXT', 'DOC-SECRET-TEXT', 'Add rate limiting', 'token bucket']) {
+      expect(json).not.toContain(m);
+    }
+    const sum = sections.reduce((n, s) => n + s.chars, 0);
+    expect(sum).toBe(messages[0]!.content.length + messages[1]!.content.length);
+  });
+
+  it('previews only the constant system:intent section', () => {
+    const { sections } = buildIntentMessages(withSources);
+    expect(sections.filter((s) => s.preview !== undefined).map((s) => s.name)).toEqual(['system:intent']);
+    expect(sections[0]!.name).toBe('system:intent');
+    expect(sections[0]!.trust).toBe('trusted');
+  });
+
+  it('uses the injected meter', () => {
+    const { sections } = buildIntentMessages(base, { tokens: (t) => t.length, digest: () => 'h' });
+    expect(sections.every((s) => s.tokens === s.chars)).toBe(true);
+    expect(sections.every((s) => s.sha256 === 'h')).toBe(true);
+  });
+});
+
 describe('computeIntentConfidence', () => {
   const ok = { kind: 'issue', ref: '#1', status: 'ok' } as const;
   const long = 'x'.repeat(120);

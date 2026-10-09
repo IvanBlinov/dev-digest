@@ -1,4 +1,5 @@
 import type { ChatMessage, PromptAssembly } from '@devdigest/shared';
+import { measure, type PromptSection, type PromptSectionTrust, type SectionMeter } from './prompt-manifest.js';
 
 /**
  * Prompt assembly + prompt-injection hardening.
@@ -116,6 +117,16 @@ export interface PromptParts {
 export interface AssembledPrompt {
   messages: ChatMessage[];
   assembly: PromptAssembly;
+  /** Manifest of the sections that make up the messages (no text). */
+  sections: PromptSection[];
+}
+
+interface Seg {
+  name: string;
+  source: string;
+  trust: PromptSectionTrust;
+  text: string;
+  preview?: string;
 }
 
 /**
@@ -123,7 +134,7 @@ export interface AssembledPrompt {
  * Untrusted blocks (specs, diff) are delimiter-wrapped; the injection guard is
  * appended to the system message.
  */
-export function assemblePrompt(parts: PromptParts): AssembledPrompt {
+export function assemblePrompt(parts: PromptParts, meter?: SectionMeter): AssembledPrompt {
   const system = `${parts.system}\n\n${INJECTION_GUARD}${parts.intent ? `\n\n${SCOPE_RULE}` : ''}`;
 
   const skillsBlock =
@@ -185,5 +196,49 @@ export function assemblePrompt(parts: PromptParts): AssembledPrompt {
     user,
   };
 
-  return { messages, assembly };
+  // Manifest: segments in message order. Joiners ("\n\n") belong to the
+  // preceding segment so the char counts sum to the real message lengths.
+  const sysSegs: Seg[] = [
+    { name: 'system:agent', source: 'agent-config', trust: 'trusted', text: parts.system },
+    { name: 'system:guard', source: 'reviewer-core', trust: 'trusted', text: INJECTION_GUARD, preview: INJECTION_GUARD },
+  ];
+  if (parts.intent) {
+    sysSegs.push({ name: 'system:scope-rule', source: 'reviewer-core', trust: 'trusted', text: SCOPE_RULE, preview: SCOPE_RULE });
+  }
+  const userSegs: Seg[] = [];
+  const u = (name: string, source: string, trust: PromptSectionTrust, text: string) =>
+    userSegs.push({ name, source, trust, text });
+  if (parts.task) u('task', 'pr-metadata', 'untrusted', parts.task);
+  if (prDescription) {
+    u('pr-description', 'pr', 'untrusted', `## PR description\n${wrapUntrusted('pr-description', prDescription)}`);
+  }
+  if (intentBlock) {
+    u('pr-intent', 'intent', 'untrusted', `## PR intent (unverified hypothesis)\n${wrapUntrusted('pr-intent', intentBlock)}`);
+  }
+  if (parts.skills && parts.skills.length > 0) {
+    parts.skills.forEach((sk, i) =>
+      u(`skill:${i}`, 'skills', 'trusted', `${i === 0 ? '## Skills / rules\n' : ''}${sk}`),
+    );
+  }
+  if (memoryBlock) u('memory', 'memory', 'trusted', `## Relevant memory\n${memoryBlock}`);
+  if (parts.repoMap && parts.repoMap.trim().length > 0) {
+    u('repo-map', 'repo-index', 'untrusted', `## Repo skeleton\n${wrapUntrusted('repo-map', parts.repoMap)}`);
+  }
+  if (parts.specs && parts.specs.length > 0) {
+    parts.specs.forEach((sp, i) =>
+      u(`spec:${i}`, 'specs', 'untrusted', `${i === 0 ? '## Project context\n' : ''}${wrapUntrusted(`spec-${i}`, sp)}`),
+    );
+  }
+  if (parts.callers && parts.callers.trim().length > 0) {
+    u('callers', 'repo-index', 'untrusted', `## Callers of changed symbols\n${wrapUntrusted('callers', parts.callers)}`);
+  }
+  u('diff', 'diff', 'untrusted', `## Diff to review\n${wrapUntrusted('diff', parts.diff)}`);
+
+  const withJoiners = (segs: Seg[]): Seg[] =>
+    segs.map((s, i) => (i < segs.length - 1 ? { ...s, text: `${s.text}\n\n` } : s));
+  const sections = [...withJoiners(sysSegs), ...withJoiners(userSegs)].map((s) =>
+    measure(s.name, s.source, s.trust, s.text, meter, s.preview),
+  );
+
+  return { messages, assembly, sections };
 }

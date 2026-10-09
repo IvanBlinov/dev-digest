@@ -2,6 +2,24 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-08 — [Security] `prompt.assembled` carries a manifest, never text; structured data must bypass `runLog`
+Symptom: it is tempting to log the prompt event through `runLog.info(msg, data)` so it shows in the Live Log.
+Cause: `RunLogger.event` publishes `data` to the SSE bus (and the persisted trace log) AND pino, so anything structured placed there is exposed to the client and stored.
+Rule: send the structured event to `ctx.logger` (pino) only; give `runLog` just a short `promptSummaryLine`. Every string in the event goes through `redactLogValue`; verbose (`PROMPT_LOG_VERBOSE=1`, config.ts, ignored in production) adds only digests and constant previews.
+Proof: `server/src/platform/run-logger.ts:54`, `server/src/modules/reviews/run-executor.ts:323`
+
+## 2026-10-08 — [Non-obvious behaviour] `taskLine` embeds the PR title and author, so the `task` section is untrusted
+Symptom: the review prompt's `task` line looks like a constant framing sentence.
+Cause: it interpolates `pull.title` and `pull.author` (author-controlled).
+Rule: mark `task` untrusted in the manifest and never preview it; only reviewer-core constants (`system:guard`, `system:scope-rule`, `system:intent`) get previews.
+Proof: `server/src/modules/reviews/helpers.ts:87`
+
+## 2026-10-08 — [Pitfall] `agent_runs.status='done'` is written before the run trace, so `.it` tests can read a missing trace
+Symptom: `reviews-intent.it` occasionally fails with `Cannot read properties of undefined (reading 'map')` on `trace.log` (2 of 4 cold runs; stable on reruns).
+Cause: `finalizeAgent` calls `completeAgentRun` (status done) and only then `saveRunTrace`, while `waitForPrRuns` returns on the status alone.
+Rule: when asserting on a trace right after `waitForPrRuns`, retry the fetch or wait for the trace; do not treat a one-off failure there as a regression of unrelated work.
+Proof: `server/src/modules/reviews/run-executor.ts:377`, `server/src/modules/reviews/run-executor.ts:427`
+
 ## 2026-10-08 — [Security] The scope filter needs a fetched issue/spec/plan, not just the PR description
 Context: the PR body is author-controlled; a long enough description alone produced fresh `medium` confidence and switched the out-of-scope filter on. Supersedes the two-phase / one-signal entry below.
 Decision: `forReview` turns the filter on only when intent is fresh, confidence is not `low`, and `hasFetchedExplicitSource(sources)` finds an `ok` issue/spec/plan; serious findings are never dropped (see reviewer-core INSIGHTS). The executor is single-phase again.

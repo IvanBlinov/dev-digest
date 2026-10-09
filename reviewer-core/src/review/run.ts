@@ -10,6 +10,7 @@ import { Review as ReviewSchema } from '@devdigest/shared';
 import { assemblePrompt, type ReviewIntent } from '../prompt.js';
 import { isProtectedFromScopeFilter, partitionByScope } from './scope.js';
 import { groundFindings, groundingSummary } from '../grounding.js';
+import type { PromptAssembledInfo, SectionMeter } from '../prompt-manifest.js';
 import { reduceReviews, scoreFromFindings, sliceDiff } from './reduce.js';
 
 /**
@@ -91,6 +92,13 @@ export interface ReviewInput {
    * review group into one session in the OpenRouter dashboard.
    */
   sessionId?: string;
+  /** Injected token counter / digest for the prompt manifest (core stays pure). */
+  promptMeter?: SectionMeter;
+  /**
+   * Fired once per prompt build (single-pass: once; map-reduce: once per chunk),
+   * BEFORE the LLM call. Carries the content-free section manifest only.
+   */
+  onPromptAssembled?: (info: PromptAssembledInfo) => void;
   /** Progress sink. */
   onEvent?: (e: ReviewEvent) => void;
   /**
@@ -171,7 +179,7 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
   let costUsd: number | null = 0;
   const raws: string[] = [];
 
-  for (const chunk of chunks) {
+  for (const [chunkIndex, chunk] of chunks.entries()) {
     // Cancellation checkpoint — stop before the next (expensive) LLM call.
     input.checkCancelled?.();
     // 'map:' prefix only for the map-reduce path (one call per file). In
@@ -181,8 +189,15 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
       mode === 'map-reduce' ? `map: reviewing ${chunk.label}` : `Reviewing ${chunk.label} in one pass`,
       { file: chunk.label },
     );
-    const a = assemblePrompt({ ...promptParts, diff: chunk.diffText });
+    const a = assemblePrompt({ ...promptParts, diff: chunk.diffText }, input.promptMeter);
     if (mode === 'single-pass') assembly = a.assembly;
+    input.onPromptAssembled?.({
+      sections: a.sections,
+      mode,
+      ...(mode === 'map-reduce'
+        ? { chunk: { index: chunkIndex, total: chunks.length, file: chunk.label } }
+        : {}),
+    });
     const res = await input.llm.completeStructured<Review>({
       model: input.model,
       schema: ReviewSchema,
