@@ -43,7 +43,9 @@ do not look for a workaround — follow the message or record the step as blocke
    `.claude/skills/pr-self-review/SKILL.md` (Step 2) whose skill the plan forgot, load it too and
    record it under Deviations.
 2. **Red:** write the test the plan describes, run only that test, and confirm it fails for the
-   expected reason. Paste the failing line into your notes.
+   expected reason. Paste the failing line into your notes. If the step's test already exists
+   (written by the `test-writer` agent), run it and confirm it is red; do not rewrite, loosen or
+   delete its assertions — a test you believe is wrong goes to Deviations.
 3. **Green:** make the smallest change that satisfies the step, following the loaded skills and
    the pattern file the plan points to. Mirror `vendor/shared` (server copy first) in the same step.
 4. **Verify:** run the step's verify command(s). Fix until green — never weaken, skip or delete a

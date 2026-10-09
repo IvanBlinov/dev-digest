@@ -3,6 +3,24 @@
 Dated entries, newest first. Format and rubrics: [.claude/skills/engineering-insights/SKILL.md](.claude/skills/engineering-insights/SKILL.md).
 Module-specific lessons go into the module's own `INSIGHTS.md` (`server/`, `client/`, `reviewer-core/`, `e2e/`).
 
+## 2026-10-08 — [Security] A path allowlist hook must check every path component for symlinks
+Symptom: `guard-allowed-paths.sh` checked only `[ -L "$root/$rel" ]`, so a write through a symlinked parent directory (e.g. the documented `.cursor/skills -> ../.claude/skills`) or into `client/node_modules/**/README.md` passed the doc-writer allowlist.
+Cause: string matching on the requested path says nothing about where the bytes land; only the final component was tested for a link, and `*/README.md` / `*/docs/*` also match inside `node_modules`.
+Rule: walk every existing component of the path and block on any symlink; deny `node_modules` before the allow patterns; cover both with harness cases that create a real link.
+Proof: `.claude/hooks/guard-allowed-paths.sh:50`, `.claude/hooks/tests/hooks.test.sh` (cases "symlinked parent", "node_modules")
+
+## 2026-10-08 — [Architectural decision] Writer subagents are path-limited by one profile-based allowlist hook
+Context: two new subagents (`test-writer`, `doc-writer`) each need write access, but only to a
+narrow, different set of paths — a tool denylist cannot express "Edit/Write, but only here".
+Decision: one script, `guard-allowed-paths.sh <profile>`, does root/`..`/symlink normalisation
+once and keeps per-agent policy as a single `case "$profile"` block, instead of one hook script
+per writer agent.
+Consequence: adding a third path-limited writer costs one profile plus a few rows in
+`.claude/hooks/tests/hooks.test.sh`, not a new script; `guard-protected-paths.sh` stays the
+separate denylist for Bash-capable agents (implementer, test-writer, plan-verifier,
+architecture-reviewer) and is unaffected.
+Proof: `.claude/hooks/guard-allowed-paths.sh:43`, `.claude/agents/doc-writer.md:15`
+
 ## 2026-09-29 — [Pitfall] `vendor/shared` copies already differ on `main`
 Symptom: `diff -rq server/src/vendor/shared client/src/vendor/shared` reports 5 differing files although AGENTS.md says the copies must stay identical.
 Cause: server-side contract additions (`sessionId`, `'openrouter'` provider id, `CommitFile`, eval-ci/knowledge fields) were never mirrored to the client.

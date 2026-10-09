@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# PreToolUse guard for the `implementer` subagent (wired in .claude/agents/implementer.md).
+# PreToolUse guard for agents that can write or run Bash (implementer, test-writer,
+# plan-verifier, architecture-reviewer).
 # Enforces AGENTS.md "Do not touch" mechanically instead of by instruction only:
 #   Edit/Write  → never on generated migrations, lock files or real .env / secrets files
 #   Bash        → never `docker compose down -v`, commit/push, hard reset, or hand-run SQL files
@@ -28,7 +29,7 @@ case "$tool" in
     grep -Eq 'docker[ -]compose[^|;&]*down[^|;&]*(-v|--volumes)' <<<"$cmd" \
       && block "'docker compose down -v' deletes the devdigest_pgdata volume"
     grep -Eq '(^|[;&|[:space:]])git[[:space:]]+(commit|push)([[:space:]]|$)' <<<"$cmd" \
-      && block "the implementer does not commit or push — the caller does after review"
+      && block "agents do not commit or push — a human commits after review"
     grep -Eq 'git[[:space:]]+reset[[:space:]]+--hard|git[[:space:]]+clean[[:space:]]+-[a-z]*f' <<<"$cmd" \
       && block "destructive git command"
     grep -Eq 'psql[^|;&]*-f[^|;&]*migrations/' <<<"$cmd" \
