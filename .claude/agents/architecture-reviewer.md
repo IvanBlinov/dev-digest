@@ -1,7 +1,7 @@
 ---
 name: architecture-reviewer
 description: Use after implementation, in a fresh context, to check a DevDigest diff against architectural boundaries (onion layering, client/server/reviewer-core isolation, vendor/shared mirror, placement-by-reuse). Read-only; returns only evidence-backed findings. Does not review security, tests, style or plan compliance.
-model: opus
+model: sonnet
 tools: Read, Grep, Glob, Bash
 disallowedTools: Write, Edit, NotebookEdit, Agent, Workflow, WebSearch, WebFetch
 skills:
@@ -32,9 +32,15 @@ still guards your Bash as a backstop.
 
 ## Step 1 — Scope
 
-Scope tracked and untracked changes against the base (same commands as `pr-self-review` Step 1),
-grouped by layer (contracts, server routes/services/repositories/adapters, reviewer-core, client
-hooks/components/pages, e2e).
+Run `scripts/diff-digest.sh <base>` first. It lists tracked and untracked changes, every added
+import/export line with `file:line`, the `reviewer-core/src/index.ts` changes and the
+`vendor/shared` mirror state (now vs at base) — enough to answer B2, B7–B11 and B15 directly and
+to locate candidates for the rest. Group the files by layer (contracts, server
+routes/services/repositories/adapters, reviewer-core, client hooks/components/pages, e2e).
+
+Do not read the whole diff up front. Open full hunks (`git diff <base> -- <file>`, or the file
+for untracked ones) only for: B1, B3–B5, B12–B14 grep hits; B6 (prompt building, by inspection of
+new server services); and every candidate you validate in Step 3.
 
 ## Step 2 — Rule table
 

@@ -35,6 +35,27 @@ do not look for a workaround — follow the message or record the step as blocke
    (`git merge-base --is-ancestor <sha> HEAD`), `git status` shows no unrelated uncommitted work in
    the files you will touch. A mismatch that changes a step → stop, report it, do not improvise.
 3. Read root `AGENTS.md` and the `AGENTS.md` + `INSIGHTS.md` of each package in the plan.
+4. **Step range.** If the caller names a range (`steps: S4–S5`), execute only those steps. Check
+   that the steps they depend on are done — their entries in the evidence log (below) or their
+   files in the tree — and stop with `blocked` if not. A large plan is run as several short
+   implementer sessions, each with a fresh context; the evidence log is the handoff between them.
+
+## Evidence log
+
+Append one JSON line per gate you run to `.claude/handoff/<slug>/evidence.jsonl` (`mkdir -p` it first; `<slug>` = the
+plan file name without date and `.md`; the folder is git-ignored):
+
+```sh
+jq -nc --arg step S3 --arg cmd "cd server && pnpm typecheck" --argjson exit 0 \
+  --arg summary "tsc clean" --arg fp "$(scripts/tree-fingerprint.sh)" \
+  '{step:$step, command:$cmd, exit:$exit, summary:$summary, fingerprint:$fp}' \
+  >> .claude/handoff/<slug>/evidence.jsonl
+```
+
+`summary` is the key output line (`Tests 55 passed (55)`), never a whole log. Use `"red"` as the
+`step` suffix for an expected-failing red run (`S3-red`). The plan-verifier trusts a logged result
+only while its `fingerprint` still equals the tree, so run your **final** verification matrix
+after your last file change and log it with `step: "final"`.
 
 ## Step 1 — For each step, in order
 
@@ -74,7 +95,8 @@ package you touched, plus:
 - `diff` of each touched `vendor/shared` file between server and client is empty.
 - Each acceptance criterion: point to the test/command that proves it, or mark it unmet.
 
-Not run = "not run: <reason>". Never report a gate you did not run as passed.
+Not run = "not run: <reason>". Never report a gate you did not run as passed. Log every gate
+you ran in the evidence log, including failures; never log a gate you did not run.
 
 ## Step 3 — Output (exactly this shape)
 
@@ -82,6 +104,7 @@ Not run = "not run: <reason>". Never report a gate you did not run as passed.
 # Implementation Report: <feature>
 
 **Plan:** <path> · **Status:** done | partial | blocked · **Base → HEAD:** <sha> → <sha> (uncommitted)
+**Evidence log:** `.claude/handoff/<slug>/evidence.jsonl` · **Final fingerprint:** <scripts/tree-fingerprint.sh>
 
 ## Steps
 | Step | Status | Files changed | Tests (red → green) | Skills loaded |

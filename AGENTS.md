@@ -119,6 +119,11 @@ In Claude Code a Stop hook (`.claude/hooks/insights-reminder.sh`) also enforces 
    optionally `test-writer` (red phase) → `implementer` agent → `plan-verifier` and
    `architecture-reviewer` (in parallel) → `doc-writer` → a human commits. `test-writer` also
    backfills tests for existing untested code outside this chain.
+   Keep the chain lean ([.claude/agents/README.md](.claude/agents/README.md) "Token budget"):
+   skip a repo `researcher` run whose only job is to map the repo for the planner; settle design
+   forks before the plan and ask the planner for a delta on revisions; run large plans as
+   implementer step ranges; handoff files (context pack, evidence log) live in the git-ignored
+   `.claude/handoff/<slug>/`.
 2. Tests first, then implementation (see [TESTING.md](TESTING.md) for which suite).
 3. Record insights as you go (see above), then run the check commands for every package you touched.
 4. Update the module `README.md` only when the "what is it / how to run" story changes.

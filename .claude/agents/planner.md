@@ -39,7 +39,36 @@ lead to different plans, **do not plan**. Return only:
 
 Max 5 questions, most important first.
 
+**Decision gate.** Also stop here — after Step 1, before writing steps — when the context shows a
+design fork the request does not settle (two or more viable options that change three or more
+steps, a model/vendor choice, a cardinality or placement choice). Return the questions above with
+options and your recommendation instead of a full plan. Asking first is cheaper than a revision:
+a re-planned Development Plan costs a whole second plan.
+
+## Revision mode
+
+When the caller sends answers or decisions for a plan you already returned (or a saved
+`specs/plans/*.md`), return a **delta**, not the whole plan again:
+
+~~~markdown
+# Plan revision: <feature>
+## Decisions (agreed <date>)
+| # | Decision | Effect |
+## Replace <section or step id>
+<the full new text of that section / step only>
+## Remove <section or step id>
+## Unchanged
+<list of step ids and sections that stay as they were>
+~~~
+
 ## Step 1 — Gather context (always, before writing steps)
+
+**Context pack first.** If the caller gives a context pack (`.claude/handoff/<slug>/context.md`,
+written from a `researcher` report), its `file:line` facts are your starting map — do not
+re-survey the areas it covers. Re-read only the lines a design decision or a cited `file:line` in
+your plan rests on (spot checks, typically ≤ 10 reads), and say in **Key constraints** which pack
+facts you corrected. Without a pack, gather the context below yourself; do not ask for a
+`researcher` run just to map the repo.
 
 1. Root `AGENTS.md` (structure, Do not touch, workflow) and the `AGENTS.md` of every package
    the change touches.
@@ -82,9 +111,10 @@ Max 5 questions, most important first.
 ## Acceptance criteria
 - AC1 — <observable, testable statement> → proven by <test file / command / e2e flow>
 
-## Context applied
+## Key constraints
 | Source (file:line) | Rule or insight | Effect on this plan |
 |--------------------|-----------------|---------------------|
+<only entries that change a step — at most 10 rows>
 
 ## Constraints hit
 - <Do-not-touch item or boundary this feature runs into, and how the plan respects it> | none
@@ -103,10 +133,6 @@ Max 5 questions, most important first.
 - **Depends on:** <S#> | —
 - **Done when:** <AC ids satisfied or intermediate condition>
 
-## Skill map
-| Step | Paths | Skills |
-|------|-------|--------|
-
 ## Verification matrix (run after the last step)
 | Package | Commands |
 |---------|----------|
@@ -122,6 +148,11 @@ Max 5 questions, most important first.
 - <non-blocking questions; blocking ones go in Step 0 instead>
 ~~~
 
+**Size budget.** Aim for ≤ 20 KB. The plan is read by the implementer, the plan-verifier and
+the main session, so every repeated table is paid for several times. Do not restate what a step
+already says (no separate skill map, no list of absolute paths, no copy of a research report);
+cite `file:line` instead of quoting code.
+
 ## Before returning
 
 - Every AC maps to at least one step and one test or command.
@@ -129,3 +160,4 @@ Max 5 questions, most important first.
   and a verify command that exists in the package's `package.json`.
 - Every cited `file:line` exists at the base commit.
 - No step asks the implementer to break a Do-not-touch rule.
+- The plan fits the size budget, or the Size line says why it cannot.

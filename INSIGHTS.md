@@ -3,6 +3,18 @@
 Dated entries, newest first. Format and rubrics: [.claude/skills/engineering-insights/SKILL.md](.claude/skills/engineering-insights/SKILL.md).
 Module-specific lessons go into the module's own `INSIGHTS.md` (`server/`, `client/`, `reviewer-core/`, `e2e/`).
 
+## 2026-10-08 — [Architectural decision] The verifier may trust an implementer gate only through a tree fingerprint
+Context: plan-verifier re-ran every gate the implementer had just run (6.5 min, most of its tokens), because an implementer's prose report is a claim, not evidence.
+Decision: the implementer logs each gate to `.claude/handoff/<slug>/evidence.jsonl` with `scripts/tree-fingerprint.sh` (sha256 of HEAD + `git diff HEAD --binary` + hashes of untracked, non-ignored files). The verifier still re-runs typechecks, unit lanes and every test file the diff added or modified; it accepts a log line only for untouched suites, and only when the fingerprint equals the current tree.
+Consequence: any edit after the implementer's final matrix (even a comment) invalidates every logged line, so the verifier falls back to a full re-run; the fingerprint ignores git-ignored files, so the log itself and build output never change it.
+Proof: `scripts/tree-fingerprint.sh:10`, `.claude/agents/plan-verifier.md` Step 2, `.claude/agents/implementer.md` "Evidence log"
+
+## 2026-10-08 — [Pitfall] Hunk-header line numbers: don't split `@@ -a,b +c,d @@` on `[ +,]`
+Symptom: the first draft of `scripts/diff-digest.sh` printed `file::` (empty line number) for every new file.
+Cause: `split("@@ -0,0 +1,40 @@", h, /[ +,]/)` yields an empty field between the space and `+`, so `h[4]` is `""`, not the new-file start line.
+Rule: take the new-side start with `match($0, /\+[0-9]+/)` and read `substr` after the `+`.
+Proof: `scripts/diff-digest.sh:32`
+
 ## 2026-10-08 — [Security] A path allowlist hook must check every path component for symlinks
 Symptom: `guard-allowed-paths.sh` checked only `[ -L "$root/$rel" ]`, so a write through a symlinked parent directory (e.g. the documented `.cursor/skills -> ../.claude/skills`) or into `client/node_modules/**/README.md` passed the doc-writer allowlist.
 Cause: string matching on the requested path says nothing about where the bytes land; only the final component was tested for a link, and `*/README.md` / `*/docs/*` also match inside `node_modules`.

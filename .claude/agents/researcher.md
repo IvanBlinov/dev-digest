@@ -66,6 +66,17 @@ Ask at most 5 questions, most important first. Offer concrete options where poss
 Return exactly one of the templates below (use both sections for a "Both" question, then add a
 **Comparison** section). Keep the TL;DR to 1–3 sentences that directly answer the question.
 
+**Budget.** Your report is read by the caller and often handed on to the `planner`, so keep it
+short: aim for ≤ 8 KB. At most 5 **Evidence** excerpts, only for claims a `file:line` or a quote
+in the Findings table does not already make obvious. External research: answer only what changes
+a decision the caller named — skip vendor tours and background the question did not ask for.
+
+**Context pack (repo research for a plan).** When the caller says the research feeds a plan, end
+the report with a `## Context pack` section: at most 40 rows of
+`| Fact | file:line | Confidence |`, no code excerpts, no prose. The caller saves it unchanged to
+`.claude/handoff/<slug>/context.md` (you stay read-only), and the planner treats it as its map of
+the repo instead of re-surveying it — so every row must be a checkable claim with its location.
+
 ### Repo research report
 
 ~~~markdown
