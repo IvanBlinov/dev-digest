@@ -32,6 +32,42 @@ const DEFAULT_MODEL = 'deepseek/deepseek-v4-flash';
 export const DEFAULT_WORKSPACE_NAME = 'default';
 export const SYSTEM_USER_EMAIL = 'you@local';
 
+/** Unified-diff hunk body (no file headers) with exactly `additions` `+` and `deletions` `-` lines. */
+function syntheticPatch(additions: number, deletions: number, label: string): string {
+  const head = `@@ -${deletions === 0 ? '0,0' : `1,${deletions}`} +1,${additions} @@`;
+  const del = Array.from({ length: deletions }, (_, i) => `-old ${label} ${i + 1}`);
+  const add = Array.from({ length: additions }, (_, i) => `+new ${label} ${i + 1}`);
+  return [head, ...del, ...add].join('\n');
+}
+
+/** New line 12 is the added Stripe key the seeded CRITICAL finding points at. */
+const SEED_CONFIG_PATCH = [
+  '@@ -10,3 +10,7 @@',
+  '   port: 3000,',
+  '   host: "0.0.0.0",',
+  '+  stripeKey: "sk_live_xxx",',
+  '+  rateLimitWindowMs: 60000,',
+  '+  rateLimitMax: 100,',
+  '+  trustProxy: true,',
+  '   redisUrl: x,',
+].join('\n');
+
+/** New lines 45-51 are the added loop; the seeded N+1 finding starts at 45. */
+const SEED_USERS_PATCH = [
+  '@@ -44,4 +44,9 @@',
+  '   const users = await db.users.findMany();',
+  '-  const result = [];',
+  '-  for (const u of users) result.push(u);',
+  '+  const result = [];',
+  '+  for (const u of users) {',
+  '+    const posts = await db.posts.findMany({ userId: u.id });',
+  '+    result.push({ ...u, posts });',
+  '+  }',
+  '+  const total = result.length;',
+  '+  logger.debug({ total });',
+  '   return result;',
+].join('\n');
+
 export async function seed(db: Db): Promise<{ workspaceId: string; userId: string }> {
   // ---- workspace + user (no-auth defaults) ----
   let [ws] = await db
@@ -121,11 +157,20 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       .returning();
 
     // pr_files (subset)
+    // 9 files = PR.filesCount; additions/deletions sum to the PR totals (247 / 38).
+    // Patches exist only where a seeded finding anchors a line (and on two small files for the
+    // smart-diff tab). `diff-loader` falls back to these patches when git has no diff, so they
+    // are also what DB-backed review tests see for PR #482.
     await db.insert(t.prFiles).values([
       { prId: pr!.id, path: 'src/middleware/ratelimit.ts', additions: 84, deletions: 0 },
       { prId: pr!.id, path: 'src/api/public/webhooks.ts', additions: 31, deletions: 6 },
-      { prId: pr!.id, path: 'src/config.ts', additions: 4, deletions: 0 },
-      { prId: pr!.id, path: 'src/api/users.ts', additions: 7, deletions: 2 },
+      { prId: pr!.id, path: 'src/config.ts', additions: 4, deletions: 0, patch: SEED_CONFIG_PATCH },
+      { prId: pr!.id, path: 'src/api/users.ts', additions: 7, deletions: 2, patch: SEED_USERS_PATCH },
+      { prId: pr!.id, path: 'test/middleware/ratelimit.test.ts', additions: 68, deletions: 0 },
+      { prId: pr!.id, path: 'package.json', additions: 2, deletions: 1 },
+      { prId: pr!.id, path: 'pnpm-lock.yaml', additions: 31, deletions: 24, patch: syntheticPatch(31, 24, 'lock') },
+      { prId: pr!.id, path: 'docs/rate-limiting.md', additions: 16, deletions: 0, patch: syntheticPatch(16, 0, 'doc') },
+      { prId: pr!.id, path: 'src/api/public/index.ts', additions: 4, deletions: 5 },
     ]);
 
     // pr_commits

@@ -2,6 +2,29 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-08 — [Non-obvious behaviour] Finding cards in the diff are expanded by default; the Agent runs tab keeps them collapsed
+Symptom: cards under a code line showed only the title, so rationale and Accept/Dismiss needed a click.
+Cause: `FindingCard` collapses unless `defaultExpanded` is passed; the annotation hook originally omitted it.
+Rule: diff annotations pass `defaultExpanded`; do not change `FindingCard`'s own default, the Agent runs tab relies on it.
+Proof: `client/src/app/repos/[repoId]/pulls/[number]/_components/DiffTab/useFindingAnnotations.tsx:53`, `client/src/app/repos/[repoId]/pulls/[number]/_components/FindingCard/FindingCard.tsx:45`
+
+## 2026-10-08 — [Pitfall] `SectionLabel` uppercases via CSS, so browser `innerText` is upper-case
+Symptom: an e2e `wait --text "Reviewer-ordered diff"` would never match the section header.
+Cause: `SectionLabel` sets `textTransform: uppercase`; agent-browser reads `innerText`, which follows it (jsdom/RTL tests do not).
+Rule: in e2e flows wait on text from non-uppercased elements (Chip, group role label, finding title, file path), never on a `SectionLabel` string.
+Proof: `client/src/vendor/ui/primitives/SectionLabel.tsx:22`
+
+## 2026-10-08 — [Non-obvious behaviour] "Show finding comments by default" must key off all shown findings, not active ones
+Symptom: dismissing the last finding made its card vanish from the diff instead of showing muted.
+Cause: a default derived from active (non-dismissed) findings flips to hidden once they are all dismissed.
+Rule: default visibility uses `shown.length` (dismissed included); only dots, bars and counters use the active subset.
+Proof: `client/src/app/repos/[repoId]/pulls/[number]/_components/DiffTab/DiffTab.tsx:53`
+
+## 2026-10-08 — [Pitfall] `@testing-library/user-event` is not installed
+Symptom: a new test importing it fails to resolve.
+Rule: use `fireEvent` (as `FindingCard.test.tsx`) unless the dependency is added on purpose.
+Proof: `client/package.json` (no `user-event`); `client/src/app/repos/[repoId]/pulls/[number]/_components/DiffTab/DiffTab.test.tsx:1`
+
 ## 2026-09-30 — [Pitfall] Async previews can land after the input changed
 Symptom: an import preview for an old URL could appear under a newly typed URL.
 Rule: remember the requested value (ref) and drop responses that don't match the current input; clear the preview on every input change.
