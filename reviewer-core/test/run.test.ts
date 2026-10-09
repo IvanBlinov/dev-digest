@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { LLMProvider, StructuredResult } from '@devdigest/shared';
 import { MockLLMProvider, MockGitClient } from '../../server/src/adapters/mocks.js';
 import { reviewPullRequest } from '../src/index.js';
+import { scoreFromFindings } from '../src/review/reduce.js';
 
 /**
  * Engine-level test for reviewPullRequest (the core lifted out of the server's
@@ -212,21 +213,25 @@ describe('reviewPullRequest — scope filter', () => {
     });
     expect(o.review.findings.map((x) => x.title)).toEqual(['in-one']);
     expect(o.review.score).toBe(97);
-    expect(o.scopeCandidate).toBeNull();
     expect(o.scopeDropped.map((d) => d.finding.title)).toEqual(['out-bug']);
     expect(events.some((m) => m.includes('out-bug'))).toBe(true);
-    expect(events.some((m) => m.startsWith('Scope filter: kept 1 in-scope, dropped 1 out-of-scope'))).toBe(true);
+    expect(events.some((m) => m.startsWith('Scope filter: kept 1 in-scope, kept 0 out-of-scope (serious), dropped 1 out-of-scope'))).toBe(true);
   });
 
-  it('returns an out CRITICAL as scopeCandidate, not inside review.findings', async () => {
+  it('keeps every out CRITICAL in review.findings, scores the kept set, drops out SUGGESTION', async () => {
     const llm = new MockLLMProvider('openai', {
-      structured: fixture([mk({ title: 'out-crit', scope: 'out', severity: 'CRITICAL', category: 'security' })]),
+      structured: fixture([
+        mk({ title: 'out-crit-1', scope: 'out', severity: 'CRITICAL', category: 'security' }),
+        mk({ title: 'out-crit-2', scope: 'out', severity: 'CRITICAL', category: 'bug', start_line: 10 }),
+        mk({ title: 'out-sugg', scope: 'out', severity: 'SUGGESTION' }),
+      ]),
     });
     const diff = await new MockGitClient().diff();
     const o = await reviewPullRequest({ systemPrompt: 's', model: 'm', diff, llm, intent, scopeFilter: true });
-    expect(o.review.findings).toHaveLength(0);
-    expect(o.review.score).toBe(100);
-    expect(o.scopeCandidate?.title).toBe('out-crit');
+    expect(o.review.findings.map((x) => x.title).sort()).toEqual(['out-crit-1', 'out-crit-2']);
+    expect(o.review.score).toBe(scoreFromFindings(o.review.findings));
+    expect(o.review.score).toBeLessThan(100);
+    expect(o.scopeDropped.map((d) => d.finding.title)).toEqual(['out-sugg']);
   });
 
   it('scopeFilter false (or no intent) → unchanged output', async () => {
@@ -234,7 +239,6 @@ describe('reviewPullRequest — scope filter', () => {
     const diff = await new MockGitClient().diff();
     const a = await reviewPullRequest({ systemPrompt: 's', model: 'm', diff, llm: new MockLLMProvider('openai', { structured: f }), intent, scopeFilter: false });
     expect(a.review.findings).toHaveLength(1);
-    expect(a.scopeCandidate).toBeNull();
     expect(a.assembly.intent).toContain('Add rate limiting');
     const b = await reviewPullRequest({ systemPrompt: 's', model: 'm', diff, llm: new MockLLMProvider('openai', { structured: f }), scopeFilter: true });
     expect(b.review.findings).toHaveLength(1);

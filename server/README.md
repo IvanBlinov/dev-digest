@@ -123,11 +123,11 @@ only — never hunk bodies**. A review run loads the stored intent, or classifie
 when none exists (a failure only logs "Intent unavailable"). It reaches every agent as
 an unverified hypothesis and each finding is tagged `scope: in|out`.
 
-The scope filter is on only for a **fresh** intent with confidence ≠ low. Then the
-executor works in two phases (`run-executor.ts`): every agent computes first (runs stay
-`running`, the Live Log says "Waiting for N other agent(s)…"), **one** out-of-scope
-signal (CRITICAL, or WARNING in `security`) is picked across all agents, and then the
-runs are persisted together. With the filter off, each run finishes on its own as before.
+The scope filter is on only for a **fresh** intent with confidence ≠ low **and** at
+least one fetched (`ok`) issue/spec/plan source — the PR description alone never turns
+it on (the author controls that text). When on, out-of-scope findings are dropped
+except CRITICAL and security WARNING, which are always kept (all agents, tagged
+`scope='out'`). Each run finishes on its own as soon as its agent is done.
 
 ## Review context (non-obvious)
 

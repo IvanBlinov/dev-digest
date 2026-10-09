@@ -6,6 +6,7 @@ import {
   intentInputHash,
   deriveStaleness,
   clampClassification,
+  hasFetchedExplicitSource,
 } from '../src/modules/intent/helpers.js';
 
 const repo = { owner: 'acme', name: 'payments-api' };
@@ -133,5 +134,17 @@ describe('clampClassification', () => {
     expect(c.out_of_scope).toEqual(['ok']);
     expect(c.missing_context).toHaveLength(10);
     expect(c.confidence).toBe('high');
+  });
+});
+
+describe('hasFetchedExplicitSource', () => {
+  it('only a description-derived source → false', () => {
+    expect(hasFetchedExplicitSource([{ kind: 'pr_body', ref: 'body', status: 'ok' }])).toBe(false);
+  });
+  it('an ok issue/spec/plan → true', () => {
+    expect(hasFetchedExplicitSource([{ kind: 'pr_body', ref: 'b', status: 'ok' }, { kind: 'issue', ref: '#1', status: 'ok' }])).toBe(true);
+  });
+  it('an explicit source that was not fetched → false', () => {
+    expect(hasFetchedExplicitSource([{ kind: 'spec', ref: 'a.md', status: 'not_found' }])).toBe(false);
   });
 });

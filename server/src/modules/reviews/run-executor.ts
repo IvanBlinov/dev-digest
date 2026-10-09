@@ -1,9 +1,8 @@
 import type { Container } from '../../platform/container.js';
-import type { Finding, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
+import type { Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
 import {
   reviewPullRequest,
   countBlockers,
-  withScopeSignal,
   type ReviewIntent,
   type ReviewOutcome,
 } from '@devdigest/reviewer-core';
@@ -15,7 +14,6 @@ import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 import { IntentService } from '../intent/service.js';
-import { pickSignal, signalDecisionLine, waitingLine, type ScopeComputation } from './scope-signal.js';
 import { runAgentsConcurrently } from './concurrency.js';
 import {
   blockedSkillsLogLine,
@@ -67,7 +65,7 @@ interface ExecCtx {
 interface AgentComputation {
   agent: AgentRow;
   runId: string;
-  /** Index of the job in this execution (tie-break for the signal pick). */
+  /** Index of the job in this execution (log ordering). */
   order: number;
   start: number;
   runLog: RunLogger;
@@ -95,11 +93,8 @@ export class ReviewRunExecutor {
    * streaming events over the runBus and persisting each review. Per-agent
    * failures are isolated.
    *
-   * Scope filter OFF (no/stale/low-confidence intent): each queue task computes
-   * AND finalizes its agent — today's behaviour and timing.
-   * Scope filter ON: phase 1 only computes; once every agent has settled the
-   * executor picks ONE out-of-scope signal across all agents, then phase 2
-   * finalizes (persists) the runs in job order. See `runWithScopeSignal`.
+   * Each queue task computes AND finalizes (persists) its agent as soon as that
+   * agent is done; the scope filter (if on) is applied per agent inside the engine.
    */
   async executeRuns(
     workspaceId: string,
@@ -165,102 +160,18 @@ export class ReviewRunExecutor {
     const ctx: ExecCtx = { workspaceId, pull, repo, diff, intent, scopeFilter, runLog, logger };
     const concurrency = this.container.config.reviewAgentConcurrency;
 
-    if (!scopeFilter) {
-      // Each run finishes (and persists) on its own, as soon as its agent is done.
-      await runAgentsConcurrently(jobs, concurrency, async (job) => {
-        const order = jobs.indexOf(job);
-        const startedAt = this.logAgentStart(ctx, job);
-        try {
-          const comp = await this.computeAgent(ctx, job, order, startedAt);
-          const outcome = await this.finalizeAgent(ctx, comp, null);
-          this.logAgentDone(ctx, comp, outcome);
-        } catch (err) {
-          await this.failAgent(ctx, job, startedAt, err);
-        }
-      });
-      return;
-    }
-    await this.runWithScopeSignal(ctx, jobs, concurrency);
-  }
-
-  /**
-   * Scope filter ON — exactly one out-of-scope signal per review execution.
-   * Phase 1 computes every agent (nothing persisted; runs stay `running`);
-   * then ONE signal is picked across agents (severity → confidence → job order
-   * → file → line → title, so completion order never matters); phase 2
-   * finalizes the surviving runs in job order, the winner's agent carrying the
-   * signal. A rejected alternative — finishing runs early and patching the
-   * winner's review afterwards — would show `done` runs that change later.
-   */
-  private async runWithScopeSignal(
-    ctx: ExecCtx,
-    jobs: { agent: AgentRow; runId: string }[],
-    concurrency: number,
-  ): Promise<void> {
-    const comps: (AgentComputation | null)[] = jobs.map(() => null);
-
-    // ---- Phase 1: compute only ---------------------------------------------
+    // Each run finishes (and persists) on its own, as soon as its agent is done.
     await runAgentsConcurrently(jobs, concurrency, async (job) => {
       const order = jobs.indexOf(job);
       const startedAt = this.logAgentStart(ctx, job);
       try {
         const comp = await this.computeAgent(ctx, job, order, startedAt);
-        comps[order] = comp;
-        if (jobs.length > 1) comp.runLog.info(waitingLine(jobs.length - 1));
+        const outcome = await this.finalizeAgent(ctx, comp);
+        this.logAgentDone(ctx, comp, outcome);
       } catch (err) {
-        // A compute failure is persisted now and contributes no candidate.
         await this.failAgent(ctx, job, startedAt, err);
       }
     });
-
-    // Runs the user cancelled while we waited are already marked + completed by
-    // `cancelRun` (which also clears the cancel flag, hence the isComplete check).
-    const survivors = comps.filter((c): c is AgentComputation => c !== null && !this.isAborted(c.runId));
-    if (survivors.length === 0) return;
-
-    // ---- Pick one signal across agents -------------------------------------
-    const toComputation = (c: AgentComputation): ScopeComputation => ({
-      order: c.order,
-      agentName: c.agent.name,
-      candidate: c.outcome.scopeCandidate,
-    });
-    const fanOut = (list: AgentComputation[]) =>
-      new RunLogger(this.container.runBus, list.map((c) => c.runId), ctx.logger, { prId: ctx.pull.id });
-    const dropped = survivors.reduce((n, c) => n + c.outcome.scopeDropped.length, 0);
-    let pick = pickSignal(survivors.map(toComputation));
-    const decision = fanOut(survivors);
-    decision.info(signalDecisionLine(pick.winner, pick.losers.length));
-    if (dropped > 0) decision.info(`Scope filter dropped ${dropped} other out-of-scope finding(s) across agents`);
-
-    // ---- Phase 2: finalize in job order --------------------------------------
-    for (let i = 0; i < survivors.length; i++) {
-      const comp = survivors[i]!;
-      if (this.isAborted(comp.runId)) continue; // cancelled during the wait or an earlier finalize
-      const signal = pick.winner && pick.winner.order === comp.order ? pick.winner.finding : null;
-      const job = { agent: comp.agent, runId: comp.runId };
-      try {
-        const outcome = await this.finalizeAgent(ctx, comp, signal);
-        this.logAgentDone(ctx, comp, outcome);
-      } catch (err) {
-        await this.failAgent(ctx, job, comp.start, err);
-        if (!signal) continue;
-        // The run holding the signal failed to persist: re-pick among runs not yet finalized.
-        const rest = survivors.slice(i + 1).filter((c) => !this.isAborted(c.runId));
-        pick = pickSignal(rest.map(toComputation));
-        if (rest.length > 0) {
-          fanOut(rest).info(
-            pick.winner
-              ? `Signal holder failed — re-picked. ${signalDecisionLine(pick.winner, pick.losers.length)}`
-              : 'Out-of-scope signal lost: the run holding it failed and no other candidate remains',
-          );
-        }
-      }
-    }
-  }
-
-  /** A run that was cancelled (or otherwise already completed on the bus) must not be finalized. */
-  private isAborted(runId: string): boolean {
-    return this.container.runBus.isCancelled(runId) || this.container.runBus.isComplete(runId);
   }
 
   private logAgentStart(ctx: ExecCtx, { agent, runId }: { agent: AgentRow; runId: string }): number {
@@ -382,22 +293,18 @@ export class ReviewRunExecutor {
   }
 
   /**
-   * Persist a computed agent run: review + findings (+ the cross-agent
-   * out-of-scope `signal` when this agent holds it), agent_runs row, trace.
+   * Persist a computed agent run: review + findings, agent_runs row, trace.
    * Completes the run on the bus. Throws on failure (callers use `failAgent`).
    */
   private async finalizeAgent(
     ctx: ExecCtx,
     comp: AgentComputation,
-    signal: Finding | null,
   ): Promise<RunOutcome> {
     const { workspaceId, pull } = ctx;
     const { agent, runId, runLog, outcome, skillsPlan } = comp;
     const { tokensIn, tokensOut, grounding, costUsd } = outcome;
 
-    // Score and findings include the signal (withScopeSignal recomputes the score).
-    const finalReview = withScopeSignal(outcome.review, signal);
-    if (signal) runLog.info(`Keeping out-of-scope signal "${signal.title}" in this review`);
+    const finalReview = outcome.review;
     const keptFindings = finalReview.findings;
 
     // ---- Persist review + findings ----------------------------------------

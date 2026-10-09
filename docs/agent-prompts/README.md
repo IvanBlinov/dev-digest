@@ -51,7 +51,8 @@ delimiter-wrapped (`prompt.ts:104-122`):
 The intent block carries the summary, in/out-of-scope lists, confidence and missing
 context. When it is present the system message also gets the trusted `SCOPE_RULE`: tag
 every finding `scope: "in" | "out"`, scope never changes severity, report every real
-defect. Agent prompts need no change for this.
+defect. The server's scope filter never drops an out-of-scope CRITICAL or security
+WARNING. Agent prompts need no change for this.
 
 Sections with no content are omitted. Everything repo- or author-derived is wrapped
 in `<untrusted source="…">…</untrusted>` so the model can tell instructions

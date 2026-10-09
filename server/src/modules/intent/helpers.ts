@@ -179,6 +179,14 @@ export function intentInputHash(i: { promptVersion: string; title: string; body:
   return createHash('sha256').update(JSON.stringify([i.promptVersion, i.title, i.body])).digest('hex');
 }
 
+/**
+ * True when a user-named source (issue/spec/plan) was actually fetched. The scope
+ * filter needs this: the PR description alone is author-controlled text.
+ */
+export function hasFetchedExplicitSource(sources: { kind: string; status: string }[]): boolean {
+  return sources.some((s) => (s.kind === 'issue' || s.kind === 'spec' || s.kind === 'plan') && s.status === 'ok');
+}
+
 /** Why a stored intent no longer matches the PR, or null when it is fresh. */
 export function deriveStaleness(
   stored: { headSha: string | null; inputHash: string | null; promptVersion: string | null },

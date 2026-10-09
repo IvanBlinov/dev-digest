@@ -74,13 +74,9 @@ export {
   MIN_BODY_CHARS,
 } from './intent/confidence.js';
 
-// Scope helpers: per-agent partition, cross-agent signal pick, CI-friendly merge.
+// Scope helpers: per-agent partition that never drops serious findings.
 export {
   partitionByScope,
-  pickScopeSignal,
-  withScopeSignal,
-  compareScopeSignal,
-  isScopeSignalEligible,
-  type ScopeCandidate,
+  isProtectedFromScopeFilter,
   type ScopePartition,
 } from './review/scope.js';

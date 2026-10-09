@@ -28,6 +28,7 @@ import {
   deriveStaleness,
   extractHunkHeaders,
   extractReferences,
+  hasFetchedExplicitSource,
   intentInputHash,
   toIntentRecordDto,
 } from './helpers.js';
@@ -128,13 +129,16 @@ export class IntentService {
       if (!row) return { intent: null, scopeFilter: false };
       const reason = this.staleness(pull, row);
       const stale = reason !== null;
-      const scopeFilter = !stale && row.confidence !== 'low';
+      const fetched = hasFetchedExplicitSource(row.sources);
+      const scopeFilter = !stale && row.confidence !== 'low' && fetched;
       log(
         stale
           ? `Intent is stale (${reason}) — used as context only, not re-classified; scope filter off`
           : scopeFilter
             ? `Using intent (confidence ${row.confidence}) — scope filter on`
-            : `Using intent (confidence ${row.confidence}) — low confidence, scope filter off`,
+            : row.confidence === 'low'
+              ? `Using intent (confidence ${row.confidence}) — low confidence, scope filter off`
+              : `Using intent (confidence ${row.confidence}) — no fetched issue/spec/plan — scope filter off`,
       );
       return {
         intent: {

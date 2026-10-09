@@ -2,7 +2,13 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
-## 2026-10-08 — [Security] The scope filter is a deterministic partition that always keeps one serious out-of-scope signal
+## 2026-10-08 — [Security] The author controls the intent, so the scope filter never drops serious findings
+Context: intent text comes from the PR description; a filter that can hide findings lets an author descope a real defect. This supersedes the "always keeps one serious signal" entry below.
+Decision: `partitionByScope` keeps EVERY out-of-scope CRITICAL / security WARNING (still tagged `out`, badge shown) and drops only the rest; scoring uses the kept set. No cross-agent pick, no `scopeCandidate`.
+Consequence: a serious out-of-scope defect from any agent always reaches the review; only low-severity noise is filtered.
+Proof: `reviewer-core/src/review/scope.ts:25`, `reviewer-core/src/review/run.ts:219`
+
+## 2026-10-08 — [Security] (superseded by the entry above) The scope filter is a deterministic partition that always keeps one serious out-of-scope signal
 Context: "ignore everything outside the PR's stated scope" is a way for an author to hide a real defect (the intent text is author-controlled).
 Decision: scope is only a tag from the model; `partitionByScope` drops out-of-scope findings but keeps the single best CRITICAL / security-WARNING one as `scopeCandidate`, `pickScopeSignal` chooses one across agents with a total order (so completion order never matters), the filter is off for stale or low-confidence intents, and severity is never changed by scope. CI callers use `withScopeSignal` so a single run also yields at most one signal.
 Consequence: a real security defect outside the PR's intent surfaces at most once per execution instead of vanishing; non-security out-of-scope findings are dropped and only logged.

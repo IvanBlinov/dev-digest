@@ -40,11 +40,9 @@ extra slots are omitted, so `assemblePrompt` simply leaves those sections out.
 right after the PR description, `<untrusted>`-wrapped, and adds the trusted `SCOPE_RULE`
 to the system prompt; without it the prompt is byte-identical to before.
 `reviewPullRequest({ intent, scopeFilter: true })` drops every out-of-scope finding after
-grounding and returns at most one eligible `scopeCandidate` (CRITICAL, or WARNING in
-`security`). Multi-agent callers (the studio server) choose one winner with
-`pickScopeSignal`; a single-agent caller (the CI runner) applies
-`withScopeSignal(outcome.review, outcome.scopeCandidate)` — so one run yields at most
-one out-of-scope signal. `buildIntentMessages` / `computeIntentConfidence` /
+grounding, except serious ones: every out-of-scope CRITICAL (or WARNING in `security`)
+is kept (still tagged `scope: 'out'`), the rest land in `scopeDropped`. The score is
+computed from the kept set. `buildIntentMessages` / `computeIntentConfidence` /
 `minConfidence` are the intent classifier's prompt and confidence rules (the input type
 has no field for hunk bodies).
 
@@ -53,8 +51,8 @@ has no field for hunk bodies).
 Exported from `src/index.ts`: `assemblePrompt` / `wrapUntrusted` (prompt),
 `groundFindings` / `groundingSummary` (grounding), `toJsonSchema` / `extractJson`
 / `parseWithRepair` (structured output), plus the `run` entrypoint and
-`reduce`, plus `buildIntentMessages`, `partitionByScope`, `pickScopeSignal`,
-`withScopeSignal` (intent layer). Contracts (`Review`, `Finding`, `Verdict`, …) come from
+`reduce`, plus `buildIntentMessages`, `partitionByScope`,
+`isProtectedFromScopeFilter` (intent layer). Contracts (`Review`, `Finding`, `Verdict`, …) come from
 `@devdigest/shared`.
 
 ## Testing

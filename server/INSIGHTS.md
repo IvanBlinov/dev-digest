@@ -2,6 +2,12 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-08 — [Security] The scope filter needs a fetched issue/spec/plan, not just the PR description
+Context: the PR body is author-controlled; a long enough description alone produced fresh `medium` confidence and switched the out-of-scope filter on. Supersedes the two-phase / one-signal entry below.
+Decision: `forReview` turns the filter on only when intent is fresh, confidence is not `low`, and `hasFetchedExplicitSource(sources)` finds an `ok` issue/spec/plan; serious findings are never dropped (see reviewer-core INSIGHTS). The executor is single-phase again.
+Consequence: description-only intents are prompt context only; the Live Log says "no fetched issue/spec/plan — scope filter off".
+Proof: `server/src/modules/intent/service.ts:133`, `server/src/modules/intent/helpers.ts:186`
+
 ## 2026-10-08 — [Pitfall] A review run that gains an LLM/GitHub call needs harness mocks, or tests hit the real services
 Symptom: after review runs started auto-classifying the PR intent, `reviews.it` / `reviews-skills.it` / `skills-injection.it` would call real OpenRouter/GitHub with whatever keys are in `~/.devdigest/secrets.json`.
 Cause: `buildApp` reads the real secrets file and the harnesses injected only an `openai` mock; every other provider and `github()` resolve to real clients.
@@ -18,13 +24,13 @@ Proof: `server/src/db/schema/reviews.ts:56`, `server/src/db/migrations/0014_l03_
 Symptom: a run cancelled while it waits for the other agents would still be finalized, because `isCancelled()` is false again.
 Cause: `cancelRun` calls `cancel()`, marks the row, then `complete()`, and `complete()` deletes the run from the `cancelled` set (it stays in `completed`).
 Rule: code that must skip cancelled runs after the fact checks `isCancelled(id) || isComplete(id)` (valid only for runs the caller has not completed itself).
-Proof: `server/src/platform/sse.ts:79`, `server/src/modules/reviews/run-executor.ts:262`
+Proof: `server/src/platform/sse.ts:79` (the executor's `isAborted` helper that used it was removed with the two-phase executor)
 
-## 2026-10-08 — [Architectural decision] With the scope filter on, a review's runs complete together, after the cross-agent signal pick
+## 2026-10-08 — [Architectural decision] (superseded: executor is single-phase again) With the scope filter on, a review's runs complete together, after the cross-agent signal pick
 Context: "exactly one out-of-scope signal per review execution" needs every agent's candidate before any review is persisted; patching the winner's review after other runs finished would show `done` runs that change later and race the client's refetch.
 Decision: the executor splits an agent into compute (in memory) and finalize (persist). Filter off: compute+finalize per queue task as before. Filter on: compute all agents, pick one winner (severity → confidence → job order → file → line → title), then finalize in job order; a failed finalize of the winner re-picks among the runs not yet finalized.
 Consequence: with the filter on, fast agents stay `running` until the slowest agent settles (bounded by per-call timeouts); a crash in between leaves runs `running`, which the boot reaper fails.
-Proof: `server/src/modules/reviews/run-executor.ts:195`, `server/src/modules/reviews/scope-signal.ts:24`
+Proof: removed in the scope-hardening plan (`specs/plans/2026-10-08-intent-scope-hardening.md`); kept as history.
 
 ## 2026-10-08 — [Security] Intent classification: hunk headers only, and logs carry sizes, refs and statuses — never text
 Context: the classifier sends PR text, issues and docs to a third-party LLM and its inputs are author-controlled.

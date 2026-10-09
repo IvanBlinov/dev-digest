@@ -8,7 +8,7 @@ import type {
 } from '@devdigest/shared';
 import { Review as ReviewSchema } from '@devdigest/shared';
 import { assemblePrompt, type ReviewIntent } from '../prompt.js';
-import { partitionByScope } from './scope.js';
+import { isProtectedFromScopeFilter, partitionByScope } from './scope.js';
 import { groundFindings, groundingSummary } from '../grounding.js';
 import { reduceReviews, scoreFromFindings, sliceDiff } from './reduce.js';
 
@@ -75,8 +75,8 @@ export interface ReviewInput {
   /** Stored PR intent (unverified hypothesis); undefined → prompt unchanged. */
   intent?: ReviewIntent;
   /**
-   * Drop out-of-scope findings (keeping at most ONE eligible candidate, returned
-   * as `scopeCandidate`). Default false; ignored without an `intent`. The caller
+   * Drop out-of-scope findings except serious ones (CRITICAL / security WARNING,
+   * always kept). Default false; ignored without an `intent`. The caller
    * decides when the filter is trustworthy (fresh intent, confidence ≠ low).
    */
   scopeFilter?: boolean;
@@ -108,8 +108,6 @@ export interface ReviewOutcome {
   grounding: string;
   /** Findings dropped by grounding, with reasons (for logs / "never go silent"). */
   dropped: { finding: Finding; reason: string }[];
-  /** The single best out-of-scope signal candidate (CRITICAL / security WARNING), or null. Not in `review.findings`. */
-  scopeCandidate: Finding | null;
   /** Out-of-scope findings removed by the scope filter, with reasons. */
   scopeDropped: { finding: Finding; reason: string }[];
   /** Which path ran. */
@@ -219,14 +217,14 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
   const filterOn = Boolean(input.scopeFilter && input.intent);
   const part = partitionByScope(ground.kept, { enabled: filterOn });
   if (filterOn) {
+    const serious = part.kept.filter(isProtectedFromScopeFilter).length;
+    const inScope = part.kept.length - serious;
     for (const d of part.dropped) {
       emit('info', `scope filter dropped "${d.finding.title}": ${d.reason}`);
     }
     emit(
       'result',
-      `Scope filter: kept ${part.kept.length} in-scope, dropped ${part.dropped.length} out-of-scope, candidate ${
-        part.candidate ? `"${part.candidate.title}"` : 'none'
-      }`,
+      `Scope filter: kept ${inScope} in-scope, kept ${serious} out-of-scope (serious), dropped ${part.dropped.length} out-of-scope`,
     );
   }
 
@@ -237,7 +235,6 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
     review: { ...merged, findings: part.kept, score: scoreFromFindings(part.kept) },
     grounding,
     dropped: ground.dropped,
-    scopeCandidate: part.candidate,
     scopeDropped: part.dropped,
     mode,
     assembly,
