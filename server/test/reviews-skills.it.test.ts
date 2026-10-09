@@ -6,7 +6,8 @@ import { waitForPrRuns } from './helpers/runs.js';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/platform/config.js';
 import { seed } from '../src/db/seed.js';
-import { MockLLMProvider, MockEmbedder, MockGitClient } from '../src/adapters/mocks.js';
+import { MockLLMProvider, MockEmbedder, MockGitClient, MockGitHubClient } from '../src/adapters/mocks.js';
+import { intentMockLlm } from './helpers/intent-mocks.js';
 import * as t from '../src/db/schema.js';
 
 const hasDocker = await dockerAvailable();
@@ -102,7 +103,8 @@ d('L02 skills reach the prompt and the trace (pg)', () => {
       overrides: {
         embedder: new MockEmbedder(),
         git: new MockGitClient({ diff: DIFF }),
-        llm: { openai: llm },
+        github: new MockGitHubClient(),
+        llm: { openai: llm, openrouter: intentMockLlm() },
       },
     });
     const pr = await setupPr(pg.handle.db, workspaceId);

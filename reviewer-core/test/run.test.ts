@@ -176,3 +176,68 @@ describe('reviewPullRequest (engine)', () => {
     else expect(outcome.costUsd).toBeCloseTo(0.002, 9);
   });
 });
+
+describe('reviewPullRequest — scope filter', () => {
+  const intent = {
+    summary: 'Add rate limiting',
+    in_scope: ['limiter'],
+    out_of_scope: ['config secrets'],
+    confidence: 'medium' as const,
+    missing_context: [],
+    stale: false,
+  };
+  const mk = (over: Record<string, unknown>) => ({
+    id: String(over.title),
+    severity: 'WARNING',
+    category: 'bug',
+    file: 'src/config.ts',
+    start_line: 11,
+    end_line: 11,
+    rationale: 'r',
+    confidence: 0.8,
+    kind: 'finding',
+    ...over,
+  });
+  const fixture = (findings: unknown[]) => ({ verdict: 'comment', summary: 's', score: 50, findings });
+
+  it('drops an out WARNING bug, scores in-scope only, emits the drop event', async () => {
+    const llm = new MockLLMProvider('openai', {
+      structured: fixture([mk({ title: 'in-one', scope: 'in', severity: 'SUGGESTION' }), mk({ title: 'out-bug', scope: 'out' })]),
+    });
+    const diff = await new MockGitClient().diff();
+    const events: string[] = [];
+    const o = await reviewPullRequest({
+      systemPrompt: 's', model: 'm', diff, llm, intent, scopeFilter: true,
+      onEvent: (e) => events.push(e.msg),
+    });
+    expect(o.review.findings.map((x) => x.title)).toEqual(['in-one']);
+    expect(o.review.score).toBe(97);
+    expect(o.scopeCandidate).toBeNull();
+    expect(o.scopeDropped.map((d) => d.finding.title)).toEqual(['out-bug']);
+    expect(events.some((m) => m.includes('out-bug'))).toBe(true);
+    expect(events.some((m) => m.startsWith('Scope filter: kept 1 in-scope, dropped 1 out-of-scope'))).toBe(true);
+  });
+
+  it('returns an out CRITICAL as scopeCandidate, not inside review.findings', async () => {
+    const llm = new MockLLMProvider('openai', {
+      structured: fixture([mk({ title: 'out-crit', scope: 'out', severity: 'CRITICAL', category: 'security' })]),
+    });
+    const diff = await new MockGitClient().diff();
+    const o = await reviewPullRequest({ systemPrompt: 's', model: 'm', diff, llm, intent, scopeFilter: true });
+    expect(o.review.findings).toHaveLength(0);
+    expect(o.review.score).toBe(100);
+    expect(o.scopeCandidate?.title).toBe('out-crit');
+  });
+
+  it('scopeFilter false (or no intent) → unchanged output', async () => {
+    const f = fixture([mk({ title: 'out-bug', scope: 'out' })]);
+    const diff = await new MockGitClient().diff();
+    const a = await reviewPullRequest({ systemPrompt: 's', model: 'm', diff, llm: new MockLLMProvider('openai', { structured: f }), intent, scopeFilter: false });
+    expect(a.review.findings).toHaveLength(1);
+    expect(a.scopeCandidate).toBeNull();
+    expect(a.assembly.intent).toContain('Add rate limiting');
+    const b = await reviewPullRequest({ systemPrompt: 's', model: 'm', diff, llm: new MockLLMProvider('openai', { structured: f }), scopeFilter: true });
+    expect(b.review.findings).toHaveLength(1);
+    expect(b.assembly.intent ?? null).toBeNull();
+  });
+});

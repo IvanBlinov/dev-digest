@@ -1,6 +1,12 @@
 import type { Container } from '../../platform/container.js';
-import type { Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
-import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
+import type { Finding, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
+import {
+  reviewPullRequest,
+  countBlockers,
+  withScopeSignal,
+  type ReviewIntent,
+  type ReviewOutcome,
+} from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
@@ -8,6 +14,8 @@ import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './reposit
 import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
+import { IntentService } from '../intent/service.js';
+import { pickSignal, signalDecisionLine, waitingLine, type ScopeComputation } from './scope-signal.js';
 import { runAgentsConcurrently } from './concurrency.js';
 import {
   blockedSkillsLogLine,
@@ -42,6 +50,31 @@ export type RunOutcome = {
   raw: Review;
 };
 
+/** Per-execution inputs shared by every agent of one review run. */
+interface ExecCtx {
+  workspaceId: string;
+  pull: PullRow;
+  repo: typeof schema.repos.$inferSelect;
+  diff: UnifiedDiff;
+  intent: ReviewIntent | null;
+  /** Fresh intent with confidence ≠ low → out-of-scope findings are filtered. */
+  scopeFilter: boolean;
+  runLog: RunLogger;
+  logger: Logger | undefined;
+}
+
+/** One agent's in-memory result between compute and finalize. */
+interface AgentComputation {
+  agent: AgentRow;
+  runId: string;
+  /** Index of the job in this execution (tie-break for the signal pick). */
+  order: number;
+  start: number;
+  runLog: RunLogger;
+  outcome: ReviewOutcome;
+  skillsPlan: ReturnType<typeof buildSkillsPrompt>;
+}
+
 /**
  * Owns the background execution of queued agent runs (extracted from
  * ReviewService; behaviour unchanged). Loads the diff + intent once, then
@@ -58,8 +91,15 @@ export class ReviewRunExecutor {
 
   /**
    * Background execution of the queued agent runs (NOT awaited by the route).
-   * Loads the diff + intent once, then map-reduces each agent, streaming events
-   * over the runBus and persisting each review. Per-agent failures are isolated.
+   * Loads the diff + intent once, then runs each agent (bounded concurrency),
+   * streaming events over the runBus and persisting each review. Per-agent
+   * failures are isolated.
+   *
+   * Scope filter OFF (no/stale/low-confidence intent): each queue task computes
+   * AND finalizes its agent — today's behaviour and timing.
+   * Scope filter ON: phase 1 only computes; once every agent has settled the
+   * executor picks ONE out-of-scope signal across all agents, then phase 2
+   * finalizes (persists) the runs in job order. See `runWithScopeSignal`.
    */
   async executeRuns(
     workspaceId: string,
@@ -112,240 +152,370 @@ export class ReviewRunExecutor {
       await failAll(`Failed to load PR diff: ${(err as Error).message}`);
       return;
     }
+
+    // PR intent (optional prompt slot): load the stored one or classify once for
+    // the whole execution. Never fails the run — see IntentService.forReview.
+    const { intent, scopeFilter } = await runLog.step(
+      'Loading PR intent',
+      () => new IntentService(this.container).forReview(workspaceId, pull, repo, diff, (m, d) => runLog.info(m, d)),
+      { kind: 'tool' },
+    );
     runLog.info(`Diff ready — ${diff.files.length} changed file(s); starting ${jobs.length} agent run(s)`);
 
-    // Agents of one review run concurrently (bounded by REVIEW_AGENT_CONCURRENCY);
-    // each run logs to its own stream and persists its own failure.
-    await runAgentsConcurrently(jobs, this.container.config.reviewAgentConcurrency, async ({ agent, runId }) => {
-      const agentStart = Date.now();
-      logger?.info(
-        { runId, agent: agent.name, provider: agent.provider, model: agent.model, prId: pull.id },
-        `review: agent "${agent.name}" started (${agent.provider}/${agent.model})`,
-      );
-      try {
-        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog);
-        logger?.info(
-          {
-            runId,
-            agent: agent.name,
-            findings: outcome.findings.length,
-            grounding: outcome.grounding,
-            durationMs: Date.now() - agentStart,
-          },
-          `review: agent "${agent.name}" done — ${outcome.findings.length} finding(s)`,
-        );
-      } catch (err) {
-        // runOneAgent already persisted the failure/cancel (status + error +
-        // trace) and completed the bus; here we only log at the run level.
-        const cancelled = err instanceof RunCancelledError;
-        logger?.[cancelled ? 'info' : 'error'](
-          { runId, agent: agent.name, err: (err as Error).message, durationMs: Date.now() - agentStart },
-          `review: agent "${agent.name}" ${cancelled ? 'cancelled' : 'failed'}`,
-        );
-      }
-    });
+    const ctx: ExecCtx = { workspaceId, pull, repo, diff, intent, scopeFilter, runLog, logger };
+    const concurrency = this.container.config.reviewAgentConcurrency;
+
+    if (!scopeFilter) {
+      // Each run finishes (and persists) on its own, as soon as its agent is done.
+      await runAgentsConcurrently(jobs, concurrency, async (job) => {
+        const order = jobs.indexOf(job);
+        const startedAt = this.logAgentStart(ctx, job);
+        try {
+          const comp = await this.computeAgent(ctx, job, order, startedAt);
+          const outcome = await this.finalizeAgent(ctx, comp, null);
+          this.logAgentDone(ctx, comp, outcome);
+        } catch (err) {
+          await this.failAgent(ctx, job, startedAt, err);
+        }
+      });
+      return;
+    }
+    await this.runWithScopeSignal(ctx, jobs, concurrency);
   }
 
-  /** Execute a single agent's review against a PR, streaming progress. */
-  private async runOneAgent(
-    workspaceId: string,
-    pull: PullRow,
-    repo: typeof schema.repos.$inferSelect,
-    diff: UnifiedDiff,
-    agent: AgentRow,
-    runId: string,
-    parentLog: RunLogger,
-  ): Promise<RunOutcome> {
-    const start = Date.now();
+  /**
+   * Scope filter ON — exactly one out-of-scope signal per review execution.
+   * Phase 1 computes every agent (nothing persisted; runs stay `running`);
+   * then ONE signal is picked across agents (severity → confidence → job order
+   * → file → line → title, so completion order never matters); phase 2
+   * finalizes the surviving runs in job order, the winner's agent carrying the
+   * signal. A rejected alternative — finishing runs early and patching the
+   * winner's review afterwards — would show `done` runs that change later.
+   */
+  private async runWithScopeSignal(
+    ctx: ExecCtx,
+    jobs: { agent: AgentRow; runId: string }[],
+    concurrency: number,
+  ): Promise<void> {
+    const comps: (AgentComputation | null)[] = jobs.map(() => null);
+
+    // ---- Phase 1: compute only ---------------------------------------------
+    await runAgentsConcurrently(jobs, concurrency, async (job) => {
+      const order = jobs.indexOf(job);
+      const startedAt = this.logAgentStart(ctx, job);
+      try {
+        const comp = await this.computeAgent(ctx, job, order, startedAt);
+        comps[order] = comp;
+        if (jobs.length > 1) comp.runLog.info(waitingLine(jobs.length - 1));
+      } catch (err) {
+        // A compute failure is persisted now and contributes no candidate.
+        await this.failAgent(ctx, job, startedAt, err);
+      }
+    });
+
+    // Runs the user cancelled while we waited are already marked + completed by
+    // `cancelRun` (which also clears the cancel flag, hence the isComplete check).
+    const survivors = comps.filter((c): c is AgentComputation => c !== null && !this.isAborted(c.runId));
+    if (survivors.length === 0) return;
+
+    // ---- Pick one signal across agents -------------------------------------
+    const toComputation = (c: AgentComputation): ScopeComputation => ({
+      order: c.order,
+      agentName: c.agent.name,
+      candidate: c.outcome.scopeCandidate,
+    });
+    const fanOut = (list: AgentComputation[]) =>
+      new RunLogger(this.container.runBus, list.map((c) => c.runId), ctx.logger, { prId: ctx.pull.id });
+    const dropped = survivors.reduce((n, c) => n + c.outcome.scopeDropped.length, 0);
+    let pick = pickSignal(survivors.map(toComputation));
+    const decision = fanOut(survivors);
+    decision.info(signalDecisionLine(pick.winner, pick.losers.length));
+    if (dropped > 0) decision.info(`Scope filter dropped ${dropped} other out-of-scope finding(s) across agents`);
+
+    // ---- Phase 2: finalize in job order --------------------------------------
+    for (let i = 0; i < survivors.length; i++) {
+      const comp = survivors[i]!;
+      if (this.isAborted(comp.runId)) continue; // cancelled during the wait or an earlier finalize
+      const signal = pick.winner && pick.winner.order === comp.order ? pick.winner.finding : null;
+      const job = { agent: comp.agent, runId: comp.runId };
+      try {
+        const outcome = await this.finalizeAgent(ctx, comp, signal);
+        this.logAgentDone(ctx, comp, outcome);
+      } catch (err) {
+        await this.failAgent(ctx, job, comp.start, err);
+        if (!signal) continue;
+        // The run holding the signal failed to persist: re-pick among runs not yet finalized.
+        const rest = survivors.slice(i + 1).filter((c) => !this.isAborted(c.runId));
+        pick = pickSignal(rest.map(toComputation));
+        if (rest.length > 0) {
+          fanOut(rest).info(
+            pick.winner
+              ? `Signal holder failed — re-picked. ${signalDecisionLine(pick.winner, pick.losers.length)}`
+              : 'Out-of-scope signal lost: the run holding it failed and no other candidate remains',
+          );
+        }
+      }
+    }
+  }
+
+  /** A run that was cancelled (or otherwise already completed on the bus) must not be finalized. */
+  private isAborted(runId: string): boolean {
+    return this.container.runBus.isCancelled(runId) || this.container.runBus.isComplete(runId);
+  }
+
+  private logAgentStart(ctx: ExecCtx, { agent, runId }: { agent: AgentRow; runId: string }): number {
+    ctx.logger?.info(
+      { runId, agent: agent.name, provider: agent.provider, model: agent.model, prId: ctx.pull.id },
+      `review: agent "${agent.name}" started (${agent.provider}/${agent.model})`,
+    );
+    return Date.now();
+  }
+
+  private logAgentDone(ctx: ExecCtx, comp: AgentComputation, outcome: RunOutcome): void {
+    ctx.logger?.info(
+      {
+        runId: comp.runId,
+        agent: comp.agent.name,
+        findings: outcome.findings.length,
+        grounding: outcome.grounding,
+        durationMs: Date.now() - comp.start,
+      },
+      `review: agent "${comp.agent.name}" done — ${outcome.findings.length} finding(s)`,
+    );
+  }
+
+  /**
+   * Compute one agent's review IN MEMORY (LLM + engine). Persists nothing and
+   * never completes the run — `finalizeAgent` / `failAgent` own that.
+   */
+  private async computeAgent(
+    ctx: ExecCtx,
+    { agent, runId }: { agent: AgentRow; runId: string },
+    order: number,
+    start: number,
+  ): Promise<AgentComputation> {
+    const { pull, repo, diff, intent } = ctx;
     // Narrow the fanned-out pre-work logger to THIS run; the shared diff/intent
-    // events are already in this run's buffer, so the persisted trace below
+    // events are already in this run's buffer, so the persisted trace
     // (built from the buffer) includes them too.
-    const runLog = parentLog.forRun(runId, { agent: agent.name });
+    const runLog = ctx.runLog.forRun(runId, { agent: agent.name });
 
     runLog.info(`Starting review with agent "${agent.name}" (${agent.provider}/${agent.model})`);
 
-    try {
-      // Resolve the agent's LLM provider. (container.llm throws if the provider
-      // key is missing — caught below and persisted as a failed run.)
-      const llm = await runLog.step(
-        `Resolving ${agent.provider} provider`,
-        () => this.container.llm(agent.provider as Provider),
-        { kind: 'tool' },
-      );
+    // Resolve the agent's LLM provider. (container.llm throws if the provider
+    // key is missing — persisted by failAgent as a failed run.)
+    const llm = await runLog.step(
+      `Resolving ${agent.provider} provider`,
+      () => this.container.llm(agent.provider as Provider),
+      { kind: 'tool' },
+    );
 
-      // Per-agent repo-intel toggle (Agent editor). When an agent opts out we
-      // skip all enrichment entirely so its prompt is identical to the
-      // repo-intel-off baseline — independent of the global REPO_INTEL_ENABLED
-      // flag, which still gates the facade internally.
-      const repoIntelOn = agent.repoIntel !== false;
-      if (!repoIntelOn) runLog.info('Repo intel disabled for this agent — skipping context enrichment');
+    // Per-agent repo-intel toggle (Agent editor). When an agent opts out we
+    // skip all enrichment entirely so its prompt is identical to the
+    // repo-intel-off baseline — independent of the global REPO_INTEL_ENABLED
+    // flag, which still gates the facade internally.
+    const repoIntelOn = agent.repoIntel !== false;
+    if (!repoIntelOn) runLog.info('Repo intel disabled for this agent — skipping context enrichment');
 
-      // T1.3 — callers-in-prompt. Best-effort: when repo-intel is off the facade
-      // returns []; we omit the section and behavior is identical to the
-      // pre-T1.3 prompt (acceptance #10).
-      const callersDigest = repoIntelOn
-        ? await this.buildCallersDigest(pull.repoId, diff, runLog)
-        : undefined;
+    // T1.3 — callers-in-prompt. Best-effort: when repo-intel is off the facade
+    // returns []; we omit the section and behavior is identical to the
+    // pre-T1.3 prompt (acceptance #10).
+    const callersDigest = repoIntelOn ? await this.buildCallersDigest(pull.repoId, diff, runLog) : undefined;
 
-      // T3 — repo skeleton + "changed files are top-5%" framing. Both best-
-      // effort: when repo-intel is off / unindexed the facade degrades and the
-      // prompt is identical to the pre-T3 shape.
-      const repoMap = repoIntelOn ? await this.buildRepoMapDigest(pull.repoId, runLog) : undefined;
-      const rankNote = repoIntelOn ? await this.buildRankNote(pull.repoId, diff, runLog) : '';
+    // T3 — repo skeleton + "changed files are top-5%" framing. Both best-
+    // effort: when repo-intel is off / unindexed the facade degrades and the
+    // prompt is identical to the pre-T3 shape.
+    const repoMap = repoIntelOn ? await this.buildRepoMapDigest(pull.repoId, runLog) : undefined;
+    const rankNote = repoIntelOn ? await this.buildRankNote(pull.repoId, diff, runLog) : '';
 
-      const task = taskLine(pull) + rankNote;
+    const task = taskLine(pull) + rankNote;
 
-      // L02 — the agent's effective skills (link.enabled AND skill.enabled, in
-      // link order) become `### Skill:` blocks in the prompt, in that order.
-      // A lookup failure fails the run: a review silently missing its rules
-      // would look valid but answer a different question.
-      // L03b — skills with prompt-injection findings never reach the prompt,
-      // even when their link is enabled; the run log names them.
-      const { allowed: usableSkills, blocked: blockedSkills } = partitionBlockedSkills(
-        await this.skills.effectiveSkillsForAgent(agent.id),
-      );
-      const blockedLine = blockedSkillsLogLine(blockedSkills);
-      if (blockedLine) runLog.info(blockedLine);
-      const skillsPlan = buildSkillsPrompt(usableSkills, this.container.tokenizer);
-      runLog.info(skillsLogLine(skillsPlan));
+    // L02 — the agent's effective skills (link.enabled AND skill.enabled, in
+    // link order) become `### Skill:` blocks in the prompt, in that order.
+    // A lookup failure fails the run: a review silently missing its rules
+    // would look valid but answer a different question.
+    // L03b — skills with prompt-injection findings never reach the prompt,
+    // even when their link is enabled; the run log names them.
+    const { allowed: usableSkills, blocked: blockedSkills } = partitionBlockedSkills(
+      await this.skills.effectiveSkillsForAgent(agent.id),
+    );
+    const blockedLine = blockedSkillsLogLine(blockedSkills);
+    if (blockedLine) runLog.info(blockedLine);
+    const skillsPlan = buildSkillsPrompt(usableSkills, this.container.tokenizer);
+    runLog.info(skillsLogLine(skillsPlan));
 
-      // ---- Engine: assemble → single-pass → grounding -----------------------
-      // The pure review pipeline lives in @devdigest/reviewer-core (shared with
-      // the CI runner). The service owns only I/O: repo-intel context resolution
-      // above, and persistence + observability below.
-      const outcome = await reviewPullRequest({
-        systemPrompt: agent.systemPrompt,
+    // ---- Engine: assemble → single-pass → grounding -----------------------
+    // The pure review pipeline lives in @devdigest/reviewer-core (shared with
+    // the CI runner). The service owns only I/O: repo-intel context resolution
+    // above, and persistence + observability in finalizeAgent.
+    const outcome = await reviewPullRequest({
+      systemPrompt: agent.systemPrompt,
+      model: agent.model,
+      diff,
+      llm,
+      // Per-agent review strategy (configured in the Agent editor); falls back
+      // to the studio default. single-pass = whole diff in one call.
+      strategy: agent.strategy ?? REVIEW_STRATEGY,
+      // T1.3 — pass the callers digest only when we built one. assemblePrompt
+      // omits the section when this is empty/undefined.
+      ...(callersDigest ? { callers: callersDigest } : {}),
+      // T3 — repo skeleton, same omit-when-empty contract.
+      ...(repoMap ? { repoMap } : {}),
+      // L02 — omitted when no skill is enabled (prompt identical to pre-L02).
+      ...(skillsPlan.texts.length > 0 ? { skills: skillsPlan.texts } : {}),
+      // PR author's description/body — untrusted; assemblePrompt wraps +
+      // truncates it. Omitted when the PR has no body.
+      ...(pull.body ? { prDescription: pull.body } : {}),
+      // PR intent — an unverified hypothesis (untrusted-wrapped by assemblePrompt).
+      // The scope filter is on only for a fresh, non-low-confidence intent.
+      ...(intent ? { intent } : {}),
+      ...(intent && ctx.scopeFilter ? { scopeFilter: true } : {}),
+      task,
+      sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
+      onEvent: (e) => runLog.event(e.kind, e.msg, e.data),
+      checkCancelled: () => {
+        if (this.container.runBus.isCancelled(runId)) throw new RunCancelledError();
+      },
+    });
+
+    return { agent, runId, order, start, runLog, outcome, skillsPlan };
+  }
+
+  /**
+   * Persist a computed agent run: review + findings (+ the cross-agent
+   * out-of-scope `signal` when this agent holds it), agent_runs row, trace.
+   * Completes the run on the bus. Throws on failure (callers use `failAgent`).
+   */
+  private async finalizeAgent(
+    ctx: ExecCtx,
+    comp: AgentComputation,
+    signal: Finding | null,
+  ): Promise<RunOutcome> {
+    const { workspaceId, pull } = ctx;
+    const { agent, runId, runLog, outcome, skillsPlan } = comp;
+    const { tokensIn, tokensOut, grounding, costUsd } = outcome;
+
+    // Score and findings include the signal (withScopeSignal recomputes the score).
+    const finalReview = withScopeSignal(outcome.review, signal);
+    if (signal) runLog.info(`Keeping out-of-scope signal "${signal.title}" in this review`);
+    const keptFindings = finalReview.findings;
+
+    // ---- Persist review + findings ----------------------------------------
+    const review = await this.repo.insertReview({
+      workspaceId,
+      prId: pull.id,
+      agentId: agent.id,
+      runId,
+      kind: 'review',
+      verdict: finalReview.verdict,
+      summary: finalReview.summary,
+      score: finalReview.score,
+      model: agent.model,
+    });
+    const findingRows = await this.repo.insertFindings(review.id, keptFindings);
+    runLog.result(`Persisted review ${review.id} with ${findingRows.length} finding(s)`);
+
+    // Mark the commit this review ran against so the PR list can tell
+    // reviewed / needs-review (head moved) / stale apart.
+    await this.repo.markReviewed(pull.id, pull.headSha);
+
+    const durationMs = Date.now() - comp.start;
+
+    // Deterministic blocker count (severity ≥ the agent's gate) — the signal
+    // the timeline colors on, NOT the model's self-reported verdict.
+    const blockers = countBlockers(keptFindings, agent.ciFailOn);
+
+    // ---- Observability: agent_runs + ONE run_traces document --------------
+    await this.repo.completeAgentRun(runId, {
+      status: 'done',
+      durationMs,
+      tokensIn,
+      tokensOut,
+      findingsCount: findingRows.length,
+      grounding,
+      score: finalReview.score,
+      blockers,
+      error: null,
+      costUsd,
+    });
+
+    const trace: RunTrace = {
+      config: {
+        agent: agent.name,
+        version: String(agent.version),
+        provider: agent.provider,
         model: agent.model,
-        diff,
-        llm,
-        // Per-agent review strategy (configured in the Agent editor); falls back
-        // to the studio default. single-pass = whole diff in one call.
-        strategy: agent.strategy ?? REVIEW_STRATEGY,
-        // T1.3 — pass the callers digest only when we built one. assemblePrompt
-        // omits the section when this is empty/undefined.
-        ...(callersDigest ? { callers: callersDigest } : {}),
-        // T3 — repo skeleton, same omit-when-empty contract.
-        ...(repoMap ? { repoMap } : {}),
-        // L02 — omitted when no skill is enabled (prompt identical to pre-L02).
-        ...(skillsPlan.texts.length > 0 ? { skills: skillsPlan.texts } : {}),
-        // PR author's description/body — untrusted; assemblePrompt wraps +
-        // truncates it. Omitted when the PR has no body.
-        ...(pull.body ? { prDescription: pull.body } : {}),
-        task,
-        sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
-        onEvent: (e) => runLog.event(e.kind, e.msg, e.data),
-        checkCancelled: () => {
-          if (this.container.runBus.isCancelled(runId)) throw new RunCancelledError();
-        },
-      });
-      const { tokensIn, tokensOut, grounding, costUsd } = outcome;
-
-      const keptFindings = outcome.review.findings;
-
-      // ---- Persist review + findings ----------------------------------------
-      const review = await this.repo.insertReview({
-        workspaceId,
-        prId: pull.id,
-        agentId: agent.id,
-        runId,
-        kind: 'review',
-        verdict: outcome.review.verdict,
-        summary: outcome.review.summary,
-        score: outcome.review.score,
-        model: agent.model,
-      });
-      const findingRows = await this.repo.insertFindings(review.id, keptFindings);
-      runLog.result(`Persisted review ${review.id} with ${findingRows.length} finding(s)`);
-
-      // Mark the commit this review ran against so the PR list can tell
-      // reviewed / needs-review (head moved) / stale apart.
-      await this.repo.markReviewed(pull.id, pull.headSha);
-
-      const durationMs = Date.now() - start;
-
-      // Deterministic blocker count (severity ≥ the agent's gate) — the signal
-      // the timeline colors on, NOT the model's self-reported verdict.
-      const blockers = countBlockers(keptFindings, agent.ciFailOn);
-
-      // ---- Observability: agent_runs + ONE run_traces document --------------
-      await this.repo.completeAgentRun(runId, {
-        status: 'done',
-        durationMs,
-        tokensIn,
-        tokensOut,
-        findingsCount: findingRows.length,
+        pr: pull.number,
+        source: 'local',
+      },
+      stats: {
+        duration_ms: durationMs,
+        tokens_in: tokensIn,
+        tokens_out: tokensOut,
+        findings: findingRows.length,
         grounding,
-        score: outcome.review.score,
-        blockers,
-        error: null,
-        costUsd,
-      });
+        cost_usd: costUsd,
+      },
+      prompt_assembly: {
+        ...outcome.assembly,
+        skills_blocks: skillsPlan.blocks.length > 0 ? skillsPlan.blocks : null,
+        skills_tokens: skillsPlan.totalTokens,
+      },
+      tool_calls: outcome.chunks.map((c) => ({
+        tool: 'review_file',
+        args: c.label,
+        meta: outcome.mode,
+        ms: Math.round(durationMs / Math.max(outcome.chunks.length, 1)),
+      })),
+      raw_output: outcome.raw,
+      memory_pulled: [],
+      specs_read: [],
+      // Persisted log = the run's FULL event buffer (incl. shared pre-work:
+      // diff load + intent), not just events recorded inside this method.
+      log: runLog.logFor(runId),
+    };
+    runLog.info('Run complete; trace persisted');
+    await this.repo.saveRunTrace(runId, trace);
+    this.container.runBus.complete(runId);
 
-      const trace: RunTrace = {
-        config: {
-          agent: agent.name,
-          version: String(agent.version),
-          provider: agent.provider,
-          model: agent.model,
-          pr: pull.number,
-          source: 'local',
-        },
-        stats: {
-          duration_ms: durationMs,
-          tokens_in: tokensIn,
-          tokens_out: tokensOut,
-          findings: findingRows.length,
-          grounding,
-          cost_usd: costUsd,
-        },
-        prompt_assembly: {
-          ...outcome.assembly,
-          skills_blocks: skillsPlan.blocks.length > 0 ? skillsPlan.blocks : null,
-          skills_tokens: skillsPlan.totalTokens,
-        },
-        tool_calls: outcome.chunks.map((c) => ({
-          tool: 'review_file',
-          args: c.label,
-          meta: outcome.mode,
-          ms: Math.round(durationMs / Math.max(outcome.chunks.length, 1)),
-        })),
-        raw_output: outcome.raw,
-        memory_pulled: [],
-        specs_read: [],
-        // Persisted log = the run's FULL event buffer (incl. shared pre-work:
-        // diff load + intent), not just events recorded inside this method.
-        log: runLog.logFor(runId),
-      };
-      runLog.info('Run complete; trace persisted');
-      await this.repo.saveRunTrace(runId, trace);
-      this.container.runBus.complete(runId);
+    return { review, findings: findingRows, grounding, raw: finalReview };
+  }
 
-      return { review, findings: findingRows, grounding, raw: outcome.review };
-    } catch (err) {
-      // Failure/cancel: persist status + the error text + the log-so-far so the
-      // run (and WHY it failed) is visible on the UI after a reload.
-      const cancelled = err instanceof RunCancelledError;
-      const status = cancelled ? 'cancelled' : 'failed';
-      const msg = cancelled ? 'Cancelled by user' : (err as Error).message;
-      runLog.error(cancelled ? 'Run cancelled by user' : `Run failed: ${msg}`);
-      await this.repo
-        .completeAgentRun(runId, {
-          status,
-          durationMs: Date.now() - start,
-          tokensIn: 0,
-          tokensOut: 0,
-          findingsCount: 0,
-          grounding: '0/0 passed',
-          error: msg,
-          costUsd: null,
-        })
-        .catch(() => undefined);
-      await this.repo
-        .saveRunTrace(runId, this.traceFromBuffer(runId, pull, agent, '0/0 passed', Date.now() - start))
-        .catch(() => undefined);
-      this.container.runBus.complete(runId);
-      throw err;
-    }
+  /**
+   * Failure/cancel: persist status + the error text + the log-so-far so the
+   * run (and WHY it failed) is visible on the UI after a reload. Never throws.
+   */
+  private async failAgent(
+    ctx: ExecCtx,
+    { agent, runId }: { agent: AgentRow; runId: string },
+    start: number,
+    err: unknown,
+  ): Promise<void> {
+    const runLog = ctx.runLog.forRun(runId, { agent: agent.name });
+    const cancelled = err instanceof RunCancelledError;
+    const status = cancelled ? 'cancelled' : 'failed';
+    const msg = cancelled ? 'Cancelled by user' : (err as Error).message;
+    runLog.error(cancelled ? 'Run cancelled by user' : `Run failed: ${msg}`);
+    await this.repo
+      .completeAgentRun(runId, {
+        status,
+        durationMs: Date.now() - start,
+        tokensIn: 0,
+        tokensOut: 0,
+        findingsCount: 0,
+        grounding: '0/0 passed',
+        error: msg,
+        costUsd: null,
+      })
+      .catch(() => undefined);
+    await this.repo
+      .saveRunTrace(runId, this.traceFromBuffer(runId, ctx.pull, agent, '0/0 passed', Date.now() - start))
+      .catch(() => undefined);
+    this.container.runBus.complete(runId);
+    ctx.logger?.[cancelled ? 'info' : 'error'](
+      { runId, agent: agent.name, err: msg, durationMs: Date.now() - start },
+      `review: agent "${agent.name}" ${cancelled ? 'cancelled' : 'failed'}`,
+    );
   }
 
   /**

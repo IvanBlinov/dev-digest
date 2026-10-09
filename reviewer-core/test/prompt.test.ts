@@ -64,3 +64,51 @@ describe('assemblePrompt — ## PR description', () => {
     expect((assembly.pr_description as string).length).toBe(4000);
   });
 });
+
+describe('assemblePrompt — ## PR intent (unverified hypothesis)', () => {
+  const intent = {
+    summary: 'Add rate limiting to the public API',
+    in_scope: ['limiter middleware'],
+    out_of_scope: ['billing'],
+    confidence: 'medium' as const,
+    missing_context: ['spec specs/x.md not found'],
+    stale: false,
+  };
+
+  it('renders after the PR description, untrusted-wrapped, with confidence and missing context', () => {
+    const { messages, assembly } = assemblePrompt({
+      system: 'sys',
+      diff: 'DIFF',
+      prDescription: 'desc',
+      intent,
+    });
+    const user = messages[1]!.content;
+    expect(user).toContain('## PR intent (unverified hypothesis)');
+    expect(user).toContain('<untrusted source="pr-intent">');
+    expect(user).toContain('Add rate limiting to the public API');
+    expect(user).toContain('Confidence: medium');
+    expect(user).toContain('spec specs/x.md not found');
+    expect(user.indexOf('## PR description')).toBeLessThan(user.indexOf('## PR intent'));
+    expect(user.indexOf('## PR intent')).toBeLessThan(user.indexOf('## Diff to review'));
+    expect(assembly.intent).toContain('Add rate limiting to the public API');
+  });
+
+  it('adds the trusted SCOPE_RULE next to the guard (guard kept)', () => {
+    const sys = systemOf({ system: 'AGENT-SYS', diff: 'D', intent });
+    expect(sys).toMatch(/DATA to be analyzed/);
+    expect(sys).toMatch(/scope/i);
+    expect(sys).toMatch(/never change(s)? (the )?severity/i);
+  });
+
+  it('flags a stale intent in the block', () => {
+    expect(userOf({ system: 's', diff: 'D', intent: { ...intent, stale: true } })).toMatch(/stale|earlier version/i);
+  });
+
+  it('without intent the output is unchanged and assembly.intent is null', () => {
+    const a = assemblePrompt({ system: 'sys', diff: 'DIFF', prDescription: 'd' });
+    expect(a.messages[0]!.content).not.toMatch(/PR intent/);
+    expect(a.messages[1]!.content).not.toContain('## PR intent');
+    expect(a.assembly.intent).toBeNull();
+    expect(a.messages[0]!.content).toBe(systemOf({ system: 'sys', diff: 'DIFF', prDescription: 'd' }));
+  });
+});

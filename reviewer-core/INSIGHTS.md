@@ -2,6 +2,12 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-08 — [Security] The scope filter is a deterministic partition that always keeps one serious out-of-scope signal
+Context: "ignore everything outside the PR's stated scope" is a way for an author to hide a real defect (the intent text is author-controlled).
+Decision: scope is only a tag from the model; `partitionByScope` drops out-of-scope findings but keeps the single best CRITICAL / security-WARNING one as `scopeCandidate`, `pickScopeSignal` chooses one across agents with a total order (so completion order never matters), the filter is off for stale or low-confidence intents, and severity is never changed by scope. CI callers use `withScopeSignal` so a single run also yields at most one signal.
+Consequence: a real security defect outside the PR's intent surfaces at most once per execution instead of vanishing; non-security out-of-scope findings are dropped and only logged.
+Proof: `reviewer-core/src/review/scope.ts:54`, `reviewer-core/src/review/scope.ts:71`
+
 ## 2026-09-30 — [Pitfall] `OpenRouterProvider` ignored the per-request `timeoutMs`
 Symptom: a review / conventions call against a slow model hung for 5–12 minutes although callers passed `timeoutMs`.
 Cause: the timeout was only set on the OpenAI client (90 s default) and the SDK retries; `req.timeoutMs` never reached `chat.completions.create`.

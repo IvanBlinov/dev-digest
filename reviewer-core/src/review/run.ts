@@ -7,7 +7,8 @@ import type {
   UnifiedDiff,
 } from '@devdigest/shared';
 import { Review as ReviewSchema } from '@devdigest/shared';
-import { assemblePrompt } from '../prompt.js';
+import { assemblePrompt, type ReviewIntent } from '../prompt.js';
+import { partitionByScope } from './scope.js';
 import { groundFindings, groundingSummary } from '../grounding.js';
 import { reduceReviews, scoreFromFindings, sliceDiff } from './reduce.js';
 
@@ -71,6 +72,14 @@ export interface ReviewInput {
   /** PR author's description/body (untrusted; truncated + delimiter-wrapped in
       the prompt). Empty/undefined → section omitted. */
   prDescription?: string;
+  /** Stored PR intent (unverified hypothesis); undefined → prompt unchanged. */
+  intent?: ReviewIntent;
+  /**
+   * Drop out-of-scope findings (keeping at most ONE eligible candidate, returned
+   * as `scopeCandidate`). Default false; ignored without an `intent`. The caller
+   * decides when the filter is trustworthy (fresh intent, confidence ≠ low).
+   */
+  scopeFilter?: boolean;
   /** Task framing line, e.g. "Review PR #482 …". */
   task?: string;
   /** Override the structured-output retry budget. */
@@ -99,6 +108,10 @@ export interface ReviewOutcome {
   grounding: string;
   /** Findings dropped by grounding, with reasons (for logs / "never go silent"). */
   dropped: { finding: Finding; reason: string }[];
+  /** The single best out-of-scope signal candidate (CRITICAL / security WARNING), or null. Not in `review.findings`. */
+  scopeCandidate: Finding | null;
+  /** Out-of-scope findings removed by the scope filter, with reasons. */
+  scopeDropped: { finding: Finding; reason: string }[];
   /** Which path ran. */
   mode: ReviewMode;
   /** Prompt assembly (for the run trace). Single-pass: the one call; map-reduce: the whole-diff assembly. */
@@ -135,6 +148,7 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
     callers: input.callers,
     repoMap: input.repoMap,
     prDescription: input.prDescription,
+    intent: input.intent,
     task: input.task,
   };
 
@@ -201,13 +215,30 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
   }
   emit('result', `Citation grounding: ${grounding}`);
 
-  // Score is derived from the findings that SURVIVED grounding (not the model's
-  // self-reported number, and not the pre-grounding set) so the score, the
-  // findings list, and the deterministic event always agree.
+  // Scope partition runs AFTER grounding so only real, cited findings compete.
+  const filterOn = Boolean(input.scopeFilter && input.intent);
+  const part = partitionByScope(ground.kept, { enabled: filterOn });
+  if (filterOn) {
+    for (const d of part.dropped) {
+      emit('info', `scope filter dropped "${d.finding.title}": ${d.reason}`);
+    }
+    emit(
+      'result',
+      `Scope filter: kept ${part.kept.length} in-scope, dropped ${part.dropped.length} out-of-scope, candidate ${
+        part.candidate ? `"${part.candidate.title}"` : 'none'
+      }`,
+    );
+  }
+
+  // Score is derived from the findings that SURVIVED grounding and the scope
+  // filter (not the model's self-reported number) so the score, the findings
+  // list, and the deterministic event always agree.
   return {
-    review: { ...merged, findings: ground.kept, score: scoreFromFindings(ground.kept) },
+    review: { ...merged, findings: part.kept, score: scoreFromFindings(part.kept) },
     grounding,
     dropped: ground.dropped,
+    scopeCandidate: part.candidate,
+    scopeDropped: part.dropped,
     mode,
     assembly,
     chunks: chunks.map((c) => ({ label: c.label })),

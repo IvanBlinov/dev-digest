@@ -25,6 +25,7 @@ receives exactly two messages:
 <your system_prompt>
 
 <INJECTION_GUARD>   // appended verbatim to EVERY agent, every run
+<SCOPE_RULE>        // only when a PR intent is supplied (see below)
 ```
 
 `INJECTION_GUARD` (`prompt.ts:16`) tells the model that everything inside
@@ -38,6 +39,7 @@ delimiter-wrapped (`prompt.ts:104-122`):
 ```
 <task line, e.g. "Review PR #7 '…'">
 ## PR description        (untrusted, author-controlled, truncated to 4000 chars)
+## PR intent (unverified hypothesis)  (untrusted, derived from the PR text; only when an intent exists)
 ## Skills / rules        (linked skill bodies)
 ## Relevant memory       (curated memory items)
 ## Repo skeleton         (untrusted, repo-derived)
@@ -45,6 +47,11 @@ delimiter-wrapped (`prompt.ts:104-122`):
 ## Callers of changed symbols  (untrusted, repo-derived)
 ## Diff to review        (untrusted)
 ```
+
+The intent block carries the summary, in/out-of-scope lists, confidence and missing
+context. When it is present the system message also gets the trusted `SCOPE_RULE`: tag
+every finding `scope: "in" | "out"`, scope never changes severity, report every real
+defect. Agent prompts need no change for this.
 
 Sections with no content are omitted. Everything repo- or author-derived is wrapped
 in `<untrusted source="…">…</untrusted>` so the model can tell instructions

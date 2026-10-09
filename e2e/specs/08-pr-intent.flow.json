@@ -1,0 +1,18 @@
+{
+  "name": "PR detail shows the Intent card above the results",
+  "description": "From PR #482, the seeded (fresh, medium-confidence) PR intent renders as a card above the Overview and Agent runs content: quoted summary, In scope / Out of scope columns and the confidence badge. Read-only seeded data (no model call, no Re-detect click). Assumes a freshly-seeded DB (see e2e/README.md).",
+  "steps": [
+    { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "land on the PR list" },
+    { "cmd": ["find", "text", "Add rate limiting to public API endpoints", "click"], "label": "open the PR row" },
+    { "cmd": ["wait", "--url", "/pulls/482"], "label": "navigate to the PR detail route" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "PR detail data settles" },
+    { "cmd": ["wait", "--text", "Add token-bucket rate limiting to the public API endpoints"], "label": "the seeded intent summary renders on Overview" },
+    { "cmd": ["wait", "--text", "In scope"], "label": "the In scope column renders" },
+    { "cmd": ["wait", "--text", "Out of scope"], "label": "the Out of scope column renders" },
+    { "cmd": ["wait", "--text", "Medium confidence"], "label": "the confidence badge renders" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Agent runs"], "label": "switch to the Agent runs tab" },
+    { "cmd": ["wait", "--url", "tab=findings"], "label": "findings tab is active in the URL" },
+    { "cmd": ["wait", "--text", "Add token-bucket rate limiting to the public API endpoints"], "label": "the intent card is still above the results" }
+  ]
+}

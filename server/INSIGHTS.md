@@ -2,6 +2,36 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-08 — [Pitfall] A review run that gains an LLM/GitHub call needs harness mocks, or tests hit the real services
+Symptom: after review runs started auto-classifying the PR intent, `reviews.it` / `reviews-skills.it` / `skills-injection.it` would call real OpenRouter/GitHub with whatever keys are in `~/.devdigest/secrets.json`.
+Cause: `buildApp` reads the real secrets file and the harnesses injected only an `openai` mock; every other provider and `github()` resolve to real clients.
+Rule: any `*.it.test.ts` that drives `POST /pulls/:id/review` injects `github: new MockGitHubClient()` and `llm.openrouter` (`test/helpers/intent-mocks.ts`); extend that helper when the review path gains another call.
+Proof: `server/src/platform/config.ts:79`, `server/test/helpers/intent-mocks.ts:17`, `server/test/reviews.it.test.ts:124`
+
+## 2026-10-08 — [Pitfall] Renaming a column makes `drizzle-kit generate` interactive
+Symptom: `pnpm db:generate` blocks on a "created or renamed?" prompt, which an agent cannot answer.
+Cause: drizzle-kit 0.30 asks whenever a column disappears and another appears in one diff.
+Rule: change the TS key only and keep the SQL name (`summary: text('intent')`); the migration then holds `ADD COLUMN` statements only.
+Proof: `server/src/db/schema/reviews.ts:56`, `server/src/db/migrations/0014_l03_intent_layer.sql:1`
+
+## 2026-10-08 — [Non-obvious behaviour] `RunBus.complete()` clears the cancel flag — detect cancellation with `isComplete` too
+Symptom: a run cancelled while it waits for the other agents would still be finalized, because `isCancelled()` is false again.
+Cause: `cancelRun` calls `cancel()`, marks the row, then `complete()`, and `complete()` deletes the run from the `cancelled` set (it stays in `completed`).
+Rule: code that must skip cancelled runs after the fact checks `isCancelled(id) || isComplete(id)` (valid only for runs the caller has not completed itself).
+Proof: `server/src/platform/sse.ts:79`, `server/src/modules/reviews/run-executor.ts:262`
+
+## 2026-10-08 — [Architectural decision] With the scope filter on, a review's runs complete together, after the cross-agent signal pick
+Context: "exactly one out-of-scope signal per review execution" needs every agent's candidate before any review is persisted; patching the winner's review after other runs finished would show `done` runs that change later and race the client's refetch.
+Decision: the executor splits an agent into compute (in memory) and finalize (persist). Filter off: compute+finalize per queue task as before. Filter on: compute all agents, pick one winner (severity → confidence → job order → file → line → title), then finalize in job order; a failed finalize of the winner re-picks among the runs not yet finalized.
+Consequence: with the filter on, fast agents stay `running` until the slowest agent settles (bounded by per-call timeouts); a crash in between leaves runs `running`, which the boot reaper fails.
+Proof: `server/src/modules/reviews/run-executor.ts:195`, `server/src/modules/reviews/scope-signal.ts:24`
+
+## 2026-10-08 — [Security] Intent classification: hunk headers only, and logs carry sizes, refs and statuses — never text
+Context: the classifier sends PR text, issues and docs to a third-party LLM and its inputs are author-controlled.
+Decision: files go in as paths plus `@@` header lines (the input type has no field for bodies and the builder drops non-`@@` lines); only same-repo issues/docs are fetched through the GitHub port (other hosts are recorded, never fetched); refs are stored sanitised (no query string/fragment/userinfo); errors are logged by class name or our own message, never the provider's text.
+Consequence: a log line or `missing_context` entry must never include body, issue or doc text; `intent.it.test.ts` greps a capturing logger for known marker strings.
+Proof: `server/src/modules/intent/helpers.ts:162`, `server/src/modules/intent/service.ts:52`, `reviewer-core/src/intent/prompt.ts:69`
+
 ## 2026-10-07 — [Performance] A review's agents run in parallel (bounded), not one after another
 Symptom: on a big PR "Run all" showed all 5 agents `running` for 10+ min — agents 2–5 were just queued behind agent 1's slow LLM call.
 Decision: `runAgentsConcurrently` (p-queue) runs the agents of one review at most `REVIEW_AGENT_CONCURRENCY` (default 4) at a time; each run keeps its own log stream and persists its own failure, so one failing agent never stops the others. `1` restores the old sequential behaviour.

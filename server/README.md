@@ -71,6 +71,9 @@ flowchart TB
   subgraph Review["Review & runs"]
     reviews["reviews<br/>/pulls/:id/review · /reviews · /findings/:id/(accept|dismiss)<br/>/runs/:id/(events|trace)"]
   end
+  subgraph IntentLayer["Intent layer"]
+    intent["intent<br/>GET/POST /pulls/:id/intent (POST 6/min) — classifies the PR's intent with the review_intent model"]
+  end
   subgraph Agents["Agents"]
     agents["agents<br/>/agents (+ findings by severity) · /agents/:id · /agents/:id/findings"]
   end
@@ -108,6 +111,23 @@ through `SecretsProvider` (`~/.devdigest/secrets.json`, mode `0600`, with
 Migrations are **not** applied on boot — run `pnpm db:migrate` (pgvector is
 enabled by migration `0000`). `pnpm db:seed` is idempotent demo data
 (`acme/payments-api`, PR #482, the two built-in agents).
+
+## PR intent and the scope filter (non-obvious)
+
+`modules/intent/` classifies what a PR is trying to do (one cheap, non-reasoning
+structured call; default `openrouter / openai/gpt-4.1-mini`, changeable under
+Settings → "PR Review · Intent") and stores it in `pr_intent`. The classifier sees the
+title, description, branch, commit messages, same-repo issues and `.md` plans/specs
+(fetched via the GitHub API at the head SHA) and the changed files with **hunk headers
+only — never hunk bodies**. A review run loads the stored intent, or classifies once
+when none exists (a failure only logs "Intent unavailable"). It reaches every agent as
+an unverified hypothesis and each finding is tagged `scope: in|out`.
+
+The scope filter is on only for a **fresh** intent with confidence ≠ low. Then the
+executor works in two phases (`run-executor.ts`): every agent computes first (runs stay
+`running`, the Live Log says "Waiting for N other agent(s)…"), **one** out-of-scope
+signal (CRITICAL, or WARNING in `security`) is picked across all agents, and then the
+runs are persisted together. With the filter off, each run finishes on its own as before.
 
 ## Review context (non-obvious)
 

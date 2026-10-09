@@ -3,6 +3,7 @@ import {
   Review,
   Finding,
   Intent,
+  PromptAssembly,
   BlastRadius,
   Risks,
   PrHistory,
@@ -71,8 +72,27 @@ describe('AI contracts parse fixtures', () => {
 
   it('Intent / BlastRadius / Risks / PrHistory', () => {
     expect(() =>
-      Intent.parse({ intent: 'x', in_scope: ['a'], out_of_scope: ['b'] }),
+      Intent.parse({
+        summary: 'x',
+        in_scope: ['a'],
+        out_of_scope: ['b'],
+        confidence: 'medium',
+        sources: [{ kind: 'issue', ref: '#471', status: 'ok' }],
+        missing_context: [],
+      }),
     ).not.toThrow();
+    // old shape (`intent:` field, no confidence/sources) is rejected
+    expect(() => Intent.parse({ intent: 'x', in_scope: ['a'], out_of_scope: ['b'] })).toThrow();
+    expect(() =>
+      Intent.parse({
+        summary: 'x',
+        in_scope: [],
+        out_of_scope: [],
+        confidence: 'high',
+        sources: [{ kind: 'issue', ref: '#1', status: 'maybe' }],
+        missing_context: [],
+      }),
+    ).toThrow();
     expect(() =>
       BlastRadius.parse({
         changed_symbols: [{ name: 'rateLimit', file: 'a.ts', kind: 'function' }],
@@ -233,5 +253,29 @@ describe('platform DTOs', () => {
         commits: [],
       }),
     ).not.toThrow();
+  });
+});
+
+describe('intent layer contracts', () => {
+  const base = {
+    id: 'f1',
+    severity: 'WARNING',
+    category: 'bug',
+    title: 't',
+    file: 'a.ts',
+    start_line: 1,
+    end_line: 2,
+    rationale: 'r',
+    confidence: 0.5,
+  };
+  it('Finding.scope is optional and limited to in|out', () => {
+    expect(() => Finding.parse(base)).not.toThrow();
+    expect(Finding.parse({ ...base, scope: 'out' }).scope).toBe('out');
+    expect(Finding.parse({ ...base, scope: null }).scope).toBeNull();
+    expect(() => Finding.parse({ ...base, scope: 'both' })).toThrow();
+  });
+  it('PromptAssembly parses without intent', () => {
+    expect(PromptAssembly.parse({ system: 's', user: 'u' }).intent).toBeUndefined();
+    expect(PromptAssembly.parse({ system: 's', user: 'u', intent: 'x' }).intent).toBe('x');
   });
 });
