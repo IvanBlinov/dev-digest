@@ -2,13 +2,18 @@ import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-/** Markdown renderer (replaces prototype mdLite). Inline + GFM. */
-export function Markdown({ children }: { children?: string | null }) {
+/**
+ * Markdown renderer (replaces prototype mdLite). Inline + GFM.
+ * `skipHtml` drops raw HTML (incl. `<!-- comments -->`) instead of showing it as escaped text —
+ * use it for author-written bodies such as PR descriptions.
+ */
+export function Markdown({ children, skipHtml = false }: { children?: string | null; skipHtml?: boolean }) {
   if (!children) return null;
   return (
     <div className="dd-md" style={{ fontSize: "inherit", lineHeight: 1.55 }}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        skipHtml={skipHtml}
         components={{
           p: ({ children }) => <p style={{ margin: "0 0 10px" }}>{children}</p>,
           strong: ({ children }) => (

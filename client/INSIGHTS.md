@@ -2,6 +2,12 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-12 — [Security] react-markdown shows raw HTML as escaped text unless `skipHtml` is set
+Symptom: the PR Description box showed `<!-- demo video goes here -->` literally after switching it to `<Markdown>`.
+Cause: react-markdown without `rehype-raw` never executes HTML (safe), but by default it renders raw HTML nodes as escaped text instead of dropping them.
+Rule: author-written bodies (PR descriptions) use `<Markdown skipHtml>`; never add `rehype-raw` for untrusted text. `javascript:` links are already dropped by react-markdown's default URL transform.
+Proof: `src/vendor/ui/primitives/Markdown.tsx:10`, `src/app/repos/[repoId]/pulls/[number]/_components/OverviewTab/OverviewTab.test.tsx:33`
+
 ## 2026-10-08 — [Non-obvious behaviour] Finding cards in the diff are expanded by default; the Agent runs tab keeps them collapsed
 Symptom: cards under a code line showed only the title, so rationale and Accept/Dismiss needed a click.
 Cause: `FindingCard` collapses unless `defaultExpanded` is passed; the annotation hook originally omitted it.

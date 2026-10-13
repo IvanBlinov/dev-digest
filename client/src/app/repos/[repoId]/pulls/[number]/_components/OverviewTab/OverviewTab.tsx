@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { SectionLabel } from "@devdigest/ui";
+import { Markdown, SectionLabel } from "@devdigest/ui";
 import { s } from "./styles";
 
 interface OverviewTabProps {
@@ -14,7 +14,10 @@ export function OverviewTab({ prBody }: OverviewTabProps) {
       {prBody && (
         <section>
           <SectionLabel icon="MessageSquare">Description</SectionLabel>
-          <div style={s.descriptionBox}>{prBody}</div>
+          {/* Author-controlled text: raw HTML is skipped and javascript: links are dropped. */}
+          <div style={s.descriptionBox}>
+            <Markdown skipHtml>{prBody}</Markdown>
+          </div>
         </section>
       )}
     </>
