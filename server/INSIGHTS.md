@@ -16,9 +16,9 @@ Proof: `server/src/modules/smart-diff/constants.ts:37`, `server/src/modules/smar
 
 ## 2026-10-08 — [Pitfall] Seeded `pr_files` patches feed `diff-loader`, so seed edits change what review `.it` tests see for PR #482
 Symptom: adding patches to the PR #482 seed rows changes the diff DB-backed review tests get when git has no diff.
-Cause: `loadDiff` falls back to `diffFromPrFiles`, which uses every `pr_files.patch`; the seed insert only runs when the PR is new, so existing dev DBs keep old rows.
-Rule: after touching the PR #482 seed, run the whole `.it` lane; use a fresh DB (never `down -v`) to see new rows.
-Proof: `server/src/modules/reviews/diff-loader.ts:33`, `server/src/db/seed.ts:167`
+Cause: `loadDiff` falls back to `diffFromPrFiles`, which uses every `pr_files.patch`; the PR #482 insert itself only runs when the PR is new.
+Rule: after touching the PR #482 seed, run the whole `.it` lane. Existing dev DBs pick up new files via `topUpPr482Files` (adds missing rows, fills null patches, only for the seed head SHA) on the next `pnpm db:seed` — keep `pr482Files` the single list. Never `down -v`.
+Proof: `server/src/modules/reviews/diff-loader.ts:33`, `server/src/db/seed.ts:99`, `server/test/seed-pr482-topup.it.test.ts`
 
 ## 2026-10-08 — [Security] `prompt.assembled` carries a manifest, never text; structured data must bypass `runLog`
 Symptom: it is tempting to log the prompt event through `runLog.info(msg, data)` so it shows in the Live Log.

@@ -32,8 +32,8 @@ to GitHub order (`?order=original`).
 
 ## Per-package work
 - server: `modules/smart-diff/{constants,helpers,service,routes}.ts` (no repository: reads reuse
-  `ReviewRepository`); seed PR #482 with 9 files and small patches (fresh DB needed, the insert is
-  guarded by "PR exists"). The seeded patches also feed `diff-loader`'s `pr_files` fallback.
+  `ReviewRepository`); seed PR #482 with 9 files and small patches (an existing dev DB is topped up on the next
+  `pnpm db:seed`; only the seeded PR, identified by its head SHA, is touched). The seeded patches also feed `diff-loader`'s `pr_files` fallback.
 - client: `useSmartDiff` hook (`["smart-diff", prId]`, invalidated when a run finishes), generic
   `DiffAnnotationApi` in `diff-viewer`, `DiffTab` helpers, `SmartGroupHeader`, i18n under
   `prReview.smartDiff`.
