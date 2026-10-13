@@ -69,6 +69,8 @@ export const PromptAssembly = z.object({
   repo_map: z.string().nullish(),
   /** PR author's description/body (truncated); null when absent. */
   pr_description: z.string().nullish(),
+  /** Rendered PR-intent block (unverified hypothesis); null when no intent was available. */
+  intent: z.string().nullish(),
   user: z.string(),
 });
 export type PromptAssembly = z.infer<typeof PromptAssembly>;
@@ -99,6 +101,8 @@ export const RunTrace = z.object({
     model: z.string(),
     pr: z.number().int().nullish(),
     source: z.enum(['local', 'ci']).default('local'),
+    /** Correlates this run's `prompt.assembled` log events. Absent on older traces. */
+    correlation_id: z.string().nullish(),
   }),
   stats: RunStats,
   prompt_assembly: PromptAssembly,

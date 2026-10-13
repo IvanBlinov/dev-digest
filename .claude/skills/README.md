@@ -19,6 +19,10 @@ Reusable AI skills that provide specialized knowledge and workflows. Canonical l
 | [security](security/SKILL.md) | Full-stack | OWASP Top 10:2025, auth, injection, uploads, secrets |
 | [engineering-insights](engineering-insights/SKILL.md) | Process | Always-on: record Pitfall / Non-obvious behaviour / Architectural decision / Performance / Security findings into the module INSIGHTS.md with date + file:line proof |
 | [pr-self-review](pr-self-review/SKILL.md) | Process (workflow) | Pre-PR self-review: scopes the branch diff, dispatches each changed path to the owning skills, runs package gates, returns one verdict report |
+| [shared-contracts](shared-contracts/SKILL.md) | Full-stack | Changing `@devdigest/shared` Zod contracts: server copy first, mirror client, optional vs nullable, consumers, gates |
+| [db-schema-change](db-schema-change/SKILL.md) | Backend | Schema → `db:generate --name` → `db:migrate`, never hand-edit migrations, `TEST_DATABASE_URL` for `.it.test.ts` |
+| [test-strategy](test-strategy/SKILL.md) | Process | Which test first, where it lives, how to stub, which command proves it; gates per package |
+| [e2e-flows](e2e-flows/SKILL.md) | E2E | Deterministic agent-browser flows in `e2e/specs/*.flow.json` over seeded data |
 | [mermaid-diagram](mermaid-diagram/SKILL.md) | Shared | Mermaid diagrams in markdown (flowcharts, sequence, ERD, …) |
 
 ## What Are Skills?

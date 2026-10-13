@@ -6,6 +6,7 @@ import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/platform/config.js';
 import { seed } from '../src/db/seed.js';
 import { MockLLMProvider, MockEmbedder, MockGitClient, MockGitHubClient } from '../src/adapters/mocks.js';
+import { intentMockLlm } from './helpers/intent-mocks.js';
 import * as t from '../src/db/schema.js';
 
 const hasDocker = await dockerAvailable();
@@ -63,7 +64,7 @@ d('skill injection guard (L03b, pg)', () => {
         embedder: new MockEmbedder(),
         git: new MockGitClient({ diff: DIFF }),
         github: new MockGitHubClient(),
-        ...(llm ? { llm: { openai: llm } } : {}),
+        llm: { ...(llm ? { openai: llm } : {}), openrouter: intentMockLlm() },
       },
     });
 

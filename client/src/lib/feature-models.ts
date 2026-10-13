@@ -21,9 +21,9 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
   {
     id: "review_intent",
     label: "PR Review · Intent",
-    description: "Derives a PR’s intent and scope before review.",
-    defaultProvider: "openai",
-    defaultModel: "gpt-4.1",
+    description: "Derives a PR’s intent and scope before review. Use a cheap, non-reasoning model.",
+    defaultProvider: "openrouter",
+    defaultModel: "openai/gpt-4.1-mini",
   },
   {
     id: "risk_brief",

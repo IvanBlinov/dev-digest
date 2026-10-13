@@ -7,8 +7,10 @@ import type {
   UnifiedDiff,
 } from '@devdigest/shared';
 import { Review as ReviewSchema } from '@devdigest/shared';
-import { assemblePrompt } from '../prompt.js';
+import { assemblePrompt, type ReviewIntent } from '../prompt.js';
+import { isProtectedFromScopeFilter, partitionByScope } from './scope.js';
 import { groundFindings, groundingSummary } from '../grounding.js';
+import type { PromptAssembledInfo, SectionMeter } from '../prompt-manifest.js';
 import { reduceReviews, scoreFromFindings, sliceDiff } from './reduce.js';
 
 /**
@@ -71,6 +73,14 @@ export interface ReviewInput {
   /** PR author's description/body (untrusted; truncated + delimiter-wrapped in
       the prompt). Empty/undefined → section omitted. */
   prDescription?: string;
+  /** Stored PR intent (unverified hypothesis); undefined → prompt unchanged. */
+  intent?: ReviewIntent;
+  /**
+   * Drop out-of-scope findings except serious ones (CRITICAL / security WARNING,
+   * always kept). Default false; ignored without an `intent`. The caller
+   * decides when the filter is trustworthy (fresh intent, confidence ≠ low).
+   */
+  scopeFilter?: boolean;
   /** Task framing line, e.g. "Review PR #482 …". */
   task?: string;
   /** Override the structured-output retry budget. */
@@ -82,6 +92,13 @@ export interface ReviewInput {
    * review group into one session in the OpenRouter dashboard.
    */
   sessionId?: string;
+  /** Injected token counter / digest for the prompt manifest (core stays pure). */
+  promptMeter?: SectionMeter;
+  /**
+   * Fired once per prompt build (single-pass: once; map-reduce: once per chunk),
+   * BEFORE the LLM call. Carries the content-free section manifest only.
+   */
+  onPromptAssembled?: (info: PromptAssembledInfo) => void;
   /** Progress sink. */
   onEvent?: (e: ReviewEvent) => void;
   /**
@@ -99,6 +116,8 @@ export interface ReviewOutcome {
   grounding: string;
   /** Findings dropped by grounding, with reasons (for logs / "never go silent"). */
   dropped: { finding: Finding; reason: string }[];
+  /** Out-of-scope findings removed by the scope filter, with reasons. */
+  scopeDropped: { finding: Finding; reason: string }[];
   /** Which path ran. */
   mode: ReviewMode;
   /** Prompt assembly (for the run trace). Single-pass: the one call; map-reduce: the whole-diff assembly. */
@@ -135,6 +154,7 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
     callers: input.callers,
     repoMap: input.repoMap,
     prDescription: input.prDescription,
+    intent: input.intent,
     task: input.task,
   };
 
@@ -159,7 +179,7 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
   let costUsd: number | null = 0;
   const raws: string[] = [];
 
-  for (const chunk of chunks) {
+  for (const [chunkIndex, chunk] of chunks.entries()) {
     // Cancellation checkpoint — stop before the next (expensive) LLM call.
     input.checkCancelled?.();
     // 'map:' prefix only for the map-reduce path (one call per file). In
@@ -169,8 +189,15 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
       mode === 'map-reduce' ? `map: reviewing ${chunk.label}` : `Reviewing ${chunk.label} in one pass`,
       { file: chunk.label },
     );
-    const a = assemblePrompt({ ...promptParts, diff: chunk.diffText });
+    const a = assemblePrompt({ ...promptParts, diff: chunk.diffText }, input.promptMeter);
     if (mode === 'single-pass') assembly = a.assembly;
+    input.onPromptAssembled?.({
+      sections: a.sections,
+      mode,
+      ...(mode === 'map-reduce'
+        ? { chunk: { index: chunkIndex, total: chunks.length, file: chunk.label } }
+        : {}),
+    });
     const res = await input.llm.completeStructured<Review>({
       model: input.model,
       schema: ReviewSchema,
@@ -201,13 +228,29 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
   }
   emit('result', `Citation grounding: ${grounding}`);
 
-  // Score is derived from the findings that SURVIVED grounding (not the model's
-  // self-reported number, and not the pre-grounding set) so the score, the
-  // findings list, and the deterministic event always agree.
+  // Scope partition runs AFTER grounding so only real, cited findings compete.
+  const filterOn = Boolean(input.scopeFilter && input.intent);
+  const part = partitionByScope(ground.kept, { enabled: filterOn });
+  if (filterOn) {
+    const serious = part.kept.filter(isProtectedFromScopeFilter).length;
+    const inScope = part.kept.length - serious;
+    for (const d of part.dropped) {
+      emit('info', `scope filter dropped "${d.finding.title}": ${d.reason}`);
+    }
+    emit(
+      'result',
+      `Scope filter: kept ${inScope} in-scope, kept ${serious} out-of-scope (serious), dropped ${part.dropped.length} out-of-scope`,
+    );
+  }
+
+  // Score is derived from the findings that SURVIVED grounding and the scope
+  // filter (not the model's self-reported number) so the score, the findings
+  // list, and the deterministic event always agree.
   return {
-    review: { ...merged, findings: ground.kept, score: scoreFromFindings(ground.kept) },
+    review: { ...merged, findings: part.kept, score: scoreFromFindings(part.kept) },
     grounding,
     dropped: ground.dropped,
+    scopeDropped: part.dropped,
     mode,
     assembly,
     chunks: chunks.map((c) => ({ label: c.label })),

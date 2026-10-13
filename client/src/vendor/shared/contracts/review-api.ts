@@ -59,8 +59,28 @@ export const ReviewRunResponse = z.object({
 export type ReviewRunResponse = z.infer<typeof ReviewRunResponse>;
 
 /** Intent persisted for a PR (the Intent plus the pr_id it scopes). */
-export const PrIntentRecord = Intent.extend({ pr_id: z.string() });
+export const PrIntentStaleReason = z.enum(['head_moved', 'description_changed', 'prompt_updated']);
+export type PrIntentStaleReason = z.infer<typeof PrIntentStaleReason>;
+
+export const PrIntentRecord = Intent.extend({
+  pr_id: z.string(),
+  head_sha: z.string().nullable(),
+  provider: z.string().nullable(),
+  model: z.string().nullable(),
+  prompt_version: z.string().nullable(),
+  tokens_in: z.number().int().nullable(),
+  tokens_out: z.number().int().nullable(),
+  duration_ms: z.number().int().nullable(),
+  cost_usd: z.number().nullable(),
+  detected_at: z.string(),
+  stale: z.boolean(),
+  stale_reason: PrIntentStaleReason.nullable(),
+});
 export type PrIntentRecord = z.infer<typeof PrIntentRecord>;
+
+/** GET/POST /pulls/:id/intent — `intent` is null before the first detection. */
+export const PrIntentResponse = z.object({ intent: PrIntentRecord.nullable() });
+export type PrIntentResponse = z.infer<typeof PrIntentResponse>;
 
 /** Smart-diff response for a PR (the SmartDiff). */
 export const SmartDiffResponse = SmartDiff;

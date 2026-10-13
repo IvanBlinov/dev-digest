@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import type { LLMProvider, StructuredResult } from '@devdigest/shared';
 import { MockLLMProvider, MockGitClient } from '../../server/src/adapters/mocks.js';
-import { reviewPullRequest } from '../src/index.js';
+import { reviewPullRequest, type PromptAssembledInfo } from '../src/index.js';
+import { scoreFromFindings } from '../src/review/reduce.js';
 
 /**
  * Engine-level test for reviewPullRequest (the core lifted out of the server's
@@ -174,5 +175,130 @@ describe('reviewPullRequest (engine)', () => {
     // With a single-file diff there is one call; with a multi-file diff the second is null — either way null.
     if (diff.files.length > 1) expect(outcome.costUsd).toBeNull();
     else expect(outcome.costUsd).toBeCloseTo(0.002, 9);
+  });
+});
+
+describe('reviewPullRequest — scope filter', () => {
+  const intent = {
+    summary: 'Add rate limiting',
+    in_scope: ['limiter'],
+    out_of_scope: ['config secrets'],
+    confidence: 'medium' as const,
+    missing_context: [],
+    stale: false,
+  };
+  const mk = (over: Record<string, unknown>) => ({
+    id: String(over.title),
+    severity: 'WARNING',
+    category: 'bug',
+    file: 'src/config.ts',
+    start_line: 11,
+    end_line: 11,
+    rationale: 'r',
+    confidence: 0.8,
+    kind: 'finding',
+    ...over,
+  });
+  const fixture = (findings: unknown[]) => ({ verdict: 'comment', summary: 's', score: 50, findings });
+
+  it('drops an out WARNING bug, scores in-scope only, emits the drop event', async () => {
+    const llm = new MockLLMProvider('openai', {
+      structured: fixture([mk({ title: 'in-one', scope: 'in', severity: 'SUGGESTION' }), mk({ title: 'out-bug', scope: 'out' })]),
+    });
+    const diff = await new MockGitClient().diff();
+    const events: string[] = [];
+    const o = await reviewPullRequest({
+      systemPrompt: 's', model: 'm', diff, llm, intent, scopeFilter: true,
+      onEvent: (e) => events.push(e.msg),
+    });
+    expect(o.review.findings.map((x) => x.title)).toEqual(['in-one']);
+    expect(o.review.score).toBe(97);
+    expect(o.scopeDropped.map((d) => d.finding.title)).toEqual(['out-bug']);
+    expect(events.some((m) => m.includes('out-bug'))).toBe(true);
+    expect(events.some((m) => m.startsWith('Scope filter: kept 1 in-scope, kept 0 out-of-scope (serious), dropped 1 out-of-scope'))).toBe(true);
+  });
+
+  it('keeps every out CRITICAL in review.findings, scores the kept set, drops out SUGGESTION', async () => {
+    const llm = new MockLLMProvider('openai', {
+      structured: fixture([
+        mk({ title: 'out-crit-1', scope: 'out', severity: 'CRITICAL', category: 'security' }),
+        mk({ title: 'out-crit-2', scope: 'out', severity: 'CRITICAL', category: 'bug', start_line: 10 }),
+        mk({ title: 'out-sugg', scope: 'out', severity: 'SUGGESTION' }),
+      ]),
+    });
+    const diff = await new MockGitClient().diff();
+    const o = await reviewPullRequest({ systemPrompt: 's', model: 'm', diff, llm, intent, scopeFilter: true });
+    expect(o.review.findings.map((x) => x.title).sort()).toEqual(['out-crit-1', 'out-crit-2']);
+    expect(o.review.score).toBe(scoreFromFindings(o.review.findings));
+    expect(o.review.score).toBeLessThan(100);
+    expect(o.scopeDropped.map((d) => d.finding.title)).toEqual(['out-sugg']);
+  });
+
+  it('scopeFilter false (or no intent) → unchanged output', async () => {
+    const f = fixture([mk({ title: 'out-bug', scope: 'out' })]);
+    const diff = await new MockGitClient().diff();
+    const a = await reviewPullRequest({ systemPrompt: 's', model: 'm', diff, llm: new MockLLMProvider('openai', { structured: f }), intent, scopeFilter: false });
+    expect(a.review.findings).toHaveLength(1);
+    expect(a.assembly.intent).toContain('Add rate limiting');
+    const b = await reviewPullRequest({ systemPrompt: 's', model: 'm', diff, llm: new MockLLMProvider('openai', { structured: f }), scopeFilter: true });
+    expect(b.review.findings).toHaveLength(1);
+    expect(b.assembly.intent ?? null).toBeNull();
+  });
+});
+
+describe('reviewPullRequest — onPromptAssembled', () => {
+  const empty = { verdict: 'approve', summary: 's', score: 100, findings: [] };
+  const mkDiff = (paths: string[]) => ({
+    raw: paths.map((p) => `diff --git a/${p} b/${p}\n--- a/${p}\n+++ b/${p}\n@@ -1 +1 @@\n+x`).join('\n'),
+    files: paths.map((path) => ({ path, additions: 500, deletions: 0, hunks: [] })),
+  });
+
+  it('single-pass: fires once, before the LLM call, without chunk', async () => {
+    const order: string[] = [];
+    const llm = new MockLLMProvider('openai', { structured: empty });
+    const orig = llm.completeStructured.bind(llm);
+    llm.completeStructured = (async (req: never) => {
+      order.push('llm');
+      return orig(req);
+    }) as typeof llm.completeStructured;
+    const calls: PromptAssembledInfo[] = [];
+    await reviewPullRequest({
+      systemPrompt: 's',
+      model: 'm',
+      diff: await new MockGitClient().diff(),
+      llm,
+      strategy: 'single-pass',
+      onPromptAssembled: (i) => {
+        order.push('hook');
+        calls.push(i);
+      },
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.mode).toBe('single-pass');
+    expect(calls[0]!.chunk).toBeUndefined();
+    expect(calls[0]!.sections.some((s) => s.name === 'diff')).toBe(true);
+    expect(order).toEqual(['hook', 'llm']);
+  });
+
+  it('map-reduce: fires once per file with chunk index/total/file; passes the meter', async () => {
+    const llm = new MockLLMProvider('openai', { structured: empty });
+    const calls: PromptAssembledInfo[] = [];
+    await reviewPullRequest({
+      systemPrompt: 's',
+      model: 'm',
+      diff: mkDiff(['a.ts', 'b.ts', 'c.ts']),
+      llm,
+      strategy: 'map-reduce',
+      promptMeter: { tokens: () => 7 },
+      onPromptAssembled: (i) => calls.push(i),
+    });
+    expect(calls).toHaveLength(3);
+    expect(calls.map((c) => c.chunk)).toEqual([
+      { index: 0, total: 3, file: 'a.ts' },
+      { index: 1, total: 3, file: 'b.ts' },
+      { index: 2, total: 3, file: 'c.ts' },
+    ]);
+    expect(calls.every((c) => c.mode === 'map-reduce')).toBe(true);
+    expect(calls[0]!.sections.every((s) => s.tokens === 7)).toBe(true);
   });
 });

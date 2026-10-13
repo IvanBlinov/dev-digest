@@ -133,6 +133,15 @@ export interface GitHubClient {
   ): Promise<PrReviewComment>;
   openPullRequest(repo: RepoRef, payload: OpenPrPayload): Promise<{ url: string }>;
   getIssue(repo: RepoRef, n: number): Promise<IssueMeta>;
+  /**
+   * Read one file's text at `ref` (commit SHA/branch). Errors carry `.status`
+   * (404 missing, 403 forbidden, 413 too large, 415 directory/unsupported).
+   */
+  getFileContent(
+    repo: RepoRef,
+    path: string,
+    ref: string,
+  ): Promise<{ path: string; content: string; size: number }>;
   /** GET /user — for "posting as @user". */
   currentLogin(): Promise<string>;
 }

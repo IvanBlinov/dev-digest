@@ -127,6 +127,10 @@ export interface MockGitHubOptions {
   login?: string;
   /** Existing inline review comments returned by listReviewComments. */
   comments?: PrReviewComment[];
+  /** Issues by number: a value, or `{status}` to make `getIssue` reject with that status. */
+  issues?: Record<number, IssueMeta | { status: number }>;
+  /** File contents by repo-relative path: text, or `{status}` to reject. Missing path → 404. */
+  files?: Record<string, string | { status: number }>;
 }
 
 export class MockGitHubClient implements GitHubClient {
@@ -134,6 +138,8 @@ export class MockGitHubClient implements GitHubClient {
   public openedPrs: OpenPrPayload[] = [];
   public committed: CommitFilesPayload[] = [];
   public createdComments: CreateReviewCommentInput[] = [];
+  public issueCalls: number[] = [];
+  public fileCalls: { path: string; ref: string }[] = [];
 
   constructor(private opts: MockGitHubOptions = {}) {}
 
@@ -233,7 +239,23 @@ export class MockGitHubClient implements GitHubClient {
   }
 
   async getIssue(_repo: RepoRef, n: number): Promise<IssueMeta> {
+    this.issueCalls.push(n);
+    const mapped = this.opts.issues?.[n];
+    if (mapped && 'status' in mapped) throw Object.assign(new Error(`mock ${mapped.status}`), { status: mapped.status });
+    if (mapped) return mapped;
     return { number: n, title: `Issue #${n}`, body: 'mock issue', state: 'open' };
+  }
+
+  async getFileContent(
+    _repo: RepoRef,
+    path: string,
+    ref: string,
+  ): Promise<{ path: string; content: string; size: number }> {
+    this.fileCalls.push({ path, ref });
+    const mapped = this.opts.files?.[path];
+    if (mapped === undefined) throw Object.assign(new Error('mock 404'), { status: 404 });
+    if (typeof mapped !== 'string') throw Object.assign(new Error(`mock ${mapped.status}`), { status: mapped.status });
+    return { path, content: mapped, size: Buffer.byteLength(mapped) };
   }
 
   async currentLogin(): Promise<string> {

@@ -2,6 +2,24 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-08 — [Architectural decision] The prompt meter is injected, so the core stays crypto- and env-free
+Context: logging a prompt manifest needs token counts and digests, but the core is pure (no `node:crypto`, no env, no tokenizer dependency).
+Decision: `assemblePrompt(parts, meter?)` and `buildIntentMessages(input, meter?)` take an injected `SectionMeter {tokens?, digest?}`; the manifest (`PromptSection`) never stores section text and only constants authored here carry a `preview`. `reviewPullRequest` exposes `promptMeter` and `onPromptAssembled` (fired before each LLM call).
+Consequence: the server decides token counting and whether digests exist (verbose flag); the CI runner can adopt the hook without new dependencies.
+Proof: `reviewer-core/src/prompt.ts:137`, `reviewer-core/src/prompt-manifest.ts:39`
+
+## 2026-10-08 — [Security] The author controls the intent, so the scope filter never drops serious findings
+Context: intent text comes from the PR description; a filter that can hide findings lets an author descope a real defect. This supersedes the "always keeps one serious signal" entry below.
+Decision: `partitionByScope` keeps EVERY out-of-scope CRITICAL / security WARNING (still tagged `out`, badge shown) and drops only the rest; scoring uses the kept set. No cross-agent pick, no `scopeCandidate`.
+Consequence: a serious out-of-scope defect from any agent always reaches the review; only low-severity noise is filtered.
+Proof: `reviewer-core/src/review/scope.ts:25`, `reviewer-core/src/review/run.ts:219`
+
+## 2026-10-08 — [Security] (superseded by the entry above) The scope filter is a deterministic partition that always keeps one serious out-of-scope signal
+Context: "ignore everything outside the PR's stated scope" is a way for an author to hide a real defect (the intent text is author-controlled).
+Decision: scope is only a tag from the model; `partitionByScope` drops out-of-scope findings but keeps the single best CRITICAL / security-WARNING one as `scopeCandidate`, `pickScopeSignal` chooses one across agents with a total order (so completion order never matters), the filter is off for stale or low-confidence intents, and severity is never changed by scope. CI callers use `withScopeSignal` so a single run also yields at most one signal.
+Consequence: a real security defect outside the PR's intent surfaces at most once per execution instead of vanishing; non-security out-of-scope findings are dropped and only logged.
+Proof: `reviewer-core/src/review/scope.ts:54`, `reviewer-core/src/review/scope.ts:71`
+
 ## 2026-09-30 — [Pitfall] `OpenRouterProvider` ignored the per-request `timeoutMs`
 Symptom: a review / conventions call against a slow model hung for 5–12 minutes although callers passed `timeoutMs`.
 Cause: the timeout was only set on the OpenAI client (90 s default) and the SDK retries; `req.timeoutMs` never reached `chat.completions.create`.

@@ -39,12 +39,14 @@ matching skill **before** judging that file. Load each skill once.
 | `client/**/*.test.tsx`, `client/src/**/*.test.ts` | `react-testing-library` |
 | `client/messages/**` | `frontend-architecture` (i18n section) |
 | `server/src/modules/**`, `server/src/adapters/**`, `server/src/platform/**` | `onion-architecture`, `fastify-best-practices` |
-| `server/src/db/**` | `drizzle-orm-patterns`, `postgresql-table-design` |
-| `*/src/vendor/shared/**` | `zod` |
+| `server/src/db/**` | `db-schema-change`, `drizzle-orm-patterns`, `postgresql-table-design` |
+| `*/src/vendor/shared/**` | `shared-contracts`, `zod` |
 | server routes, auth, secrets, env/config, file or shell input, LLM prompt text (`server/src/prompts/**`, `reviewer-core/src/**`) | `security` |
 | `reviewer-core/src/**` | `typescript-expert`; read `reviewer-core/AGENTS.md` Boundaries |
-| `e2e/**` | read `e2e/AGENTS.md` |
-| `.claude/skills/**`, `**/AGENTS.md`, `**/INSIGHTS.md`, `docs/**`, `specs/**` | none — run the **fact check** below |
+| `e2e/**` | `e2e-flows`; read `e2e/AGENTS.md` |
+| any new or changed test file | `test-strategy` |
+| `.claude/skills/**`, `.claude/agents/**`, `**/AGENTS.md`, `**/INSIGHTS.md`, `docs/**`, `specs/**` | none — run the **fact check** below |
+| `.claude/hooks/**` | none — run `bash .claude/hooks/tests/hooks.test.sh` |
 | any change at all | `engineering-insights` |
 
 **Fact check for instruction/docs files:** every path, symbol, command, and `file:line` they cite
@@ -87,6 +89,7 @@ A package counts as touched only when a non-`.md` file inside it changed.
 | `reviewer-core/` | `cd reviewer-core && npm run typecheck && npm test` |
 | `e2e/` | `cd e2e && npm run typecheck` |
 | only `.md` / skills changed | the fact check from Step 2 (links + cited paths) |
+| `.claude/hooks/**` changed | `bash .claude/hooks/tests/hooks.test.sh` (all PASS) |
 
 Record the exact command and pass/fail. A gate you could not run is reported as "not run: <reason>", never as passed.
 

@@ -6,12 +6,62 @@ import { z } from 'zod';
  */
 
 // ---- Intent ----
+export const IntentConfidence = z.enum(['low', 'medium', 'high']);
+export type IntentConfidence = z.infer<typeof IntentConfidence>;
+
+export const IntentSourceKind = z.enum([
+  'pr_title',
+  'pr_body',
+  'branch',
+  'commits',
+  'files',
+  'issue',
+  'spec',
+  'plan',
+  'link',
+]);
+export type IntentSourceKind = z.infer<typeof IntentSourceKind>;
+
+export const IntentSourceStatus = z.enum([
+  'ok',
+  'not_found',
+  'forbidden',
+  'timeout',
+  'not_allowlisted',
+  'too_large',
+  'unsupported',
+  'unavailable',
+]);
+export type IntentSourceStatus = z.infer<typeof IntentSourceStatus>;
+
+/** One input the classifier looked at (or tried to). `ref` is sanitised: no query string, fragment or userinfo. */
+export const IntentSource = z.object({
+  kind: IntentSourceKind,
+  ref: z.string(),
+  status: IntentSourceStatus,
+  truncated: z.boolean().nullish(),
+});
+export type IntentSource = z.infer<typeof IntentSource>;
+
 export const Intent = z.object({
-  intent: z.string(),
+  summary: z.string(),
   in_scope: z.array(z.string()),
   out_of_scope: z.array(z.string()),
+  confidence: IntentConfidence,
+  sources: z.array(IntentSource),
+  missing_context: z.array(z.string()),
 });
 export type Intent = z.infer<typeof Intent>;
+
+/** LLM output of the intent classifier (strict json_schema: all required, no length constraints). */
+export const IntentClassification = z.object({
+  summary: z.string(),
+  in_scope: z.array(z.string()),
+  out_of_scope: z.array(z.string()),
+  confidence: IntentConfidence,
+  missing_context: z.array(z.string()),
+});
+export type IntentClassification = z.infer<typeof IntentClassification>;
 
 // ---- Blast radius ----
 export const ChangedSymbol = z.object({

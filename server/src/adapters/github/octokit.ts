@@ -15,6 +15,7 @@ import type {
 import { withRetry, withTimeout } from '../../platform/resilience.js';
 
 const TIMEOUT = 30_000;
+const MAX_FILE_BYTES = 1_000_000;
 
 function mapStatus(state: string, merged: boolean | undefined): PrStatus {
   if (merged) return 'merged';
@@ -361,6 +362,34 @@ export class OctokitGitHubClient implements GitHubClient {
       body: res.data.body,
       state: res.data.state,
     };
+  }
+
+  async getFileContent(
+    repo: RepoRef,
+    path: string,
+    ref: string,
+  ): Promise<{ path: string; content: string; size: number }> {
+    const res = await withRetry(() =>
+      withTimeout(
+        this.octokit.rest.repos.getContent({ owner: repo.owner, repo: repo.name, path, ref }),
+        TIMEOUT,
+      ),
+    );
+    const data = res.data as unknown;
+    if (Array.isArray(data)) throw Object.assign(new Error('path is a directory'), { status: 415 });
+    const file = data as { type?: string; size?: number; content?: string; encoding?: string };
+    if (file.type !== 'file' || typeof file.content !== 'string') {
+      throw Object.assign(new Error('path is not a regular file'), { status: 415 });
+    }
+    const size = file.size ?? 0;
+    if (size > MAX_FILE_BYTES) {
+      throw Object.assign(new Error('file too large'), { status: 413 });
+    }
+    const content =
+      file.encoding === 'base64'
+        ? Buffer.from(file.content, 'base64').toString('utf8')
+        : file.content;
+    return { path, content, size };
   }
 
   async currentLogin(): Promise<string> {

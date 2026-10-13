@@ -14,7 +14,7 @@ No Playwright, no LLM, no API key. How flows work and how to run: [README.md](RE
 
 ## Layout
 
-- `specs/NN-name.flow.json` — **test flows**, not documentation. Each is an ordered list of agent-browser commands. Current: 01 app boot, 02 repo pulls detail, 03 agents, 04 PR findings, 05 PR diff, 06 onboarding, 07 settings.
+- `specs/NN-name.flow.json` — **test flows**, not documentation. Each is an ordered list of agent-browser commands. Current: 01 app boot, 02 repo pulls detail, 03 agents, 04 PR findings, 05 PR diff, 06 onboarding, 07 settings, 08 PR intent.
 - `run.ts` — runs every flow in order against one shared browser session; a non-zero exit fails the step.
 - `lib/` — helpers for `run.ts`.
 - `agent-browser.json` — CLI config.

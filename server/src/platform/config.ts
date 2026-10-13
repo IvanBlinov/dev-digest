@@ -32,6 +32,10 @@ const EnvSchema = z.object({
   WEB_PORT: z.coerce.number().int().default(3000),
   DEVDIGEST_CLONE_DIR: z.string().optional(),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  // Verbose prompt-assembly logging (adds section digests + constant previews to
+  // the `prompt.assembled` event). Only the literal '1' enables it, and it is
+  // ignored in production. Never section contents either way.
+  PROMPT_LOG_VERBOSE: z.string().optional(),
   // `.env` (and .env.example) ship `LOG_LEVEL=` empty; an empty string is not a
   // valid enum member, so coerce '' → undefined to fall through to the default.
   LOG_LEVEL: z.preprocess(
@@ -63,6 +67,10 @@ export type AppConfig = {
    * EXACTLY like the ripgrep-only baseline.
    */
   repoIntelEnabled: boolean;
+  /** Verbose `prompt.assembled` detail (digests, constant previews). Never true in production. */
+  promptLogVerbose: boolean;
+  /** PROMPT_LOG_VERBOSE=1 was set in production and ignored (boot warns once). */
+  promptLogVerboseIgnored: boolean;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -70,6 +78,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const cloneDirRaw =
     parsed.DEVDIGEST_CLONE_DIR ?? join(homedir(), '.devdigest', 'workspace');
   const cloneDir = isAbsolute(cloneDirRaw) ? cloneDirRaw : resolve(process.cwd(), cloneDirRaw);
+  const verboseRequested = parsed.PROMPT_LOG_VERBOSE === '1';
+  const isProd = parsed.NODE_ENV === 'production';
   return {
     databaseUrl: parsed.DATABASE_URL,
     apiPort: parsed.API_PORT,
@@ -82,5 +92,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     webOrigin: `http://localhost:${parsed.WEB_PORT}`,
     embeddingsEnabled: parsed.EMBEDDINGS_ENABLED === 'true',
     repoIntelEnabled: parsed.REPO_INTEL_ENABLED !== 'false',
+    promptLogVerbose: verboseRequested && !isProd,
+    promptLogVerboseIgnored: verboseRequested && isProd,
   };
 }

@@ -71,6 +71,9 @@ flowchart TB
   subgraph Review["Review & runs"]
     reviews["reviews<br/>/pulls/:id/review · /reviews · /findings/:id/(accept|dismiss)<br/>/runs/:id/(events|trace)"]
   end
+  subgraph IntentLayer["Intent layer"]
+    intent["intent<br/>GET/POST /pulls/:id/intent (POST 6/min) — classifies the PR's intent with the review_intent model"]
+  end
   subgraph Agents["Agents"]
     agents["agents<br/>/agents (+ findings by severity) · /agents/:id · /agents/:id/findings"]
   end
@@ -99,6 +102,7 @@ flowchart TB
 | `REPO_INTEL_ENABLED` | `true` | repo skeleton + callers in the prompt; `false` → ripgrep-only |
 | `DEVDIGEST_CLONE_DIR` | `./clones` | imported-repo checkouts (git-ignored) |
 | `LOG_LEVEL` | `info` (`silent` in test) | pino level |
+| `PROMPT_LOG_VERBOSE` | off | `1` adds section digests + constant previews to the `prompt.assembled` log event (never contents); ignored in production |
 | `NODE_ENV` | `development` | `test` → silent logs + global rate-limit disabled |
 
 Secrets (API keys, `GITHUB_TOKEN`) are **not** part of `AppConfig` — they go
@@ -108,6 +112,23 @@ through `SecretsProvider` (`~/.devdigest/secrets.json`, mode `0600`, with
 Migrations are **not** applied on boot — run `pnpm db:migrate` (pgvector is
 enabled by migration `0000`). `pnpm db:seed` is idempotent demo data
 (`acme/payments-api`, PR #482, the two built-in agents).
+
+## PR intent and the scope filter (non-obvious)
+
+`modules/intent/` classifies what a PR is trying to do (one cheap, non-reasoning
+structured call; default `openrouter / openai/gpt-4.1-mini`, changeable under
+Settings → "PR Review · Intent") and stores it in `pr_intent`. The classifier sees the
+title, description, branch, commit messages, same-repo issues and `.md` plans/specs
+(fetched via the GitHub API at the head SHA) and the changed files with **hunk headers
+only — never hunk bodies**. A review run loads the stored intent, or classifies once
+when none exists (a failure only logs "Intent unavailable"). It reaches every agent as
+an unverified hypothesis and each finding is tagged `scope: in|out`.
+
+The scope filter is on only for a **fresh** intent with confidence ≠ low **and** at
+least one fetched (`ok`) issue/spec/plan source — the PR description alone never turns
+it on (the author controls that text). When on, out-of-scope findings are dropped
+except CRITICAL and security WARNING, which are always kept (all agents, tagged
+`scope='out'`). Each run finishes on its own as soon as its agent is done.
 
 ## Review context (non-obvious)
 

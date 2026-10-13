@@ -59,6 +59,8 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
           },
   });
 
+  if (config.promptLogVerboseIgnored) app.log.warn('PROMPT_LOG_VERBOSE ignored in production');
+
   // Use zod schemas directly for request validation + response serialization.
   // Routes opt in per-module via `app.withTypeProvider<ZodTypeProvider>()`.
   app.setValidatorCompiler(validatorCompiler);

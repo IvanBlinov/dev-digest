@@ -58,3 +58,18 @@ describe("FindingCard (smoke, both themes)", () => {
     expect(onAction).toHaveBeenCalledWith("dismiss");
   });
 });
+
+describe("FindingCard — scope badge", () => {
+  it('shows "Outside PR scope" only for scope=out', () => {
+    const { rerender } = renderWithIntl(<FindingCard f={{ ...FINDING, scope: "out" }} />);
+    expect(screen.getByText("Outside PR scope")).toBeInTheDocument();
+    for (const scope of ["in", null, undefined] as const) {
+      rerender(
+        <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
+          <FindingCard f={{ ...FINDING, scope }} />
+        </NextIntlClientProvider>,
+      );
+      expect(screen.queryByText("Outside PR scope")).not.toBeInTheDocument();
+    }
+  });
+});

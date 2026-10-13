@@ -8,6 +8,8 @@ import {
   PERFORMANCE_REVIEWER_PROMPT,
 } from './seed-prompts.js';
 import { seedSkillsLab } from './seed-skills/index.js';
+import { INTENT_PROMPT_VERSION } from '@devdigest/reviewer-core';
+import { intentInputHash } from '../modules/intent/helpers.js';
 
 /** Default provider/model for the built-in reviewer agents. */
 const DEFAULT_PROVIDER = 'openrouter' as const;
@@ -176,6 +178,31 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       },
     ]);
   }
+
+  // ---- PR #482 intent (fresh, so the Intent card renders without a model call) ----
+  // Idempotent: never overwrites an intent a real detection has stored. head_sha and
+  // input_hash match the seeded PR, so it reads as fresh (not stale).
+  await db
+    .insert(t.prIntent)
+    .values({
+      prId: pr!.id,
+      summary: 'Add token-bucket rate limiting to the public API endpoints to stop abuse by unauthenticated clients.',
+      inScope: ['Rate limiter middleware', 'Applying the limiter to public API routes'],
+      outOfScope: ['Authentication changes', 'Billing and payments code'],
+      confidence: 'medium',
+      sources: [
+        { kind: 'pr_title', ref: 'title', status: 'ok' },
+        { kind: 'pr_body', ref: 'description', status: 'ok' },
+        { kind: 'files', ref: '4 file(s)', status: 'ok' },
+      ],
+      missingContext: [],
+      headSha: pr!.headSha,
+      inputHash: intentInputHash({ promptVersion: INTENT_PROMPT_VERSION, title: pr!.title, body: pr!.body ?? '' }),
+      provider: 'seed',
+      model: 'seed',
+      promptVersion: INTENT_PROMPT_VERSION,
+    })
+    .onConflictDoNothing();
 
   // ---- built-in agents (the three starter presets) ----
   // Prompt bodies live in ./seed-prompts.ts (mirrored in docs/agent-prompts/*.md).

@@ -34,12 +34,25 @@ feeding it — `skills` (L02), `memory` (L07), `specs` (L05), `callers` — plus
 In the starter the server passes only the diff, system prompt, and repo map; the
 extra slots are omitted, so `assemblePrompt` simply leaves those sections out.
 
+### Intent slot and scope helpers (L03)
+
+`PromptParts.intent` (a `ReviewIntent`) renders `## PR intent (unverified hypothesis)`
+right after the PR description, `<untrusted>`-wrapped, and adds the trusted `SCOPE_RULE`
+to the system prompt; without it the prompt is byte-identical to before.
+`reviewPullRequest({ intent, scopeFilter: true })` drops every out-of-scope finding after
+grounding, except serious ones: every out-of-scope CRITICAL (or WARNING in `security`)
+is kept (still tagged `scope: 'out'`), the rest land in `scopeDropped`. The score is
+computed from the kept set. `buildIntentMessages` / `computeIntentConfidence` /
+`minConfidence` are the intent classifier's prompt and confidence rules (the input type
+has no field for hunk bodies).
+
 ## Public API
 
-Exported from `src/index.ts`: `assemblePrompt` / `wrapUntrusted` (prompt),
+Exported from `src/index.ts`: prompt-manifest types (`PromptSection`, `SectionMeter`, `PromptAssembledInfo`, `measure`) and the `onPromptAssembled` / `promptMeter` review hooks (content-free section manifest for logging); `assemblePrompt` / `wrapUntrusted` (prompt),
 `groundFindings` / `groundingSummary` (grounding), `toJsonSchema` / `extractJson`
 / `parseWithRepair` (structured output), plus the `run` entrypoint and
-`reduce`. Contracts (`Review`, `Finding`, `Verdict`, …) come from
+`reduce`, plus `buildIntentMessages`, `partitionByScope`,
+`isProtectedFromScopeFilter` (intent layer). Contracts (`Review`, `Finding`, `Verdict`, …) come from
 `@devdigest/shared`.
 
 ## Testing
