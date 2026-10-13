@@ -26,7 +26,7 @@ Cause: a default derived from active (non-dismissed) findings flips to hidden on
 Rule: default visibility uses `shown.length` (dismissed included); only dots, bars and counters use the active subset.
 Proof: `client/src/app/repos/[repoId]/pulls/[number]/_components/DiffTab/DiffTab.tsx:53`
 
-## 2026-10-08 — [Pitfall] `@testing-library/user-event` is not installed
+## 2026-10-08 — [Pitfall] `@testing-library/user-event` is not installed *(superseded 2026-10-12: installed as a devDependency, `@testing-library/user-event@14.6.1` — prefer `userEvent.setup()` in new tests)*
 Symptom: a new test importing it fails to resolve.
 Rule: use `fireEvent` (as `FindingCard.test.tsx`) unless the dependency is added on purpose.
 Proof: `client/package.json` (no `user-event`); `client/src/app/repos/[repoId]/pulls/[number]/_components/DiffTab/DiffTab.test.tsx:1`

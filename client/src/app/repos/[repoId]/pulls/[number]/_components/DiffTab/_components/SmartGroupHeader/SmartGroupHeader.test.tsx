@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../../../../../../../../../../messages/en/prReview.json";
 import { SmartGroupHeader } from "./SmartGroupHeader";
@@ -25,7 +26,8 @@ function renderHeader(props: Partial<React.ComponentProps<typeof SmartGroupHeade
 }
 
 describe("SmartGroupHeader", () => {
-  it("shows label, hint, counter before the file count, and toggles on click", () => {
+  it("shows label, hint, counter before the file count, and toggles on click", async () => {
+    const user = userEvent.setup();
     const { onToggle } = renderHeader();
     const button = screen.getByRole("button", { expanded: true });
     expect(button).toHaveTextContent("Tests");
@@ -34,7 +36,7 @@ describe("SmartGroupHeader", () => {
     expect(counter).toHaveTextContent("2");
     const files = screen.getByText("3 files");
     expect(counter.compareDocumentPosition(files) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    fireEvent.click(button);
+    await user.click(button);
     expect(onToggle).toHaveBeenCalledTimes(1);
   });
 
