@@ -14,7 +14,9 @@ import {
   partitionThreads,
   type CommentThread,
   type DiffCommentApi,
+  cs,
 } from "../comments";
+import { annotationsForLine, markerForLine, partitionAnnotations, type DiffAnnotationApi, type LineAnnotation } from "../annotations";
 import { s, chevronFor } from "../styles";
 import { CodeLine } from "../CodeLine";
 import { OutdatedComments } from "../OutdatedComments";
@@ -30,10 +32,21 @@ function threadsForLine(ln: Line, matched: Map<string, CommentThread[]>): Commen
   return out;
 }
 
-export function FileCard({ file, commenting }: { file: PrFile; commenting?: DiffCommentApi }) {
+export function FileCard({
+  file,
+  commenting,
+  annotations,
+  defaultOpen,
+}: {
+  file: PrFile;
+  commenting?: DiffCommentApi;
+  annotations?: DiffAnnotationApi;
+  /** Overrides the size-based auto-expand rule. */
+  defaultOpen?: boolean;
+}) {
   const t = useTranslations("shell");
   const [open, setOpen] = React.useState(
-    (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES
+    defaultOpen ?? (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES
   );
   const lines = React.useMemo(() => parsePatch(file.patch), [file.patch]);
 
@@ -47,6 +60,18 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
     for (const ln of lines) for (const k of keysForLine(ln)) renderedKeys.add(k);
     return partitionThreads(fileThreads, renderedKeys);
   }, [comments, file.path, lines]);
+
+  // Same split for line annotations (e.g. findings): anchored vs outside the patch.
+  const annotationItems = annotations?.items;
+  const { matchedAnnotations, outsideAnnotations } = React.useMemo(() => {
+    const mine = (annotationItems ?? []).filter((a) => a.path === file.path);
+    const renderedKeys = new Set<string>();
+    for (const ln of lines) for (const k of keysForLine(ln)) renderedKeys.add(k);
+    const { matched: m, outside } = partitionAnnotations(mine, renderedKeys);
+    return { matchedAnnotations: m, outsideAnnotations: outside };
+  }, [annotationItems, file.path, lines]);
+  const showAnnotations = !!annotations?.visible;
+  const flagged = !!annotations?.flaggedPaths.has(file.path);
 
   const commentCount = commenting
     ? commenting.comments.filter((c) => c.path === file.path).length
@@ -64,6 +89,9 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
           <span style={s.addText}>+{file.additions}</span>{" "}
           <span style={s.delText}>−{file.deletions}</span>
         </span>
+        {flagged && annotations && (
+          <span role="img" aria-label={annotations.flagLabel} style={s.flagDot} />
+        )}
         {commentCount > 0 && (
           <span
             style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--text-muted)" }}
@@ -85,12 +113,35 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
                 path={file.path}
                 threads={threadsForLine(ln, matched)}
                 commenting={commenting}
+                marker={markerForLine(ln, matchedAnnotations)}
+                annotationNodes={
+                  showAnnotations
+                    ? annotationsForLine(ln, matchedAnnotations).map((a) => (
+                        <React.Fragment key={a.id}>{a.node}</React.Fragment>
+                      ))
+                    : undefined
+                }
               />
             ))
           )}
           {commenting && commenting.showComments && <OutdatedComments threads={outdated} />}
+          {showAnnotations && annotations && outsideAnnotations.length > 0 && (
+            <OutsideAnnotations title={annotations.outsideTitle} items={outsideAnnotations} />
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Annotations whose line is not part of this file's patch — never dropped silently. */
+function OutsideAnnotations({ title, items }: { title: string; items: LineAnnotation[] }) {
+  return (
+    <div style={cs.outdatedWrap}>
+      <span style={cs.outdatedTitle}>{title}</span>
+      {items.map((a) => (
+        <React.Fragment key={a.id}>{a.node}</React.Fragment>
+      ))}
     </div>
   );
 }

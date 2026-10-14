@@ -64,6 +64,21 @@ export const s = {
     color: "var(--text-primary)",
     paddingRight: 12,
   } satisfies CSSProperties,
+  flagDot: {
+    width: 8,
+    height: 8,
+    borderRadius: "50%",
+    background: "var(--crit)",
+    flexShrink: 0,
+  } satisfies CSSProperties,
+  marker: {
+    fontSize: 10.5,
+    fontWeight: 700,
+    letterSpacing: "0.04em",
+    padding: "0 12px",
+    alignSelf: "center",
+    flexShrink: 0,
+  } satisfies CSSProperties,
 } as const;
 
 /** Chevron rotates 90deg when the file card is open. */
@@ -76,9 +91,17 @@ export function chevronFor(open: boolean): CSSProperties {
 }
 
 /** Row background per line kind (add/del tinted, others transparent). */
-export function lineRowFor(kind: Line["kind"]): CSSProperties {
+export function lineRowFor(kind: Line["kind"], markerColor?: string): CSSProperties {
   const background = kind === "add" ? "var(--code-add)" : kind === "del" ? "var(--code-del)" : "transparent";
-  return { display: "flex", alignItems: "stretch", fontSize: 13, lineHeight: "20px", background };
+  return {
+    display: "flex",
+    alignItems: "stretch",
+    fontSize: 13,
+    lineHeight: "20px",
+    background,
+    // Severity bar on the left edge of an annotated line.
+    ...(markerColor ? { boxShadow: `inset 3px 0 0 ${markerColor}` } : null),
+  };
 }
 
 /** Gutter sign colour per line kind. */

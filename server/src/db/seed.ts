@@ -32,6 +32,85 @@ const DEFAULT_MODEL = 'deepseek/deepseek-v4-flash';
 export const DEFAULT_WORKSPACE_NAME = 'default';
 export const SYSTEM_USER_EMAIL = 'you@local';
 
+/** Unified-diff hunk body (no file headers) with exactly `additions` `+` and `deletions` `-` lines. */
+function syntheticPatch(additions: number, deletions: number, label: string): string {
+  const head = `@@ -${deletions === 0 ? '0,0' : `1,${deletions}`} +1,${additions} @@`;
+  const del = Array.from({ length: deletions }, (_, i) => `-old ${label} ${i + 1}`);
+  const add = Array.from({ length: additions }, (_, i) => `+new ${label} ${i + 1}`);
+  return [head, ...del, ...add].join('\n');
+}
+
+/** New line 12 is the added Stripe key the seeded CRITICAL finding points at. */
+const SEED_CONFIG_PATCH = [
+  '@@ -10,3 +10,7 @@',
+  '   port: 3000,',
+  '   host: "0.0.0.0",',
+  '+  stripeKey: "sk_live_xxx",',
+  '+  rateLimitWindowMs: 60000,',
+  '+  rateLimitMax: 100,',
+  '+  trustProxy: true,',
+  '   redisUrl: x,',
+].join('\n');
+
+/** New lines 45-51 are the added loop; the seeded N+1 finding starts at 45. */
+const SEED_USERS_PATCH = [
+  '@@ -44,4 +44,9 @@',
+  '   const users = await db.users.findMany();',
+  '-  const result = [];',
+  '-  for (const u of users) result.push(u);',
+  '+  const result = [];',
+  '+  for (const u of users) {',
+  '+    const posts = await db.posts.findMany({ userId: u.id });',
+  '+    result.push({ ...u, posts });',
+  '+  }',
+  '+  const total = result.length;',
+  '+  logger.debug({ total });',
+  '   return result;',
+].join('\n');
+
+/** Head SHA the seed gives PR #482; a PR #482 with another SHA was synced from GitHub. */
+const SEED_PR482_HEAD_SHA = 'a1b2c3d4e5f6';
+
+/**
+ * PR #482 files. 9 files = PR.filesCount; additions/deletions sum to the PR totals (247 / 38).
+ * Patches exist only where a seeded finding anchors a line (and on two small files for the
+ * smart-diff tab). `diff-loader` falls back to these patches when git has no diff, so they
+ * are also what DB-backed review tests see for PR #482.
+ */
+function pr482Files(prId: string) {
+  return [
+    { prId, path: 'src/middleware/ratelimit.ts', additions: 84, deletions: 0, patch: null },
+    { prId, path: 'src/api/public/webhooks.ts', additions: 31, deletions: 6, patch: null },
+    { prId, path: 'src/config.ts', additions: 4, deletions: 0, patch: SEED_CONFIG_PATCH },
+    { prId, path: 'src/api/users.ts', additions: 7, deletions: 2, patch: SEED_USERS_PATCH },
+    { prId, path: 'test/middleware/ratelimit.test.ts', additions: 68, deletions: 0, patch: null },
+    { prId, path: 'package.json', additions: 2, deletions: 1, patch: null },
+    { prId, path: 'pnpm-lock.yaml', additions: 31, deletions: 24, patch: syntheticPatch(31, 24, 'lock') },
+    { prId, path: 'docs/rate-limiting.md', additions: 16, deletions: 0, patch: syntheticPatch(16, 0, 'doc') },
+    { prId, path: 'src/api/public/index.ts', additions: 4, deletions: 5, patch: null },
+  ];
+}
+
+/**
+ * A dev DB seeded before Smart Diff has only 4 PR #482 files and no patches, and the insert
+ * below runs only for a new PR. Add the missing files and fill empty patches — only for the
+ * seeded PR (its head SHA), never for a PR #482 synced from GitHub, and never overwriting data.
+ */
+async function topUpPr482Files(db: Db, pr: { id: string; headSha: string }): Promise<void> {
+  if (pr.headSha !== SEED_PR482_HEAD_SHA) return;
+  const existing = await db.select().from(t.prFiles).where(eq(t.prFiles.prId, pr.id));
+  const byPath = new Map(existing.map((r) => [r.path, r]));
+  const wanted = pr482Files(pr.id);
+  const missing = wanted.filter((f) => !byPath.has(f.path));
+  if (missing.length) await db.insert(t.prFiles).values(missing);
+  for (const f of wanted) {
+    const row = byPath.get(f.path);
+    if (row && row.patch === null && f.patch !== null) {
+      await db.update(t.prFiles).set({ patch: f.patch }).where(eq(t.prFiles.id, row.id));
+    }
+  }
+}
+
 export async function seed(db: Db): Promise<{ workspaceId: string; userId: string }> {
   // ---- workspace + user (no-auth defaults) ----
   let [ws] = await db
@@ -111,7 +190,7 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
         author: 'marisa.koch',
         branch: 'feat/rate-limit-public',
         base: 'main',
-        headSha: 'a1b2c3d4e5f6',
+        headSha: SEED_PR482_HEAD_SHA,
         additions: 247,
         deletions: 38,
         filesCount: 9,
@@ -120,13 +199,7 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       })
       .returning();
 
-    // pr_files (subset)
-    await db.insert(t.prFiles).values([
-      { prId: pr!.id, path: 'src/middleware/ratelimit.ts', additions: 84, deletions: 0 },
-      { prId: pr!.id, path: 'src/api/public/webhooks.ts', additions: 31, deletions: 6 },
-      { prId: pr!.id, path: 'src/config.ts', additions: 4, deletions: 0 },
-      { prId: pr!.id, path: 'src/api/users.ts', additions: 7, deletions: 2 },
-    ]);
+    await db.insert(t.prFiles).values(pr482Files(pr!.id));
 
     // pr_commits
     await db.insert(t.prCommits).values({
@@ -178,6 +251,8 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       },
     ]);
   }
+
+  await topUpPr482Files(db, pr!);
 
   // ---- PR #482 intent (fresh, so the Intent card renders without a model call) ----
   // Idempotent: never overwrites an intent a real detection has stored. head_sha and

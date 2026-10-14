@@ -1,0 +1,20 @@
+{
+  "name": "PR detail Files changed tab shows the smart, reviewer-ordered diff",
+  "description": "From PR #482, open the Files changed tab: smart order is the default, role groups render, the Boilerplate group expands to reveal the lock file, the seeded Stripe-key finding shows under its line, and the Original order chip writes order=original. Read-only seeded data (no model call, no Run review). Assumes a freshly-seeded DB (see e2e/README.md).",
+  "steps": [
+    { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "land on the PR list" },
+    { "cmd": ["find", "text", "Add rate limiting to public API endpoints", "click"], "label": "open the PR row" },
+    { "cmd": ["wait", "--url", "/pulls/482"], "label": "navigate to the PR detail route" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "PR detail data settles" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Files changed"], "label": "switch to the Files changed tab" },
+    { "cmd": ["wait", "--url", "tab=diff"], "label": "diff tab is active in the URL" },
+    { "cmd": ["wait", "--text", "Smart order"], "label": "smart order is the default" },
+    { "cmd": ["wait", "--text", "Core"], "label": "core role group renders" },
+    { "cmd": ["wait", "--text", "Hardcoded Stripe secret key in commit"], "label": "seeded finding renders under its line, expanded" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Boilerplate"], "label": "expand the collapsed Boilerplate group" },
+    { "cmd": ["wait", "--text", "pnpm-lock.yaml"], "label": "lock file is in the boilerplate group" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Original order"], "label": "switch to original order" },
+    { "cmd": ["wait", "--url", "order=original"], "label": "order=original is written to the URL" }
+  ]
+}
