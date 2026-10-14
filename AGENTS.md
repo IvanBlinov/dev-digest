@@ -11,7 +11,7 @@ the `AGENTS.md` beside it — edit `AGENTS.md` only; never replace the symlink w
 
 ## Repository structure
 
-Four standalone packages, **no monorepo workspace** (no `pnpm-workspace.yaml`; each package has
+Five standalone packages, **no monorepo workspace** (no `pnpm-workspace.yaml`; each package has
 its own lockfile). Each has its own `AGENTS.md` — read it before working inside that folder.
 
 | Folder | Package | Role | Port | AGENTS.md |
@@ -20,6 +20,7 @@ its own lockfile). Each has its own `AGENTS.md` — read it before working insid
 | `client/` | `@devdigest/web` | The studio UI: repos, PRs, findings, agents, settings | 3000 | [client/AGENTS.md](client/AGENTS.md) |
 | `reviewer-core/` | `@devdigest/reviewer-core` | Pure review engine: diff → prompt → LLM → grounded findings | — | [reviewer-core/AGENTS.md](reviewer-core/AGENTS.md) |
 | `e2e/` | `@devdigest/e2e` | Deterministic browser flows over the seeded stack | — | [e2e/AGENTS.md](e2e/AGENTS.md) |
+| `mcp/` | `@devdigest/mcp` | stdio MCP server: thin adapter over the HTTP API (no DB, no server imports) | — | [mcp/AGENTS.md](mcp/AGENTS.md) |
 | `server/src/vendor/shared/` | `@devdigest/shared` | Zod contracts used by every package (mirrored in `client/src/vendor/shared/`) | — | — |
 | `docs/`, `specs/`, `INSIGHTS.md` | — | Cross-module design docs, cross-module feature specs, project-wide lessons | — | — |
 | `scripts/` | — | `dev.sh` (full local stack), `e2e.sh` (hermetic e2e stack) | — | — |
@@ -36,10 +37,11 @@ Cross-package code is shared via **tsconfig path aliases only** (`@devdigest/sha
 | `client/` | TypeScript, React 19 | Next.js 15 App Router | TanStack Query, `next-intl`, Tailwind CSS 4, `recharts`, `mermaid`, `react-markdown` + `remark-gfm`, `lucide-react`, `zod` | vitest + jsdom, React Testing Library |
 | `reviewer-core/` | TypeScript (source-only, never emits JS) | — | `zod`, `openai` (OpenRouter-compatible client) | vitest |
 | `e2e/` | TypeScript, `tsx` | Vercel agent-browser CLI (Rust + CDP) | — | `run.ts` flow runner |
+| `mcp/` | TypeScript, Node ≥ 22, `tsx` (source only) | `@modelcontextprotocol/sdk` (stdio) | `zod` | vitest |
 | Infra | Docker | — | `pgvector/pgvector:pg16` via `docker-compose.yml` | — |
 
 Package managers: **pnpm** for `server/` and `client/` (`pnpm-lock.yaml`), **npm** for
-`reviewer-core/` and `e2e/` (`package-lock.json`).
+`reviewer-core/`, `e2e/` and `mcp/` (`package-lock.json`).
 
 ## Run commands
 
@@ -62,6 +64,7 @@ cd server        && pnpm exec vitest run .it.test                      # DB-back
 cd client        && pnpm test && pnpm typecheck
 cd reviewer-core && npm test  && npm run typecheck
 cd e2e           && npm run typecheck && npm run e2e:hermetic
+cd mcp           && npm run typecheck && npm test
 ```
 
 There is **no lint script** in any package (no ESLint/Biome/Prettier config). `typecheck` is the
@@ -87,7 +90,7 @@ static gate; keep it green before finishing any task.
 ## Do not touch
 
 - **Migrations — `server/src/db/migrations/**`.** Never edit or delete an existing `NNNN_*.sql` or the `meta/` journal by hand. Schema changes go through `src/db/schema/*.ts` → `pnpm db:generate` → a **new** migration file → `pnpm db:migrate`. Migrations do **not** run on boot.
-- **Lock files — `pnpm-lock.yaml`, `package-lock.json` (all four packages).** Never edit by hand and never regenerate wholesale. They change only as a side effect of an intentional `pnpm add`/`npm install <pkg>` in that package, committed together with the `package.json` change. Do not switch a package between pnpm and npm.
+- **Lock files — `pnpm-lock.yaml`, `package-lock.json` (all five packages).** Never edit by hand and never regenerate wholesale. They change only as a side effect of an intentional `pnpm add`/`npm install <pkg>` in that package, committed together with the `package.json` change. Do not switch a package between pnpm and npm.
 - **`docker compose down -v`** — never. It deletes the `devdigest_pgdata` volume with every imported repo and review.
 - **`src/vendor/shared` copies** — never let `server/` and `client/` copies diverge; change the server copy first, mirror in the same commit.
 - **`reviewer-core/src/index.ts` exports** — the server type-checks against this source; renaming or removing an export breaks the server.
