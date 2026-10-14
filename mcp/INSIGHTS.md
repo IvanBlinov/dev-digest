@@ -2,6 +2,12 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-13 - [Security] "Short" fields like category, file path and agent name are model- or user-written too
+Symptom: fencing covered rationale/suggestion/snippet/summary, but `category`, `file`, `evidencePath`, agent `name`/`model` and the run `error` were printed raw in row text, so a newline in them could inject a line that reads like an instruction to the calling agent.
+Cause: these fields look like structured metadata, but the LLM writes `category`/`file`/`evidencePath`, users write agent names, and run errors can quote model output.
+Rule: every interpolated string field in a presenter goes through `oneLine` with a cap (`NAME_MAX`, `CATEGORY_MAX`, `PATH_MAX`); untrusted text that must stay inline uses `untrustedInline`; only enums (severity, status) and numbers are printed raw. Each presenter test has a newline-injection case.
+Proof: `mcp/src/presenters/text.ts:21`, `mcp/src/presenters/findings.ts:34`, `mcp/test/presenters/findings.test.ts`
+
 ## 2026-10-13 - [Pitfall] The `zod` path alias must point at `index.d.cts`, not the package directory
 Symptom: `tsc` ran for minutes at 4 GB and then reported `ZodNumber is not assignable to ZodTypeAny` / `Type instantiation is excessively deep` in `registerTool(...)`.
 Cause: `"zod": ["./node_modules/zod"]` resolves `index.d.ts`, while the SDK resolves zod through package `exports` to `index.d.cts`: two distinct zod type copies.

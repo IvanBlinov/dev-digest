@@ -1,6 +1,14 @@
 import type { ConventionsView } from '../domain/conventions';
 import type { ResponseFormat } from './findings';
-import { HINT_RESERVE, MAX_RESPONSE_CHARS, capItems, fenceUntrusted, oneLine } from './text';
+import {
+  CATEGORY_MAX,
+  HINT_RESERVE,
+  MAX_RESPONSE_CHARS,
+  PATH_MAX,
+  capItems,
+  fenceUntrusted,
+  oneLine,
+} from './text';
 
 const NEVER_STARTS = 'This tool never starts extraction; run it from the DevDigest UI.';
 const RULE_MAX = 300;
@@ -24,7 +32,7 @@ export function presentConventions(view: ConventionsView, format: ResponseFormat
   const render = (c: ConventionsView['items'][number], i: number): string => {
     const lines =
       c.startLine === null ? '' : `:${c.startLine}${c.endLine === null ? '' : `-${c.endLine}`}`;
-    const row = `${i + 1}. [${c.category}] ${oneLine(c.rule, RULE_MAX)} · ${c.evidencePath}${lines} (${c.status})`;
+    const row = `${i + 1}. [${oneLine(c.category, CATEGORY_MAX)}] ${oneLine(c.rule, RULE_MAX)} · ${oneLine(c.evidencePath, PATH_MAX)}${lines} (${c.status})`;
     return format === 'detailed' ? `${row}\n${fenceUntrusted(c.snippet, SNIPPET_MAX)}` : row;
   };
   const { text, rendered } = capItems(view.items, render, MAX_RESPONSE_CHARS - header.length - HINT_RESERVE);

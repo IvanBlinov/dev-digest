@@ -1,5 +1,14 @@
 import type { FindingItem, FindingsPage, ReviewSummary, RunRef } from '../domain/findings';
-import { HINT_RESERVE, MAX_RESPONSE_CHARS, capItems, fenceUntrusted, oneLine } from './text';
+import {
+  CATEGORY_MAX,
+  HINT_RESERVE,
+  MAX_RESPONSE_CHARS,
+  NAME_MAX,
+  PATH_MAX,
+  capItems,
+  fenceUntrusted,
+  oneLine,
+} from './text';
 
 export type ResponseFormat = 'concise' | 'detailed';
 
@@ -16,13 +25,13 @@ export interface FindingsPresentation {
 
 function reviewsHeader(reviews: ReviewSummary[]): string {
   const parts = reviews.map(
-    (r) => `${oneLine(r.agentName, 60)}: ${r.verdict ?? 'no verdict'}${r.score === null ? '' : `, ${r.score}`}`,
+    (r) => `${oneLine(r.agentName, NAME_MAX)}: ${r.verdict ?? 'no verdict'}${r.score === null ? '' : `, ${r.score}`}`,
   );
   return `${reviews.length} review(s) (${parts.join('; ')})`;
 }
 
 function renderItem(f: FindingItem, n: number, format: ResponseFormat): string {
-  const line = `${n}. [${f.severity}] ${f.category} · ${f.file}:${f.startLine}-${f.endLine} · ${oneLine(f.title, TITLE_MAX)} (${oneLine(f.agentName, 60)})`;
+  const line = `${n}. [${f.severity}] ${oneLine(f.category, CATEGORY_MAX)} · ${oneLine(f.file, PATH_MAX)}:${f.startLine}-${f.endLine} · ${oneLine(f.title, TITLE_MAX)} (${oneLine(f.agentName, NAME_MAX)})`;
   if (format === 'concise') return line;
   const extra = [fenceUntrusted(f.rationale, FIELD_MAX)];
   if (f.suggestion) extra.push(`   suggestion:\n${fenceUntrusted(f.suggestion, FIELD_MAX)}`);
@@ -32,7 +41,7 @@ function renderItem(f: FindingItem, n: number, format: ResponseFormat): string {
 export function presentFindings(input: FindingsPresentation, format: ResponseFormat): string {
   const running = input.running.length
     ? `\nStill running: ${input.running
-        .map((r) => `${oneLine(r.agentName, 60)} (run_id ${r.runId}, ~${r.ageSec}s)`)
+        .map((r) => `${oneLine(r.agentName, NAME_MAX)} (run_id ${r.runId}, ~${r.ageSec}s)`)
         .join('; ')}. Call get_findings again later for their results.`
     : '';
 
@@ -48,7 +57,7 @@ export function presentFindings(input: FindingsPresentation, format: ResponseFor
   ];
   if (format === 'detailed') {
     for (const r of input.reviews) {
-      if (r.summary) header.push(`${oneLine(r.agentName, 60)} summary:\n${fenceUntrusted(r.summary, SUMMARY_MAX)}`);
+      if (r.summary) header.push(`${oneLine(r.agentName, NAME_MAX)} summary:\n${fenceUntrusted(r.summary, SUMMARY_MAX)}`);
     }
   }
   const headerText = header.join('\n');

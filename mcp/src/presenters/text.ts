@@ -1,3 +1,8 @@
+/** Caps for short model- or user-written fields shown inline in a row. */
+export const NAME_MAX = 60;
+export const CATEGORY_MAX = 40;
+export const PATH_MAX = 300;
+
 /** Hard cap on one tool response (chars). */
 export const MAX_RESPONSE_CHARS = 20_000;
 /** Chars kept free for the trailing "more -> offset" hint. */
@@ -10,6 +15,11 @@ export function truncate(s: string, max: number): string {
 /** Collapse to one line, for list rows. */
 export function oneLine(s: string, max: number): string {
   return truncate(s.replace(/\s+/g, ' ').trim(), max);
+}
+
+/** One-line, quoted and labelled as data: for untrusted text that must stay inline. */
+export function untrustedInline(label: string, s: string, max: number): string {
+  return `${label} (untrusted data): "${oneLine(s, max).replace(/"/g, "'")}"`;
 }
 
 /** Wrap model-produced text as inert data. Backtick runs inside cannot close the fence. */
