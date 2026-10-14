@@ -1,0 +1,30 @@
+import type { CSSProperties } from "react";
+
+export const s = {
+  headerRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" } satisfies CSSProperties,
+  summaryRow: { display: "flex", gap: 24, flexWrap: "wrap", margin: "4px 0 14px" } satisfies CSSProperties,
+  stat: { display: "flex", alignItems: "baseline", gap: 6 } satisfies CSSProperties,
+  statNum: { fontSize: 20, fontWeight: 700, color: "var(--text-primary)" } satisfies CSSProperties,
+  statLabel: { fontSize: 12.5, color: "var(--text-muted)" } satisfies CSSProperties,
+  symbolList: { display: "flex", flexDirection: "column", gap: 8 } satisfies CSSProperties,
+  symbolHead: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    width: "100%",
+    background: "none",
+    border: "none",
+    padding: "6px 0",
+    cursor: "pointer",
+    fontSize: 14,
+    color: "var(--text-primary)",
+    textAlign: "left",
+  } satisfies CSSProperties,
+  count: { marginLeft: "auto", fontSize: 12.5, color: "var(--text-muted)" } satisfies CSSProperties,
+  body: { padding: "0 0 8px 22px", display: "flex", flexDirection: "column", gap: 8 } satisfies CSSProperties,
+  callers: { margin: 0, paddingLeft: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 3 } satisfies CSSProperties,
+  caller: { display: "flex", gap: 10, fontSize: 13, color: "var(--text-secondary)" } satisfies CSSProperties,
+  chips: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 } satisfies CSSProperties,
+  chipsLabel: { fontSize: 12, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" } satisfies CSSProperties,
+  muted: { fontSize: 13, color: "var(--text-muted)" } satisfies CSSProperties,
+} as const;

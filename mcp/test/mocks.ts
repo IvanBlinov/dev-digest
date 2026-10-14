@@ -1,5 +1,6 @@
 import type {
   Agent,
+  BlastRadius,
   ConventionsState,
   FindingRecord,
   PrMeta,
@@ -134,6 +135,28 @@ export function conventionsState(over: Partial<ConventionsState> = {}): Conventi
   };
 }
 
+export function blastRadius(over: Partial<BlastRadius> = {}): BlastRadius {
+  return {
+    changed_symbols: [
+      { name: 'formatMoney', file: 'src/lib/money.ts', kind: 'function' },
+      { name: 'parseMoney', file: 'src/lib/parse.ts', kind: 'function' },
+    ],
+    downstream: [
+      {
+        symbol: 'formatMoney',
+        callers: [
+          { name: 'refund', file: 'src/a.ts', line: 12 },
+          { name: 'order', file: 'src/b.ts', line: 30 },
+        ],
+        endpoints_affected: ['GET /refunds'],
+        crons_affected: ['0 * * * *'],
+      },
+    ],
+    summary: '2 changed symbols, 2 callers, 1 endpoint, 1 cron',
+    ...over,
+  };
+}
+
 // ---- MockDevDigestApi -------------------------------------------------------
 
 type Method = keyof DevDigestApi;
@@ -145,6 +168,7 @@ export interface MockFixtures {
   runs: Record<string, RunSummary[]>;
   reviews: Record<string, ReviewRecord[]>;
   conventions: Record<string, ConventionsState>;
+  blast: Record<string, BlastRadius>;
   /** Overrides the default startReview response. */
   startReviewResult?: ReviewRunResponse;
 }
@@ -163,6 +187,7 @@ export class MockDevDigestApi implements DevDigestApi {
       runs: {},
       reviews: {},
       conventions: {},
+      blast: {},
       ...fixtures,
     };
   }
@@ -218,5 +243,11 @@ export class MockDevDigestApi implements DevDigestApi {
     const state = this.fixtures.conventions[repoId];
     if (!state) throw new Error(`no conventions fixture for ${repoId}`);
     return state;
+  }
+  async getBlastRadius(prId: string): Promise<BlastRadius> {
+    this.record('getBlastRadius', [prId]);
+    const radius = this.fixtures.blast[prId];
+    if (!radius) throw new Error(`no blast fixture for ${prId}`);
+    return radius;
   }
 }

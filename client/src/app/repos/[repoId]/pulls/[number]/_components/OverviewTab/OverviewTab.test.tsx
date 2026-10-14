@@ -1,6 +1,13 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
+
+vi.mock("./_components/BlastRadiusBlock", () => ({
+  BlastRadiusBlock: ({ prId }: { prId: string | null }) => <div data-testid="blast-block">{prId}</div>,
+}));
+
 import { OverviewTab } from "./OverviewTab";
+
+const blastProps = { prId: "p1", repoId: "r1", repoFullName: "acme/payments-api", headSha: "abc" };
 
 afterEach(cleanup);
 
@@ -20,7 +27,7 @@ const BODY = [
 
 describe("OverviewTab", () => {
   it("renders the PR description as Markdown, not raw text", () => {
-    render(<OverviewTab prBody={BODY} />);
+    render(<OverviewTab prBody={BODY} {...blastProps} />);
     expect(screen.getByRole("heading", { name: "What it does" })).toBeTruthy();
     expect(screen.getByText("Files changed").tagName).toBe("STRONG");
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
@@ -29,15 +36,21 @@ describe("OverviewTab", () => {
   });
 
   it("does not render raw HTML or javascript: links from the author-controlled body", () => {
-    const { container } = render(<OverviewTab prBody={BODY} />);
+    const { container } = render(<OverviewTab prBody={BODY} {...blastProps} />);
     expect(container.querySelector("img")).toBeNull();
     expect(container.textContent).not.toContain("demo video goes here");
     const link = screen.getByText("bad").closest("a");
     expect(link?.getAttribute("href") ?? "").not.toMatch(/^javascript:/i);
   });
 
-  it("renders nothing without a body", () => {
-    const { container } = render(<OverviewTab prBody={null} />);
-    expect(container.textContent).toBe("");
+  it("renders the blast radius block with the PR id", () => {
+    render(<OverviewTab prBody={BODY} {...blastProps} />);
+    expect(screen.getByTestId("blast-block").textContent).toBe("p1");
+  });
+
+  it("has no description without a body, but the blast block still renders", () => {
+    render(<OverviewTab prBody={null} {...blastProps} />);
+    expect(screen.queryByText("Description")).toBeNull();
+    expect(screen.getByTestId("blast-block")).toBeInTheDocument();
   });
 });

@@ -2,6 +2,12 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-13 — [Non-obvious behaviour] Blast radius caller cap is global, not per symbol; grouping is name-keyed
+Symptom: a PR that changes one heavily used symbol plus several rarely used ones shows few or no callers for the rare ones; same-named symbols from different files merge into one group.
+Cause: `getBlastRadius` truncates the flat caller list with `MAX_CALLERS_PER_SYMBOL` (20) across all symbols, despite the name; callers carry only `viaSymbol` (a name), so `toBlastRadius` groups by name and the declaring-file filter checks every file that declares that name.
+Rule: do not add capping or per-file attribution in `blast/helpers.ts`; fix the limit in the facade (slice per `viaSymbol`) if per-symbol completeness matters.
+Proof: `server/src/modules/repo-intel/service.ts:386`, `server/src/modules/repo-intel/constants.ts:30`, `server/src/modules/blast/helpers.ts:33`
+
 ## 2026-10-08 — [Non-obvious behaviour] Seed patches feed `diff-loader`, and rule order puts `e2e/README.md` in "tests"
 Symptom: seeded `pr_files` patches change what review/intent code sees when git has no diff; a doc under `e2e/` classifies as tests, not docs.
 Cause: `diff-loader` falls back to `pr_files.patch`; the classifier checks directory segments before the `.md` rule.

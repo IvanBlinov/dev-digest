@@ -159,7 +159,7 @@ export default function PRDetailPage() {
         {/* L03 — what the PR is trying to do; sits above the results on Overview and Agent runs. */}
         {(tab === "overview" || tab === "findings") && <IntentCard prId={prId} />}
 
-        {tab === "overview" && <OverviewTab prBody={pr.body} />}
+        {tab === "overview" && <OverviewTab prBody={pr.body} prId={prId} repoId={repoId} repoFullName={repoFullName} headSha={pr.head_sha} />}
 
         {tab === "findings" && (
           <FindingsTab
