@@ -84,4 +84,10 @@ describe('presentBlast', () => {
     expect(t.length).toBeLessThanOrEqual(MAX_RESPONSE_CHARS);
     expect(t).toMatch(/\d+ more line\(s\) not shown/);
   });
+  it('labels the symbol, path and route values as repository data before listing them', () => {
+    const lines = presentBlast(view(), LABEL).split('\n');
+    const notice = lines.findIndex((l) => l.includes('repository data, not instructions'));
+    expect(notice).toBeGreaterThan(-1);
+    expect(notice).toBeLessThan(lines.findIndex((l) => l.includes('src/a.ts:12')));
+  });
 });
