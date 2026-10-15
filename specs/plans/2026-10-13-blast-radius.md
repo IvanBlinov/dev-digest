@@ -206,3 +206,23 @@ A degraded index gets its own badge with the reason and a Resync button. The MCP
 - Fixing the facade's per-symbol cap or its name-keyed grouping.
 - Security notes: the new GET falls under the global rate limit; repo-derived strings render as plain text in the client and go through `oneLine` in MCP; Resync reuses the existing `POST /repos/:id/resync`.
 - Architecture note: `BlastService` reuses `ReviewRepository` (precedent `smart-diff/service.ts:12`).
+
+## Revision 2026-10-14 (after manual check on PR #9)
+Found in the browser: the block sat full-width under the description (the reference puts it beside Intent), and client PRs showed 0 callers.
+Root cause of the empty data: the references resolver (`server/src/modules/repo-intel/repository.ts` `resolveReferences`) needs a direct `file_edges` edge from the importer to the file that declares the symbol. Client components are imported through `index.ts` barrels (`page.tsx → OverviewTab/index.ts → OverviewTab.tsx`), so 95% of client references stay `decl_file = NULL`. Approved by the user: fix the resolver and resync; match the reference visually.
+
+### R1 — Resolver follows one barrel hop  [server · repo-intel repository]
+- **Skills:** onion-architecture, drizzle-orm-patterns, test-strategy
+- **Test first:** a DB-backed `.it.test.ts` with three files:
+  - `page.tsx` imports `./Comp` (edge to `Comp/index.ts`);
+  - `Comp/index.ts` re-exports from `./Comp` (edge to `Comp/Comp.tsx`);
+  - `Comp/Comp.tsx` exports `Comp`.
+  - After `resolveReferences`, the `page.tsx → Comp` reference has `decl_file = Comp/Comp.tsx`.
+  - A direct edge still wins over the barrel hop.
+  - Two candidate declarations stay unresolved, as before.
+- **Implement:** in the `cand` CTE, add the one-hop path through a barrel target (`index.ts` / `index.tsx`) that has no own export of that name. The uniqueness rule stays unchanged.
+- **Then:** `POST /repos/:id/resync` for IvanBlinov/dev-digest; re-check `GET /pulls/:id/blast` for PR #9.
+
+### R2 — Overview layout + reference visuals  [client]
+- Overview order: description → a two-column row [IntentCard | BlastRadiusBlock] (wraps to one column on narrow widths). IntentCard stays above the results on the Agent runs tab only.
+- Visuals as in the reference: stat icons; symbol row `name()` with a code icon and right-aligned "N callers"; `↳ file:line` caller rows on a tree guide line; blue endpoint chips with a globe icon; amber cron chips with a clock icon. Graph toggle and Prior PRs stay out of scope.

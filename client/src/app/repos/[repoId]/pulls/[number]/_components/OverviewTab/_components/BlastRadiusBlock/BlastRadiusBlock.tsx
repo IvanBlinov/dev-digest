@@ -22,13 +22,19 @@ interface BlastRadiusBlockProps {
 
 type LinkCtx = { repoFullName: string | null; headSha: string | null };
 
-function ChipGroup({ label, items }: { label: string; items: string[] }) {
+function ChipGroup({ label, items, kind }: { label: string; items: string[]; kind: "endpoint" | "cron" }) {
   if (items.length === 0) return null;
+  const isEndpoint = kind === "endpoint";
   return (
     <div role="group" aria-label={label} style={s.chips}>
-      <span style={s.chipsLabel}>{label}</span>
       {items.map((item) => (
-        <Badge key={item} mono>
+        <Badge
+          key={item}
+          mono
+          icon={isEndpoint ? "Globe" : "Clock"}
+          color={isEndpoint ? "var(--accent-text)" : "var(--warn)"}
+          bg={isEndpoint ? "var(--accent-bg)" : "var(--warn-bg)"}
+        >
           {item}
         </Badge>
       ))}
@@ -36,19 +42,28 @@ function ChipGroup({ label, items }: { label: string; items: string[] }) {
   );
 }
 
-function CallerRef({ file, line, link }: { file: string; line: number; link: LinkCtx }) {
+function CallerRef({ file, line, name, link }: { file: string; line: number; name: string; link: LinkCtx }) {
   const text = `${file}:${line}`;
-  if (link.repoFullName && link.headSha) {
-    return <MonoLink href={githubBlobUrl(link.repoFullName, link.headSha, file, line)}>{text}</MonoLink>;
-  }
-  return <span className="mono">{text}</span>;
+  // The caller function name is only a tooltip; the visible text is the location.
+  const ref =
+    link.repoFullName && link.headSha ? (
+      <MonoLink href={githubBlobUrl(link.repoFullName, link.headSha, file, line)}>{text}</MonoLink>
+    ) : (
+      <span className="mono">{text}</span>
+    );
+  return (
+    <span title={name} style={s.callerRef}>
+      <Icon.CornerDownRight size={12} style={s.muted} />
+      {ref}
+    </span>
+  );
 }
 
 function SymbolImpact({ impact, open, onToggle, link }: { impact: DownstreamImpact; open: boolean; onToggle: () => void; link: LinkCtx }) {
   const t = useTranslations("blast");
   const Chevron = open ? Icon.ChevronDown : Icon.ChevronRight;
   return (
-    <div>
+    <div style={s.symbolBox}>
       <button
         type="button"
         style={s.symbolHead}
@@ -57,7 +72,8 @@ function SymbolImpact({ impact, open, onToggle, link }: { impact: DownstreamImpa
         onClick={onToggle}
       >
         <Chevron size={14} />
-        <span className="mono">{impact.symbol}</span>
+        <Icon.Code size={14} style={s.codeIcon} />
+        <span className="mono">{`${impact.symbol}()`}</span>
         <span style={s.count}>{t("callerCount", { count: impact.callers.length })}</span>
       </button>
       {open && (
@@ -65,13 +81,12 @@ function SymbolImpact({ impact, open, onToggle, link }: { impact: DownstreamImpa
           <ul style={s.callers}>
             {impact.callers.map((c, i) => (
               <li key={`${i}-${c.file}-${c.line}`} style={s.caller}>
-                <CallerRef file={c.file} line={c.line} link={link} />
-                <span>{c.name}</span>
+                <CallerRef file={c.file} line={c.line} name={c.name} link={link} />
               </li>
             ))}
           </ul>
-          <ChipGroup label={t("endpointsLabel")} items={impact.endpoints_affected} />
-          <ChipGroup label={t("cronsLabel")} items={impact.crons_affected} />
+          <ChipGroup label={t("endpointsLabel")} items={impact.endpoints_affected} kind="endpoint" />
+          <ChipGroup label={t("cronsLabel")} items={impact.crons_affected} kind="cron" />
         </div>
       )}
     </div>
@@ -85,10 +100,10 @@ function BlastBody({ radius, repoId, link }: { radius: BlastRadius; repoId: stri
   const [flipped, setFlipped] = useState<ReadonlySet<string>>(new Set());
   const counts = blastCounts(radius);
   const stats = [
-    ["symbols", counts.symbols],
-    ["callers", counts.callers],
-    ["endpoints", counts.endpoints],
-    ["crons", counts.crons],
+    ["symbols", counts.symbols, Icon.Code],
+    ["callers", counts.callers, Icon.CornerDownRight],
+    ["endpoints", counts.endpoints, Icon.Globe],
+    ["crons", counts.crons, Icon.Clock],
   ] as const;
 
   const isOpen = (symbol: string, index: number) => (index === 0) !== flipped.has(symbol);
@@ -123,8 +138,9 @@ function BlastBody({ radius, repoId, link }: { radius: BlastRadius; repoId: stri
       {resync.isSuccess && <p style={s.muted}>{t("resyncStarted")}</p>}
 
       <div role="group" aria-label={t("summaryAria")} style={s.summaryRow}>
-        {stats.map(([key, n]) => (
+        {stats.map(([key, n, StatIcon]) => (
           <div key={key} style={s.stat}>
+            <StatIcon size={14} style={s.muted} />
             <span style={s.statNum}>{n}</span>
             <span style={s.statLabel}>{t(`stat.${key}`)}</span>
           </div>

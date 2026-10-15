@@ -3,10 +3,13 @@ import type { CSSProperties } from "react";
 export const s = {
   headerRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" } satisfies CSSProperties,
   summaryRow: { display: "flex", gap: 24, flexWrap: "wrap", margin: "4px 0 14px" } satisfies CSSProperties,
-  stat: { display: "flex", alignItems: "baseline", gap: 6 } satisfies CSSProperties,
+  stat: { display: "flex", alignItems: "center", gap: 6 } satisfies CSSProperties,
   statNum: { fontSize: 20, fontWeight: 700, color: "var(--text-primary)" } satisfies CSSProperties,
   statLabel: { fontSize: 12.5, color: "var(--text-muted)" } satisfies CSSProperties,
   symbolList: { display: "flex", flexDirection: "column", gap: 8 } satisfies CSSProperties,
+  symbolBox: { background: "var(--bg-hover)", borderRadius: 6, padding: "0 10px" } satisfies CSSProperties,
+  codeIcon: { color: "var(--accent-text)", flexShrink: 0 } satisfies CSSProperties,
+  callerRef: { display: "inline-flex", alignItems: "center", gap: 6 } satisfies CSSProperties,
   symbolHead: {
     display: "flex",
     alignItems: "center",
@@ -21,10 +24,16 @@ export const s = {
     textAlign: "left",
   } satisfies CSSProperties,
   count: { marginLeft: "auto", fontSize: 12.5, color: "var(--text-muted)" } satisfies CSSProperties,
-  body: { padding: "0 0 8px 22px", display: "flex", flexDirection: "column", gap: 8 } satisfies CSSProperties,
+  body: {
+    margin: "0 0 10px 7px",
+    padding: "0 0 0 14px",
+    borderLeft: "1px solid var(--border)",
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  } satisfies CSSProperties,
   callers: { margin: 0, paddingLeft: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 3 } satisfies CSSProperties,
   caller: { display: "flex", gap: 10, fontSize: 13, color: "var(--text-secondary)" } satisfies CSSProperties,
   chips: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 } satisfies CSSProperties,
-  chipsLabel: { fontSize: 12, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" } satisfies CSSProperties,
   muted: { fontSize: 13, color: "var(--text-muted)" } satisfies CSSProperties,
 } as const;

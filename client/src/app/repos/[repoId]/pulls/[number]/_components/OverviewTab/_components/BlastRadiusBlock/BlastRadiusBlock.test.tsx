@@ -103,6 +103,13 @@ describe("BlastRadiusBlock", () => {
     expect(within(endpoints).queryByText("0 * * * *")).toBeNull();
   });
 
+  it("shows symbols as name() and keeps the caller function name as the link title", () => {
+    setup({ data: RADIUS });
+    expect(screen.getByText("formatMoney()")).toBeInTheDocument();
+    expect(screen.getByText("src/a.ts:12").closest("[title]")?.getAttribute("title")).toBe("refund");
+    expect(screen.queryByText("refund")).toBeNull();
+  });
+
   it("explains an empty downstream", () => {
     setup({ data: { changed_symbols: RADIUS.changed_symbols, downstream: [], summary: "s" } });
     expect(screen.getByText("2 changed symbol(s), no downstream callers found.")).toBeInTheDocument();
@@ -129,5 +136,10 @@ describe("BlastRadiusBlock", () => {
     expect(screen.getByText("Could not load the blast radius.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /retry/i }));
     expect(refetch).toHaveBeenCalled();
+  });
+  it("pluralises the per-symbol caller count", () => {
+    setup({ data: RADIUS });
+    expect(screen.getByText("1 caller")).toBeInTheDocument();
+    expect(screen.queryByText("1 callers")).not.toBeInTheDocument();
   });
 });

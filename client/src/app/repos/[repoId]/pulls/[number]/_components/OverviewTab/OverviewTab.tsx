@@ -11,9 +11,11 @@ interface OverviewTabProps {
   repoId: string | null;
   repoFullName: string | null;
   headSha: string | null;
+  /** The PR intent card; rendered beside the blast radius block. */
+  intentSlot?: React.ReactNode;
 }
 
-export function OverviewTab({ prBody, prId, repoId, repoFullName, headSha }: OverviewTabProps) {
+export function OverviewTab({ prBody, prId, repoId, repoFullName, headSha, intentSlot }: OverviewTabProps) {
   return (
     <>
       {prBody && (
@@ -25,7 +27,10 @@ export function OverviewTab({ prBody, prId, repoId, repoFullName, headSha }: Ove
           </div>
         </section>
       )}
-      <BlastRadiusBlock prId={prId} repoId={repoId} repoFullName={repoFullName} headSha={headSha} />
+      <div style={s.twoCol}>
+        {intentSlot}
+        <BlastRadiusBlock prId={prId} repoId={repoId} repoFullName={repoFullName} headSha={headSha} />
+      </div>
     </>
   );
 }
