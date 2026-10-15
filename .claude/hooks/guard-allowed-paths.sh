@@ -55,17 +55,17 @@ case "$profile" in
   test-writer)
     # Deny patterns first: files that look like they match an allow pattern but are not tests.
     case "$rel" in
-      client/src/test/setup.ts) block "client test setup is config, not a test — allowed: server/test/**, reviewer-core/test/**, client/src/**/*.test.ts(x), client/src/**/test-fixtures.ts, server/src/adapters/mocks.ts, e2e/specs/NN-*.flow.json, INSIGHTS.md" ;;
+      client/src/test/setup.ts) block "client test setup is config, not a test — allowed: server/test/**, reviewer-core/test/**, mcp/test/**, client/src/**/*.test.ts(x), client/src/**/test-fixtures.ts, server/src/adapters/mocks.ts, e2e/specs/NN-*.flow.json, INSIGHTS.md" ;;
     esac
     case "$rel" in
-      server/test/*|reviewer-core/test/*) exit 0 ;;
+      server/test/*|reviewer-core/test/*|mcp/test/*) exit 0 ;;
       client/src/*.test.ts|client/src/*.test.tsx) exit 0 ;;
       client/src/*/test-fixtures.ts) exit 0 ;;
       server/src/adapters/mocks.ts) exit 0 ;;
       e2e/specs/[0-9][0-9]-*.flow.json) exit 0 ;;
       */INSIGHTS.md|INSIGHTS.md) exit 0 ;;
     esac
-    block "test-writer may only write server/test/**, reviewer-core/test/**, client/src/**/*.test.ts(x), client/src/**/test-fixtures.ts, server/src/adapters/mocks.ts, e2e/specs/NN-*.flow.json, or INSIGHTS.md — got $rel"
+    block "test-writer may only write server/test/**, reviewer-core/test/**, mcp/test/**, client/src/**/*.test.ts(x), client/src/**/test-fixtures.ts, server/src/adapters/mocks.ts, e2e/specs/NN-*.flow.json, or INSIGHTS.md — got $rel"
     ;;
   doc-writer)
     # Deny patterns first.

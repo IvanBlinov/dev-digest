@@ -16,6 +16,7 @@ edge that actually matters, at the seam (route, adapter, contract, pipeline, ren
 | server route / service without DB | `server/test/<feature>.test.ts` via `buildApp({ config, overrides })` | `src/adapters/mocks.ts` (`MockLLMProvider`, `MockGitHubClient`, `MockGitClient`, `MockUrlFetcher`, …) | same |
 | DB-backed route / repository | `server/test/<feature>.it.test.ts` + `test/helpers/pg.ts` | real Postgres; mocks for LLM/GitHub | see `db-schema-change` (TEST_DATABASE_URL) |
 | reviewer-core | `reviewer-core/test/…` | a fake `LLMProvider`; assert on assembled prompt + grounded output | `cd reviewer-core && npm test` |
+| mcp (tools / services / domain / presenters) | `mcp/test/<layer>/…` | `MockDevDigestApi` from `mcp/test/mocks.ts`; tools through `test/helpers/connect.ts` (in-memory MCP client) | `cd mcp && npm test` |
 | client component | colocated `<Name>.test.tsx` | `vi.mock` the hook module (`@/lib/hooks/<domain>`), `vi.mock` heavy children; wrap in `NextIntlClientProvider` with the real `messages/en/<ns>.json` | `cd client && pnpm exec vitest run <path>` |
 | client pure helper | colocated `helpers.test.ts` | nothing | same |
 | main user journey (new screen/route) | `e2e/specs/NN-name.flow.json` | seeded data only | see `e2e-flows` |
@@ -38,6 +39,7 @@ edge that actually matters, at the seam (route, adapter, contract, pipeline, ren
 | server | `cd server && pnpm typecheck && pnpm exec vitest run --exclude '**/*.it.test.ts'` (+ touched `.it.test.ts`) |
 | client | `cd client && pnpm typecheck && pnpm test` (+ `pnpm build` after a new `@devdigest/shared` value import or route) |
 | reviewer-core | `cd reviewer-core && npm run typecheck && npm test` then `cd server && pnpm typecheck` |
+| mcp | `cd mcp && npm run typecheck && npm test` (+ `npm run test:it` only with `./scripts/dev.sh` up) |
 | e2e | `cd e2e && npm run typecheck` (+ `npm run e2e:hermetic` when flows changed) |
 
 `next build` while `next dev` runs on :3000 corrupts the dev server's `.next` — stop dev first,

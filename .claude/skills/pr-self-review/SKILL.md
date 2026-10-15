@@ -43,6 +43,7 @@ matching skill **before** judging that file. Load each skill once.
 | `*/src/vendor/shared/**` | `shared-contracts`, `zod` |
 | server routes, auth, secrets, env/config, file or shell input, LLM prompt text (`server/src/prompts/**`, `reviewer-core/src/**`) | `security` |
 | `reviewer-core/src/**` | `typescript-expert`; read `reviewer-core/AGENTS.md` Boundaries |
+| `mcp/**` | `typescript-expert`, `zod`, `security`; read `mcp/AGENTS.md` Boundaries |
 | `e2e/**` | `e2e-flows`; read `e2e/AGENTS.md` |
 | any new or changed test file | `test-strategy` |
 | `.claude/skills/**`, `.claude/agents/**`, `**/AGENTS.md`, `**/INSIGHTS.md`, `docs/**`, `specs/**` | none — run the **fact check** below |
@@ -87,6 +88,7 @@ A package counts as touched only when a non-`.md` file inside it changed.
 | `server/` | `cd server && pnpm typecheck && pnpm exec vitest run --exclude '**/*.it.test.ts'` (+ `pnpm exec vitest run .it.test` if Docker is up and DB code changed) |
 | `client/` | `cd client && pnpm typecheck && pnpm test` |
 | `reviewer-core/` | `cd reviewer-core && npm run typecheck && npm test` |
+| `mcp/` | `cd mcp && npm run typecheck && npm test` |
 | `e2e/` | `cd e2e && npm run typecheck` |
 | only `.md` / skills changed | the fact check from Step 2 (links + cited paths) |
 | `.claude/hooks/**` changed | `bash .claude/hooks/tests/hooks.test.sh` (all PASS) |

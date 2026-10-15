@@ -79,6 +79,8 @@ run_case "allow test-writer: server test helper" \
   guard-allowed-paths.sh test-writer Edit "$ROOT/server/test/helpers/pg.ts" 0
 run_case "allow test-writer: reviewer-core test" \
   guard-allowed-paths.sh test-writer Edit "$ROOT/reviewer-core/test/prompt.test.ts" 0
+run_case "allow test-writer: mcp test" \
+  guard-allowed-paths.sh test-writer Edit "$ROOT/mcp/test/foo.test.ts" 0
 run_case "allow test-writer: client component test" \
   guard-allowed-paths.sh test-writer Write "$ROOT/client/src/app/x/_components/Y/Y.test.tsx" 0
 run_case "allow test-writer: client lib test" \
