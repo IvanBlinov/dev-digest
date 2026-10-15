@@ -74,4 +74,14 @@ describe('HttpDevDigestApi', () => {
     expect(err).toBeInstanceOf(ApiError);
     expect(err).toMatchObject({ status: 500, code: 'http_500' });
   });
+
+  it('getBlastRadius GETs /pulls/:id/blast with the id encoded', async () => {
+    const seen: string[] = [];
+    const api = new HttpDevDigestApi(config, async (url) => {
+      seen.push(String(url));
+      return jsonResponse({ changed_symbols: [], downstream: [], summary: 's' });
+    });
+    await api.getBlastRadius('pr/1');
+    expect(seen).toEqual(['http://api.test:3001/pulls/pr%2F1/blast']);
+  });
 });

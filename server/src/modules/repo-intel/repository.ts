@@ -21,6 +21,8 @@ import type { DegradedReason, FileRankRow, IndexState, IndexStatus } from './typ
 
 /** Chunk size for batched inserts — same value blast already uses. */
 const INSERT_CHUNK_SIZE = 500;
+/** Postgres regex for a barrel module (`…/index.ts` etc.) that resolveReferences may hop through. */
+const BARREL_FILE_PATTERN = '(^|/)index\\.(ts|tsx|js|jsx|mjs|cjs)$';
 
 /** Row shape the indexer pipeline buffers up before persistence. */
 export interface IndexerSymbolRow {
@@ -390,6 +392,12 @@ export class RepoIntelRepository {
    * candidate is unique. 0 or >1 candidates leave `decl_file = NULL` (which is
    * the honest "unresolved" signal, never a nearest-name guess).
    *
+   * Barrels: when there is no direct candidate and `from_path` imports an
+   * `index.*` file, the files that barrel imports are candidates too (one hop).
+   * Client components are imported as `./_components/Comp` → `Comp/index.ts`
+   * → `Comp/Comp.tsx`, so without the hop most client references stayed NULL.
+   * A direct candidate always wins; the uniqueness rule applies to the hop too.
+   *
    * `reset: true` (incremental) first clears every decl_file so a changed
    * decl-file can't leave a stale resolution behind; full index inserts rows
    * with NULL decl_file already, so reset is unnecessary there.
@@ -404,7 +412,7 @@ export class RepoIntelRepository {
       );
     }
     await this.db.execute(sql`
-      WITH cand AS (
+      WITH direct AS (
         SELECT r.id AS ref_id, e.to_file AS decl
         FROM "references" r
         JOIN file_edges e ON e.repo_id = r.repo_id AND e.from_file = r.from_path
@@ -412,6 +420,23 @@ export class RepoIntelRepository {
                       AND s.name = r.to_symbol AND s.exported = true
         WHERE r.repo_id = ${repoId}
         GROUP BY r.id, e.to_file
+      ),
+      via_barrel AS (
+        SELECT r.id AS ref_id, e2.to_file AS decl
+        FROM "references" r
+        JOIN file_edges e ON e.repo_id = r.repo_id AND e.from_file = r.from_path
+        JOIN file_edges e2 ON e2.repo_id = r.repo_id AND e2.from_file = e.to_file
+        JOIN symbols s ON s.repo_id = r.repo_id AND s.path = e2.to_file
+                      AND s.name = r.to_symbol AND s.exported = true
+        WHERE r.repo_id = ${repoId}
+          AND e.to_file ~ ${BARREL_FILE_PATTERN}
+          AND NOT EXISTS (SELECT 1 FROM direct d WHERE d.ref_id = r.id)
+        GROUP BY r.id, e2.to_file
+      ),
+      cand AS (
+        SELECT ref_id, decl FROM direct
+        UNION ALL
+        SELECT ref_id, decl FROM via_barrel
       ),
       uniq AS (
         SELECT ref_id FROM cand GROUP BY ref_id HAVING count(*) = 1

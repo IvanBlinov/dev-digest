@@ -1,5 +1,6 @@
 import type {
   Agent,
+  BlastRadius,
   ConventionsState,
   PrMeta,
   Repo,
@@ -18,4 +19,5 @@ export interface DevDigestApi {
   listRuns(prId: string): Promise<RunSummary[]>;
   listReviews(prId: string): Promise<ReviewRecord[]>;
   getConventions(repoId: string): Promise<ConventionsState>;
+  getBlastRadius(prId: string): Promise<BlastRadius>;
 }

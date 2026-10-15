@@ -1,0 +1,13 @@
+{
+  "name": "PR detail Overview shows the Blast radius block",
+  "description": "From PR #482, the Overview tab renders the Blast radius block: the four summary labels and, because the seeded repo has no repo-intel index, the degraded badge 'Index incomplete'. Read-only (no Resync click, no model call). Does not match the section heading, which is uppercased by CSS. Assumes a freshly-seeded DB (see e2e/README.md).",
+  "steps": [
+    { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "land on the PR list" },
+    { "cmd": ["find", "text", "Add rate limiting to public API endpoints", "click"], "label": "open the PR row" },
+    { "cmd": ["wait", "--url", "/pulls/482"], "label": "navigate to the PR detail route" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "PR detail data settles" },
+    { "cmd": ["wait", "--text", "cron/jobs"], "label": "the blast radius summary labels render on Overview" },
+    { "cmd": ["wait", "--text", "Index incomplete"], "label": "the degraded index badge renders for the unindexed seeded repo" }
+  ]
+}

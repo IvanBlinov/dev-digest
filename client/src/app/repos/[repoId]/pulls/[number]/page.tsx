@@ -156,10 +156,10 @@ export default function PRDetailPage() {
       />
 
       <div style={{ padding: "24px 32px 44px", display: "flex", flexDirection: "column", gap: 24, maxWidth: 1080, margin: "0 auto" }}>
-        {/* L03 — what the PR is trying to do; sits above the results on Overview and Agent runs. */}
-        {(tab === "overview" || tab === "findings") && <IntentCard prId={prId} />}
+        {/* L03 — what the PR is trying to do; sits above the results on Agent runs and beside the blast radius on Overview. */}
+        {tab === "findings" && <IntentCard prId={prId} />}
 
-        {tab === "overview" && <OverviewTab prBody={pr.body} />}
+        {tab === "overview" && <OverviewTab prBody={pr.body} prId={prId} repoId={repoId} repoFullName={repoFullName} headSha={pr.head_sha} intentSlot={<IntentCard prId={prId} />} />}
 
         {tab === "findings" && (
           <FindingsTab

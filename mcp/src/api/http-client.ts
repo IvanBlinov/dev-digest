@@ -1,6 +1,7 @@
 import type {
   Agent,
   ApiErrorBody,
+  BlastRadius,
   ConventionsState,
   PrMeta,
   Repo,
@@ -47,6 +48,9 @@ export class HttpDevDigestApi implements DevDigestApi {
   }
   getConventions(repoId: string): Promise<ConventionsState> {
     return this.request('GET', `/repos/${encodeURIComponent(repoId)}/conventions`);
+  }
+  getBlastRadius(prId: string): Promise<BlastRadius> {
+    return this.request('GET', `/pulls/${encodeURIComponent(prId)}/blast`);
   }
 
   private async request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {

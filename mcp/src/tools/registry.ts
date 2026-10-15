@@ -1,5 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { AgentsService } from '../services/agents-service';
+import type { BlastService } from '../services/blast-service';
 import type { ConventionsService } from '../services/conventions-service';
 import type { ReviewsService } from '../services/reviews-service';
 import * as getBlastRadius from './get-blast-radius';
@@ -12,6 +13,7 @@ export interface Services {
   agents: AgentsService;
   reviews: ReviewsService;
   conventions: ConventionsService;
+  blast: BlastService;
 }
 
 export function registerTools(server: McpServer, services: Services): void {
@@ -19,5 +21,5 @@ export function registerTools(server: McpServer, services: Services): void {
   server.registerTool(runReview.definition.name, runReview.definition.config, runReview.handler(services));
   server.registerTool(getFindings.definition.name, getFindings.definition.config, getFindings.handler(services));
   server.registerTool(getConventions.definition.name, getConventions.definition.config, getConventions.handler(services));
-  server.registerTool(getBlastRadius.definition.name, getBlastRadius.definition.config, getBlastRadius.handler());
+  server.registerTool(getBlastRadius.definition.name, getBlastRadius.definition.config, getBlastRadius.handler(services));
 }
