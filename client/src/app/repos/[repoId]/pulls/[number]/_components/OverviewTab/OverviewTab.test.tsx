@@ -48,13 +48,13 @@ describe("OverviewTab", () => {
     expect(screen.getByTestId("blast-block").textContent).toBe("p1");
   });
 
-  it("renders the intent slot next to the blast block, after the description", () => {
+  it("renders the intent slot next to the blast block, before the description", () => {
     render(<OverviewTab prBody={BODY} intentSlot={<div data-testid="intent">intent</div>} {...blastProps} />);
     const intent = screen.getByTestId("intent");
     const blast = screen.getByTestId("blast-block");
     expect(intent.parentElement).toBe(blast.parentElement);
     const description = screen.getByRole("heading", { name: "What it does" });
-    expect(description.compareDocumentPosition(intent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(blast.compareDocumentPosition(description) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(intent.compareDocumentPosition(blast) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 

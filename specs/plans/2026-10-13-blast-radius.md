@@ -224,5 +224,5 @@ Root cause of the empty data: the references resolver (`server/src/modules/repo-
 - **Then:** `POST /repos/:id/resync` for IvanBlinov/dev-digest; re-check `GET /pulls/:id/blast` for PR #9.
 
 ### R2 — Overview layout + reference visuals  [client]
-- Overview order: description → a two-column row [IntentCard | BlastRadiusBlock] (wraps to one column on narrow widths). IntentCard stays above the results on the Agent runs tab only.
+- Overview order: a two-column row [IntentCard | BlastRadiusBlock] (wraps to one column on narrow widths), then the description (user correction 2026-10-14: the row goes first). IntentCard stays above the results on the Agent runs tab only.
 - Visuals as in the reference: stat icons; symbol row `name()` with a code icon and right-aligned "N callers"; `↳ file:line` caller rows on a tree guide line; blue endpoint chips with a globe icon; amber cron chips with a clock icon. Graph toggle and Prior PRs stay out of scope.

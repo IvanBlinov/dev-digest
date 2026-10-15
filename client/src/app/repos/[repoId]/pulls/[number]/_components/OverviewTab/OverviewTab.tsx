@@ -18,6 +18,10 @@ interface OverviewTabProps {
 export function OverviewTab({ prBody, prId, repoId, repoFullName, headSha, intentSlot }: OverviewTabProps) {
   return (
     <>
+      <div style={s.twoCol}>
+        {intentSlot}
+        <BlastRadiusBlock prId={prId} repoId={repoId} repoFullName={repoFullName} headSha={headSha} />
+      </div>
       {prBody && (
         <section>
           <SectionLabel icon="MessageSquare">Description</SectionLabel>
@@ -27,10 +31,6 @@ export function OverviewTab({ prBody, prId, repoId, repoFullName, headSha, inten
           </div>
         </section>
       )}
-      <div style={s.twoCol}>
-        {intentSlot}
-        <BlastRadiusBlock prId={prId} repoId={repoId} repoFullName={repoFullName} headSha={headSha} />
-      </div>
     </>
   );
 }
