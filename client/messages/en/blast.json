@@ -8,14 +8,22 @@
     "crons": "cron/jobs"
   },
   "view": {
-    "tree": "tree",
-    "graph": "graph"
+    "tree": "Tree",
+    "graph": "Graph",
+    "switchAria": "Blast radius view"
   },
   "callerCount": "{count, plural, one {# caller} other {# callers}}",
   "noDownstream": "{count} changed symbol(s), no downstream callers found.",
   "graph": {
     "empty": "No downstream callers to graph.",
-    "ariaLabel": "Blast radius graph"
+    "ariaLabel": "Blast radius graph",
+    "legendAria": "Legend",
+    "legend": {
+      "symbol": "changed symbol",
+      "caller": "callers",
+      "endpoint": "endpoints affected",
+      "cron": "crons affected"
+    }
   },
   "degraded": {
     "badge": "Index incomplete: {reason}",

@@ -26,7 +26,7 @@ presents** it: no re-parsing, no AST/import-graph rebuild, no LLM call.
 
 ## Decisions (settled with the user, 2026-10-13)
 - Scope: **P1 + P2 + cheap P3** (collapsible tree, sort by rank, crons separate from endpoints,
-  resync button next to the degraded badge, labels from `blast.json`). **Out:** Graph view, Prior PRs block.
+  resync button next to the degraded badge, labels from `blast.json`). **Out:** Prior PRs block. Graph view added on 2026-10-14 at the user's request (see AC17).
 - Contract: add optional `degraded?: boolean` and `reason?: <the five facade reasons>` to
   `BlastRadius` (both `vendor/shared` copies, same commit). Backward-compatible.
 - Branch: `feat/l04-blast-radius` off `feat/l04-mcp-server`.
@@ -80,6 +80,7 @@ P2
 - [ ] AC15 — MCP tool follows the lab rules (description, schema, concise output, useful unknown-PR error, `readOnlyHint: true`).
 P3 (in scope)
 - [ ] AC16 — Symbols collapse/expand; sorted by rank; crons separate from endpoints; Resync button on degraded; labels from `blast.json`.
+- [ ] AC17 — Tree / Graph switch next to the summary; Graph draws changed symbols → callers → endpoints/crons as inline SVG with a legend; long labels are shortened with the full text as a tooltip (added 2026-10-14).
 
 ## Out of scope
-Graph view, Prior PRs block (needs new GitHub data), any LLM summary.
+Prior PRs block (needs new GitHub data), any LLM summary.

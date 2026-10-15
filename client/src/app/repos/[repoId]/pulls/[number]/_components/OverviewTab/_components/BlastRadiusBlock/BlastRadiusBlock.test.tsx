@@ -142,4 +142,27 @@ describe("BlastRadiusBlock", () => {
     expect(screen.getByText("1 caller")).toBeInTheDocument();
     expect(screen.queryByText("1 callers")).not.toBeInTheDocument();
   });
+  it("switches between the Tree and Graph views", () => {
+    setup({ data: RADIUS });
+    const views = screen.getByRole("group", { name: "Blast radius view" });
+    const tree = within(views).getByRole("button", { name: "Tree" });
+    const graph = within(views).getByRole("button", { name: "Graph" });
+    expect(tree).toHaveAttribute("aria-pressed", "true");
+    expect(graph).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByRole("img", { name: "Blast radius graph" })).toBeNull();
+
+    fireEvent.click(graph);
+    expect(graph).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("img", { name: "Blast radius graph" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /formatMoney/ })).toBeNull();
+
+    fireEvent.click(tree);
+    expect(screen.queryByRole("img", { name: "Blast radius graph" })).toBeNull();
+    expect(screen.getByRole("button", { name: /formatMoney/ })).toBeInTheDocument();
+  });
+
+  it("hides the view switch when there are no callers", () => {
+    setup({ data: { ...RADIUS, downstream: [] } });
+    expect(screen.queryByRole("group", { name: "Blast radius view" })).toBeNull();
+  });
 });

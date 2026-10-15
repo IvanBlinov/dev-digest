@@ -226,3 +226,12 @@ Root cause of the empty data: the references resolver (`server/src/modules/repo-
 ### R2 — Overview layout + reference visuals  [client]
 - Overview order: a two-column row [IntentCard | BlastRadiusBlock] (wraps to one column on narrow widths), then the description (user correction 2026-10-14: the row goes first). IntentCard stays above the results on the Agent runs tab only.
 - Visuals as in the reference: stat icons; symbol row `name()` with a code icon and right-aligned "N callers"; `↳ file:line` caller rows on a tree guide line; blue endpoint chips with a globe icon; amber cron chips with a clock icon. Graph toggle and Prior PRs stay out of scope.
+
+### R3 — Tree / Graph switch  [client] (user request 2026-10-14)
+- `BlastRadiusBlock` gets a two-button switch (`aria-pressed`) at the right of the summary row. It is hidden when there are no callers.
+- New child `_components/BlastGraph/`: a pure `graphLayout(downstream)` builds three columns of nodes and the edges between them:
+  - columns: changed symbols → callers (one node per name + file) → endpoints / crons;
+  - edges: symbol → caller, then caller → its group's endpoints / crons.
+  - `BlastGraph` draws it as inline SVG (viewBox scales to the card) with a legend.
+  - Labels are shortened to 20 characters, with the full text in `<title>`.
+- No new dependency; labels in `blast.json` (`view.*`, `graph.legend.*`).

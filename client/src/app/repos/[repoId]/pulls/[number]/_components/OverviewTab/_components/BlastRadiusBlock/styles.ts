@@ -2,7 +2,26 @@ import type { CSSProperties } from "react";
 
 export const s = {
   headerRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" } satisfies CSSProperties,
-  summaryRow: { display: "flex", gap: 24, flexWrap: "wrap", margin: "4px 0 14px" } satisfies CSSProperties,
+  summaryRow: { display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap", margin: "4px 0 14px" } satisfies CSSProperties,
+  viewSwitch: {
+    marginLeft: "auto",
+    display: "inline-flex",
+    padding: 2,
+    gap: 2,
+    border: "1px solid var(--border)",
+    borderRadius: 7,
+    background: "var(--bg-elevated)",
+  } satisfies CSSProperties,
+  viewButton: (on: boolean): CSSProperties => ({
+    border: "none",
+    borderRadius: 5,
+    padding: "4px 12px",
+    fontSize: 12.5,
+    fontWeight: on ? 600 : 500,
+    cursor: "pointer",
+    background: on ? "var(--bg-hover)" : "transparent",
+    color: on ? "var(--text-primary)" : "var(--text-muted)",
+  }),
   stat: { display: "flex", alignItems: "center", gap: 6 } satisfies CSSProperties,
   statNum: { fontSize: 20, fontWeight: 700, color: "var(--text-primary)" } satisfies CSSProperties,
   statLabel: { fontSize: 12.5, color: "var(--text-muted)" } satisfies CSSProperties,

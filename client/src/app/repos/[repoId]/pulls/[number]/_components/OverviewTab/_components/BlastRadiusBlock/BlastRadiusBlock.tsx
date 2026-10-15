@@ -10,6 +10,7 @@ import type { BlastRadius, DownstreamImpact } from "@devdigest/shared";
 import { useBlastRadius } from "@/lib/hooks/blast";
 import { useResyncRepoIntel } from "@/lib/hooks/repo-intel";
 import { githubBlobUrl } from "@/lib/github-urls";
+import { BlastGraph } from "./_components/BlastGraph";
 import { blastCounts } from "./helpers";
 import { s } from "./styles";
 
@@ -21,6 +22,21 @@ interface BlastRadiusBlockProps {
 }
 
 type LinkCtx = { repoFullName: string | null; headSha: string | null };
+type View = "tree" | "graph";
+const VIEWS: View[] = ["tree", "graph"];
+
+function ViewSwitch({ view, onChange }: { view: View; onChange: (v: View) => void }) {
+  const t = useTranslations("blast");
+  return (
+    <div role="group" aria-label={t("view.switchAria")} style={s.viewSwitch}>
+      {VIEWS.map((v) => (
+        <button key={v} type="button" aria-pressed={view === v} style={s.viewButton(view === v)} onClick={() => onChange(v)}>
+          {t(`view.${v}`)}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function ChipGroup({ label, items, kind }: { label: string; items: string[]; kind: "endpoint" | "cron" }) {
   if (items.length === 0) return null;
@@ -98,6 +114,8 @@ function BlastBody({ radius, repoId, link }: { radius: BlastRadius; repoId: stri
   const resync = useResyncRepoIntel(repoId);
   // Symbols the user flipped away from the default (first expanded, rest collapsed).
   const [flipped, setFlipped] = useState<ReadonlySet<string>>(new Set());
+  const [view, setView] = useState<View>("tree");
+  const hasDownstream = radius.downstream.length > 0;
   const counts = blastCounts(radius);
   const stats = [
     ["symbols", counts.symbols, Icon.Code],
@@ -145,10 +163,13 @@ function BlastBody({ radius, repoId, link }: { radius: BlastRadius; repoId: stri
             <span style={s.statLabel}>{t(`stat.${key}`)}</span>
           </div>
         ))}
+        {hasDownstream && <ViewSwitch view={view} onChange={setView} />}
       </div>
 
-      {radius.downstream.length === 0 ? (
+      {!hasDownstream ? (
         <p style={s.muted}>{t("noDownstream", { count: radius.changed_symbols.length })}</p>
+      ) : view === "graph" ? (
+        <BlastGraph downstream={radius.downstream} />
       ) : (
         <div style={s.symbolList}>
           {radius.downstream.map((d, i) => (
