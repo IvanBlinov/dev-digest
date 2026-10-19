@@ -115,11 +115,16 @@ case "$profile" in
     cur_file=/dev/null
     [ -e "$root/$rel" ] && cur_file="$root/$rel"
     after=$(jq -r --rawfile cur "$cur_file" '
+      # Fail closed: an edit that would not apply cleanly (old_string empty, missing, or ambiguous
+      # without replace_all) is judged as an unknown status and blocked.
       def apply($t): . as $c
-        | ($c | split($t.old_string // "")) as $parts
-        | if ($parts | length) == 1 then $c
-          elif ($t.replace_all // false) then $parts | join($t.new_string)
-          else $parts[0] + $t.new_string + ($parts[1:] | join($t.old_string)) end;
+        | if ($t.old_string // "") == "" then "Status: unmatched-edit"
+          else ($c | split($t.old_string)) as $parts
+            | if ($parts | length) == 1 then "Status: unmatched-edit"
+              elif ($t.replace_all // false) then $parts | join($t.new_string)
+              elif ($parts | length) > 2 then "Status: ambiguous-edit"
+              else $parts[0] + $t.new_string + $parts[1] end
+          end;
       .tool_input as $t
       | if $t.content == null and $t.old_string == null and $t.new_string == null and $t.edits == null then "Status: draft"
         elif $t.content != null then $t.content
@@ -127,11 +132,17 @@ case "$profile" in
           (if ($t.new_string | test("(?im)^[\\s>*_#-]*status[\\s*_]*:")) then $t.new_string else "Status: draft" end)
         elif $t.edits != null then reduce $t.edits[] as $e ($cur; apply($e))
         else $cur | apply($t) end' <<<"$input")
-    status=$(printf '%s\n' "$after" \
-      | grep -iE '^[[:space:]>*_#-]*status[[:space:]*_]*:' | head -n 1 \
-      | sed -E 's/^[^:]*:[[:space:]*_]*//; s/[[:space:]*_.]*$//' | tr '[:upper:]' '[:lower:]')
-    if [ "$status" != "draft" ]; then
-      block "spec-writer only writes specs with 'Status: draft' (after this edit it would be '${status:-no Status line}') — approved/implemented are set by the user and doc-writer"
+    # One canonical format, the one consumers read (`^Status:`, case-sensitive): exactly one such
+    # line, valued draft. Any loosely written status line (other case, markdown) must say draft too.
+    canon=$(printf '%s\n' "$after" | grep -E '^Status:' || true)
+    canon_count=$(printf '%s' "$canon" | grep -c '^Status:' || true)
+    status=$(printf '%s\n' "$canon" | head -n 1 | sed -E 's/^Status:[[:space:]]*//; s/[[:space:]]*$//')
+    loose_bad=$(printf '%s\n' "$after" \
+      | grep -iE '^[[:space:]>*_#-]*status[[:space:]*_]*:' \
+      | sed -E 's/^[^:]*:[[:space:]*_]*//; s/[[:space:]*_.]*$//' | tr '[:upper:]' '[:lower:]' \
+      | grep -vx 'draft' || true)
+    if [ "$canon_count" != 1 ] || [ "$status" != "draft" ] || [ -n "$loose_bad" ]; then
+      block "spec-writer only writes specs with exactly one 'Status: draft' line (after this edit: ${canon_count} canonical line(s), value '${status:-none}'${loose_bad:+, other status text '$loose_bad'}) — approved/implemented are set by the user and doc-writer"
     fi
     exit 0
     ;;

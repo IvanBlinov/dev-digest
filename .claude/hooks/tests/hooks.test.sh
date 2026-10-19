@@ -298,6 +298,14 @@ run_content_case "block spec-writer: Write with a bold approved status" \
   Write "$ROOT/specs/L05-new.md" content $'# Spec: z\nSpec ID: SPEC-97\n**Status**: approved\n' 2
 run_content_case "block spec-writer: Write a new spec without a Status line" \
   Write "$ROOT/specs/L05-new.md" content $'# Spec: z\nSpec ID: SPEC-97\n' 2
+run_content_case "block spec-writer: decorated draft line above a real approved line" \
+  Write "$ROOT/specs/L05-new.md" content $'# Spec: z\n**status**: draft\nStatus: approved\n' 2
+run_content_case "block spec-writer: two canonical Status lines" \
+  Write "$ROOT/specs/L05-new.md" content $'# Spec: z\nStatus: draft\nStatus: draft\n' 2
+run_content_case "block spec-writer: only a decorated status line, no canonical one" \
+  Write "$ROOT/specs/L05-new.md" content $'# Spec: z\n**Status:** draft\n' 2
+run_edit_case "block spec-writer: Edit whose old_string is not in the file" "$DRAFT" "not present anywhere" "Status: approved" 2
+run_edit_case "block spec-writer: Edit with an empty old_string on an existing file" "$DRAFT" "" "x" 2
 rm -f "$DRAFT" "$APPROVED"
 
 echo "$pass passed, $fail failed"
