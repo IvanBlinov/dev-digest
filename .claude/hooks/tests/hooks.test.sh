@@ -275,6 +275,29 @@ run_content_case "block spec-writer: Write creates an implemented spec" \
   Write "$ROOT/specs/L05-new.md" content $'# Spec: z\nSpec ID: SPEC-97\nStatus: implemented\n' 2
 run_content_case "allow spec-writer: Write creates a draft spec" \
   Write "$ROOT/specs/L05-new.md" content $'# Spec: z\nSpec ID: SPEC-97\nStatus: draft\n' 0
+# An Edit is judged on the file as it would look afterwards (old_string → new_string applied).
+run_edit_case() {
+  local name="$1" path="$2" old="$3" new="$4" expected_exit="$5"
+  local json stderr_out exit_code
+  json=$(jq -n --arg p "$path" --arg o "$old" --arg n "$new" \
+    '{tool_name:"Edit", tool_input:{file_path:$p, old_string:$o, new_string:$n}}')
+  stderr_out=$(CLAUDE_PROJECT_DIR="$ROOT" bash "$ROOT/.claude/hooks/guard-allowed-paths.sh" spec-writer <<<"$json" 2>&1 1>/dev/null)
+  exit_code=$?
+  if [ "$exit_code" = "$expected_exit" ]; then
+    echo "PASS $name"; pass=$((pass + 1))
+  else
+    echo "FAIL $name (exit=$exit_code expected=$expected_exit stderr=$stderr_out)"; fail=$((fail + 1))
+  fi
+}
+run_edit_case "block spec-writer: Edit replaces only the word draft" "$DRAFT" "draft" "approved" 2
+run_edit_case "block spec-writer: Edit writes a bold, capitalised status" "$DRAFT" "Status: draft" "**Status:** Approved" 2
+run_edit_case "block spec-writer: Edit writes an upper-case status" "$DRAFT" "Status: draft" "status: IMPLEMENTED" 2
+run_edit_case "block spec-writer: Edit removes the Status line" "$DRAFT" $'Status: draft\n' "" 2
+run_edit_case "allow spec-writer: Edit changes the body of a draft" "$DRAFT" "# Spec: x" "# Spec: x renamed" 0
+run_content_case "block spec-writer: Write with a bold approved status" \
+  Write "$ROOT/specs/L05-new.md" content $'# Spec: z\nSpec ID: SPEC-97\n**Status**: approved\n' 2
+run_content_case "block spec-writer: Write a new spec without a Status line" \
+  Write "$ROOT/specs/L05-new.md" content $'# Spec: z\nSpec ID: SPEC-97\n' 2
 rm -f "$DRAFT" "$APPROVED"
 
 echo "$pass passed, $fail failed"

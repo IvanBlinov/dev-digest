@@ -109,10 +109,29 @@ case "$profile" in
       status=$(sed -n 's/^Status:[[:space:]]*//p' "$root/$rel" | head -n 1 | tr -d '[:space:]')
       [ "$status" = "draft" ] || block "only specs with 'Status: draft' may be edited (this one has '${status:-no Status line}') — write a new spec with 'Supersedes:' instead"
     fi
-    # Approval is the user's: the new text may not set another status.
-    new_text=$(jq -r '[.tool_input.content, .tool_input.new_string, ((.tool_input.edits // [])[]?.new_string)] | map(select(. != null)) | join("\n")' <<<"$input")
-    if grep -qE '^Status:[[:space:]]*(approved|implemented)' <<<"$new_text"; then
-      block "spec-writer only writes 'Status: draft' — approved/implemented are set by the user and doc-writer"
+    # Approval is the user's. Judge the file as it would look after this call: Write → content;
+    # Edit/MultiEdit → old_string → new_string applied to the current text. Its first Status line
+    # (any case, markdown such as **Status:** allowed) must read exactly "draft".
+    cur_file=/dev/null
+    [ -e "$root/$rel" ] && cur_file="$root/$rel"
+    after=$(jq -r --rawfile cur "$cur_file" '
+      def apply($t): . as $c
+        | ($c | split($t.old_string // "")) as $parts
+        | if ($parts | length) == 1 then $c
+          elif ($t.replace_all // false) then $parts | join($t.new_string)
+          else $parts[0] + $t.new_string + ($parts[1:] | join($t.old_string)) end;
+      .tool_input as $t
+      | if $t.content == null and $t.old_string == null and $t.new_string == null and $t.edits == null then "Status: draft"
+        elif $t.content != null then $t.content
+        elif $t.old_string == null and $t.edits == null then
+          (if ($t.new_string | test("(?im)^[\\s>*_#-]*status[\\s*_]*:")) then $t.new_string else "Status: draft" end)
+        elif $t.edits != null then reduce $t.edits[] as $e ($cur; apply($e))
+        else $cur | apply($t) end' <<<"$input")
+    status=$(printf '%s\n' "$after" \
+      | grep -iE '^[[:space:]>*_#-]*status[[:space:]*_]*:' | head -n 1 \
+      | sed -E 's/^[^:]*:[[:space:]*_]*//; s/[[:space:]*_.]*$//' | tr '[:upper:]' '[:lower:]')
+    if [ "$status" != "draft" ]; then
+      block "spec-writer only writes specs with 'Status: draft' (after this edit it would be '${status:-no Status line}') — approved/implemented are set by the user and doc-writer"
     fi
     exit 0
     ;;

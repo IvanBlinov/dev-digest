@@ -61,6 +61,16 @@ date prefix and `.md`). Write it after every phase change with `jq` or the Write
    touches → ask before starting.
 6. Write the state file (`phase: build`).
 
+## Phase 1a — Red phase (only when the plan has a "Red phase" line)
+
+When the plan's header says `**Red phase:** test-writer — S<a>, S<b>, …`, start one
+`test-writer` agent in **mode R** before any implementer: plan path, slug, those step IDs, and
+the instruction "write the acceptance tests **from the spec's ACs**, not from code; every test
+title starts with its `AC-N`; each must fail for the expected reason". Record its Test Report
+under `reports/` (see Bookkeeping). The implementer then runs those tests red→green without
+rewriting their assertions (`implementer.md` Step 1). "Needs from implementer" items are passed
+to the first implementer run.
+
 ## Phase 1 — Build
 
 - **single:** one `implementer` agent: `plan: <path>`, `slug: <slug>`, all steps, hints, design
@@ -71,6 +81,15 @@ date prefix and `.md`). Write it after every phase change with `jq` or the Write
 
 After each run, record the range status. `partial` or `blocked` → show the blocked items and ask:
 retry the range / continue with the next range / stop. Do not fix anything yourself.
+
+## Bookkeeping (every agent run, every phase)
+
+For `/workflow-retro`, after each agent finishes:
+- append to the state's `agents` list `{name, label, tokens, tool_uses, duration_ms}` from the
+  task notification's usage line;
+- save the agent's final report to `.claude/handoff/<slug>/reports/<NN>-<agent>-<label>.md`
+  (numbered in run order). These files are git-ignored; they are the retro's evidence of
+  deviations, skipped skills and "not run" items.
 
 ## Phase 2 — Architecture review
 
@@ -151,6 +170,7 @@ commit and open a PR / nothing. Do each only after the user picks it.
 - Never commit, push or open a PR without the user's explicit OK at the end.
 - Never edit a spec or plan. A requirement problem found on the way goes to the user, who sends
   it to spec-writer or implementation-planner.
-- Agents are started one at a time except where this skill says otherwise; never start
-  test-writer from here.
+- Agents are started one at a time except where this skill says otherwise. test-writer runs
+  only in Phase 1a, when the plan asks for a red phase.
+- After Phase 6, suggest `/workflow-retro <slug>` once.
 - A gate that did not run is "not run: <reason>", never passed.
