@@ -116,13 +116,14 @@ case "$profile" in
     [ -e "$root/$rel" ] && cur_file="$root/$rel"
     after=$(jq -r --rawfile cur "$cur_file" '
       # Fail closed: an edit that would not apply cleanly (old_string empty, missing, or ambiguous
-      # without replace_all) is judged as an unknown status and blocked.
+      # without replace_all) aborts jq, and a failed jq blocks the call (no sentinel text that a
+      # later MultiEdit edit could rewrite).
       def apply($t): . as $c
-        | if ($t.old_string // "") == "" then "Status: unmatched-edit"
+        | if ($t.old_string // "") == "" then error("unmatched-edit")
           else ($c | split($t.old_string)) as $parts
-            | if ($parts | length) == 1 then "Status: unmatched-edit"
+            | if ($parts | length) == 1 then error("unmatched-edit")
               elif ($t.replace_all // false) then $parts | join($t.new_string)
-              elif ($parts | length) > 2 then "Status: ambiguous-edit"
+              elif ($parts | length) > 2 then error("ambiguous-edit")
               else $parts[0] + $t.new_string + $parts[1] end
           end;
       .tool_input as $t
@@ -131,7 +132,8 @@ case "$profile" in
         elif $t.old_string == null and $t.edits == null then
           (if ($t.new_string | test("(?im)^[\\s>*_#-]*status[\\s*_]*:")) then $t.new_string else "Status: draft" end)
         elif $t.edits != null then reduce $t.edits[] as $e ($cur; apply($e))
-        else $cur | apply($t) end' <<<"$input")
+        else $cur | apply($t) end' <<<"$input") \
+      || block "the edit does not apply cleanly to the current spec (old_string missing, empty or ambiguous)"
     # One canonical format, the one consumers read (`^Status:`, case-sensitive): exactly one such
     # line, valued draft. Any loosely written status line (other case, markdown) must say draft too.
     canon=$(printf '%s\n' "$after" | grep -E '^Status:' || true)

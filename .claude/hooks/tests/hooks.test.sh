@@ -306,6 +306,13 @@ run_content_case "block spec-writer: only a decorated status line, no canonical 
   Write "$ROOT/specs/L05-new.md" content $'# Spec: z\n**Status:** draft\n' 2
 run_edit_case "block spec-writer: Edit whose old_string is not in the file" "$DRAFT" "not present anywhere" "Status: approved" 2
 run_edit_case "block spec-writer: Edit with an empty old_string on an existing file" "$DRAFT" "" "x" 2
+# MultiEdit: a failing edit must stop the whole call, even if a later edit "repairs" the text.
+json=$(jq -n --arg p "$DRAFT" '{tool_name:"MultiEdit", tool_input:{file_path:$p, edits:[
+  {old_string:"not present anywhere", new_string:"x"},
+  {old_string:"unmatched-edit", new_string:"draft"}]}}')
+CLAUDE_PROJECT_DIR="$ROOT" bash "$ROOT/.claude/hooks/guard-allowed-paths.sh" spec-writer <<<"$json" >/dev/null 2>&1
+if [ $? = 2 ]; then echo "PASS block spec-writer: MultiEdit with a failing edit followed by a repair"; pass=$((pass + 1));
+else echo "FAIL block spec-writer: MultiEdit with a failing edit followed by a repair"; fail=$((fail + 1)); fi
 rm -f "$DRAFT" "$APPROVED"
 
 echo "$pass passed, $fail failed"
