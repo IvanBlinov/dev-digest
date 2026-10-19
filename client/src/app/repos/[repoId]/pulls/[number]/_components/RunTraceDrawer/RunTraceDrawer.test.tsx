@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import type { RunTrace } from "@devdigest/shared";
+import type { RunTrace, ProjectContextBlock } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/runs.json"; // apps/web/messages/en/runs.json
 
 // Mock the trace hooks so the drawer renders without a query client / SSE.
@@ -110,5 +110,57 @@ describe("L02 skills in the prompt assembly trace", () => {
     expect(screen.getByText("System")).toBeInTheDocument();
     expect(screen.queryByText("Skills")).not.toBeInTheDocument();
     expect(screen.queryByText("Skills (dynamic)")).not.toBeInTheDocument();
+  });
+});
+
+describe("L05 project context in the prompt assembly trace", () => {
+  const block: ProjectContextBlock = { path: "docs/architecture.md", kind: "docs", origin: "attached", tokens: 70, text: "api does not import db", truncated: false };
+  const CTX_TRACE: RunTrace = {
+    ...TRACE,
+    specs_read: ["docs/architecture.md", "docs/gone.md"],
+    prompt_assembly: {
+      ...TRACE.prompt_assembly,
+      repo_map: "REPO-SKELETON",
+      specs: "legacy specs text",
+      specs_blocks: [block],
+      specs_tokens: 70,
+      specs_skipped: [{ path: "docs/gone.md", reason: "not_found" }],
+    },
+  };
+
+  function open() {
+    renderWithIntl(<RunTraceDrawer runId="r1" agentName="Security" prNumber={482} onClose={() => {}} />);
+    fireEvent.click(screen.getByText("Prompt assembly"));
+  }
+
+  it("AC-54: Specs read lists the paths, or none", () => {
+    currentTrace = CTX_TRACE;
+    renderWithIntl(<RunTraceDrawer runId="r1" agentName="Security" prNumber={482} onClose={() => {}} />);
+    expect(screen.getByText("docs/gone.md")).toBeInTheDocument();
+    cleanup();
+    currentTrace = TRACE;
+    renderWithIntl(<RunTraceDrawer runId="r1" agentName="Security" prNumber={482} onClose={() => {}} />);
+    expect(screen.getByText("none")).toBeInTheDocument();
+  });
+
+  it("AC-56: Repo skeleton renders before Project context", () => {
+    currentTrace = CTX_TRACE;
+    open();
+    const skeleton = screen.getByText("Repo skeleton — repo-intel (dynamic)");
+    const ctx = screen.getByText("Project context — attached specs (untrusted)");
+    expect(skeleton.compareDocumentPosition(ctx) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText("Project context (dynamic)")).not.toBeInTheDocument();
+  });
+
+  it("AC-58: without specs_blocks the legacy specs block renders; with nothing, no section", () => {
+    currentTrace = { ...TRACE, prompt_assembly: { ...TRACE.prompt_assembly, specs: "legacy specs text" } };
+    open();
+    expect(screen.getByText("Project context (dynamic)")).toBeInTheDocument();
+    expect(screen.queryByText(/attached specs/)).not.toBeInTheDocument();
+    cleanup();
+    currentTrace = TRACE;
+    open();
+    expect(screen.queryByText("Project context (dynamic)")).not.toBeInTheDocument();
+    expect(screen.queryByText(/attached specs/)).not.toBeInTheDocument();
   });
 });

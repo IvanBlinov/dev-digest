@@ -29,6 +29,14 @@ import {
   skillsLogLine,
   type EffectiveSkillsSource,
 } from './skills-prompt.js';
+import {
+  buildProjectContextPlan,
+  orderContextPaths,
+  projectContextLogLine,
+  readProjectDocs,
+  type ProjectContextSource,
+} from './project-context-prompt.js';
+import { makeRootMatcher } from '../project-context/helpers.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -68,6 +76,8 @@ interface ExecCtx {
   logger: Logger | undefined;
   /** One ID per review execution: ties every `prompt.assembled` event + each run trace together. */
   correlationId: string;
+  /** HEAD of the clone the project-context documents were read from; null without a clone. */
+  cloneSha: string | null;
 }
 
 /** One agent's in-memory result between compute and finalize. */
@@ -80,6 +90,7 @@ interface AgentComputation {
   runLog: RunLogger;
   outcome: ReviewOutcome;
   skillsPlan: ReturnType<typeof buildSkillsPrompt>;
+  contextPlan: ReturnType<typeof buildProjectContextPlan>;
 }
 
 /**
@@ -94,6 +105,7 @@ export class ReviewRunExecutor {
     private repo: ReviewRepository,
     private agents: Container['agentsRepo'],
     private skills: EffectiveSkillsSource,
+    private projectContext: ProjectContextSource,
   ) {}
 
   /**
@@ -171,7 +183,12 @@ export class ReviewRunExecutor {
     );
     runLog.info(`Diff ready — ${diff.files.length} changed file(s); starting ${jobs.length} agent run(s)`);
 
-    const ctx: ExecCtx = { workspaceId, pull, repo, diff, intent, scopeFilter, runLog, logger, correlationId };
+    // L05 — the clone HEAD the attached documents are read from (best-effort).
+    const cloneSha = repo.clonePath
+      ? await this.container.git.currentHead({ owner: repo.owner, name: repo.name }).catch(() => null)
+      : null;
+
+    const ctx: ExecCtx = { workspaceId, pull, repo, diff, intent, scopeFilter, runLog, logger, correlationId, cloneSha };
     const concurrency = this.container.config.reviewAgentConcurrency;
 
     // Each run finishes (and persists) on its own, as soon as its agent is done.
@@ -271,6 +288,24 @@ export class ReviewRunExecutor {
     const skillsPlan = buildSkillsPrompt(usableSkills, this.container.tokenizer);
     runLog.info(skillsLogLine(skillsPlan));
 
+    // L05 — documents attached to the agent and to its usable skills, read from
+    // the repo clone. A lookup failure fails the run (same rule as skills above);
+    // a document read never does (AC-25) — it is recorded as skipped instead.
+    const agentPaths = await this.projectContext.pathsForAgent(agent.id);
+    const skillPaths = await this.projectContext.pathsForSkills(usableSkills.map((s) => s.id));
+    const contextEntries = orderContextPaths(
+      agentPaths,
+      usableSkills.map((s) => ({ name: s.name, paths: skillPaths.get(s.id) ?? [] })),
+    );
+    const contextReads = await readProjectDocs(
+      this.container.docs,
+      repo.clonePath ?? null,
+      contextEntries,
+      makeRootMatcher(this.container.config.projectContextRoots),
+    );
+    const contextPlan = buildProjectContextPlan(contextReads, this.container.tokenizer);
+    runLog.info(projectContextLogLine(contextPlan, contextEntries.length));
+
     // ---- Engine: assemble → single-pass → grounding -----------------------
     // The pure review pipeline lives in @devdigest/reviewer-core (shared with
     // the CI runner). The service owns only I/O: repo-intel context resolution
@@ -290,6 +325,8 @@ export class ReviewRunExecutor {
       ...(repoMap ? { repoMap } : {}),
       // L02 — omitted when no skill is enabled (prompt identical to pre-L02).
       ...(skillsPlan.texts.length > 0 ? { skills: skillsPlan.texts } : {}),
+      // L05 — same omit-when-empty contract (prompt identical to pre-L05).
+      ...(contextPlan.texts.length > 0 ? { specs: contextPlan.texts } : {}),
       // PR author's description/body — untrusted; assemblePrompt wraps +
       // truncates it. Omitted when the PR has no body.
       ...(pull.body ? { prDescription: pull.body } : {}),
@@ -330,7 +367,7 @@ export class ReviewRunExecutor {
       },
     });
 
-    return { agent, runId, order, start, runLog, outcome, skillsPlan };
+    return { agent, runId, order, start, runLog, outcome, skillsPlan, contextPlan };
   }
 
   /**
@@ -342,7 +379,7 @@ export class ReviewRunExecutor {
     comp: AgentComputation,
   ): Promise<RunOutcome> {
     const { workspaceId, pull } = ctx;
-    const { agent, runId, runLog, outcome, skillsPlan } = comp;
+    const { agent, runId, runLog, outcome, skillsPlan, contextPlan } = comp;
     const { tokensIn, tokensOut, grounding, costUsd } = outcome;
 
     const finalReview = outcome.review;
@@ -396,6 +433,7 @@ export class ReviewRunExecutor {
         pr: pull.number,
         source: 'local',
         correlation_id: ctx.correlationId,
+        clone_sha: ctx.cloneSha,
       },
       stats: {
         duration_ms: durationMs,
@@ -409,6 +447,9 @@ export class ReviewRunExecutor {
         ...outcome.assembly,
         skills_blocks: skillsPlan.blocks.length > 0 ? skillsPlan.blocks : null,
         skills_tokens: skillsPlan.totalTokens,
+        specs_blocks: contextPlan.blocks.length > 0 ? contextPlan.blocks : null,
+        specs_tokens: contextPlan.totalTokens,
+        specs_skipped: contextPlan.skipped.length > 0 ? contextPlan.skipped : null,
       },
       tool_calls: outcome.chunks.map((c) => ({
         tool: 'review_file',
@@ -418,7 +459,7 @@ export class ReviewRunExecutor {
       })),
       raw_output: outcome.raw,
       memory_pulled: [],
-      specs_read: [],
+      specs_read: contextPlan.readPaths,
       // Persisted log = the run's FULL event buffer (incl. shared pre-work:
       // diff load + intent), not just events recorded inside this method.
       log: runLog.logFor(runId),

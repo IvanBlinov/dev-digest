@@ -29,6 +29,9 @@ const EnvSchema = z.object({
   API_PORT: z.coerce.number().int().default(3001),
   // How many agents of one review run at the same time (1 = one after another).
   REVIEW_AGENT_CONCURRENCY: z.coerce.number().int().min(1).max(16).default(4),
+  // Project context (L05): comma-separated root globs (commas inside {braces} are kept)
+  // that decide which repo documents can be listed and attached to agents/skills.
+  PROJECT_CONTEXT_ROOTS: z.string().optional(),
   WEB_PORT: z.coerce.number().int().default(3000),
   DEVDIGEST_CLONE_DIR: z.string().optional(),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -43,6 +46,26 @@ const EnvSchema = z.object({
     z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).optional(),
   ),
 });
+
+/** Default root globs for project-context documents (AC-1). */
+export const DEFAULT_PROJECT_CONTEXT_ROOTS = ['**/{specs,docs,insights}/**/*.md', '**/INSIGHTS.md'];
+
+/** Split on commas that are not inside `{…}`; trims entries and drops empty ones. */
+function splitRoots(raw: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let cur = '';
+  for (const ch of raw) {
+    if (ch === '{') depth++;
+    else if (ch === '}') depth = Math.max(0, depth - 1);
+    if (ch === ',' && depth === 0) {
+      out.push(cur);
+      cur = '';
+    } else cur += ch;
+  }
+  out.push(cur);
+  return out.map((r) => r.trim()).filter(Boolean);
+}
 
 export type AppConfig = {
   databaseUrl: string;
@@ -67,6 +90,8 @@ export type AppConfig = {
    * EXACTLY like the ripgrep-only baseline.
    */
   repoIntelEnabled: boolean;
+  /** Root globs of the repo documents that may be attached as project context (L05). */
+  projectContextRoots: string[];
   /** Verbose `prompt.assembled` detail (digests, constant previews). Never true in production. */
   promptLogVerbose: boolean;
   /** PROMPT_LOG_VERBOSE=1 was set in production and ignored (boot warns once). */
@@ -92,6 +117,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     webOrigin: `http://localhost:${parsed.WEB_PORT}`,
     embeddingsEnabled: parsed.EMBEDDINGS_ENABLED === 'true',
     repoIntelEnabled: parsed.REPO_INTEL_ENABLED !== 'false',
+    projectContextRoots: (() => {
+      const roots = splitRoots(parsed.PROJECT_CONTEXT_ROOTS ?? '');
+      return roots.length > 0 ? roots : [...DEFAULT_PROJECT_CONTEXT_ROOTS];
+    })(),
     promptLogVerbose: verboseRequested && !isProd,
     promptLogVerboseIgnored: verboseRequested && isProd,
   };

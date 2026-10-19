@@ -28,10 +28,12 @@ import { ConfigError } from './errors.js';
 import { AgentsRepository } from '../modules/agents/repository.js';
 import { ReviewRepository } from '../modules/reviews/repository.js';
 import { SkillsRepository } from '../modules/skills/repository.js';
+import { ContextAttachmentsRepository } from '../modules/project-context/repository.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
 import { type Tokenizer, TiktokenTokenizer } from '../adapters/tokenizer/index.js';
+import { type DocsReader, FsDocsReader } from '../adapters/docs/index.js';
 
 /**
  * DI container. One per app instance. Holds config, db, the JobRunner,
@@ -56,6 +58,8 @@ export interface ContainerOverrides {
   tokenizer?: Tokenizer;
   /** L03c — SSRF-guarded fetcher for user-supplied URLs (skill import). */
   urlFetcher?: UrlFetcher;
+  /** L05 — clone document reader for project context. */
+  docs?: DocsReader;
 }
 
 export class Container {
@@ -78,11 +82,13 @@ export class Container {
   private _agentsRepo?: AgentsRepository;
   private _reviewRepo?: ReviewRepository;
   private _skillsRepo?: SkillsRepository;
+  private _contextDocsRepo?: ContextAttachmentsRepository;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
   private _priceBook?: PriceBook;
   private _urlFetcher?: UrlFetcher;
+  private _docs?: DocsReader;
 
   constructor(config: AppConfig, db: Db, private overrides: ContainerOverrides = {}) {
     this.config = config;
@@ -110,6 +116,11 @@ export class Container {
   /** L02 — skills + `effectiveSkillsForAgent` (the run executor's skill source). */
   get skillsRepo(): SkillsRepository {
     return (this._skillsRepo ??= new SkillsRepository(this.db));
+  }
+
+  /** L05 — documents attached to agents and skills. */
+  get contextDocsRepo(): ContextAttachmentsRepository {
+    return (this._contextDocsRepo ??= new ContextAttachmentsRepository(this.db));
   }
 
   get codeIndex(): CodeIndex {
@@ -141,6 +152,13 @@ export class Container {
     if (this.overrides.tokenizer) return this.overrides.tokenizer;
     this._tokenizer ??= new TiktokenTokenizer();
     return this._tokenizer;
+  }
+
+  /** L05 — reads project-context documents from a repo clone (containment lives in the adapter). */
+  get docs(): DocsReader {
+    if (this.overrides.docs) return this.overrides.docs;
+    this._docs ??= new FsDocsReader();
+    return this._docs;
   }
 
   /** L03c — the ONLY way services fetch user-supplied URLs (SSRF guard lives in the adapter). */

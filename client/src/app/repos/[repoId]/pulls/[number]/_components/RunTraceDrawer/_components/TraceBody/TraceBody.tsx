@@ -14,6 +14,7 @@ import { TraceSection } from "../TraceSection";
 import { ToolCallRow } from "../ToolCallRow";
 import { PromptBlock } from "../PromptBlock";
 import { SkillsBlocks } from "../SkillsBlocks";
+import { SpecsBlocks } from "../SpecsBlocks";
 import { FindingsSection } from "../FindingsSection";
 import { Row, Stat } from "../atoms";
 
@@ -21,6 +22,8 @@ export function TraceBody({ trace, findings }: { trace: RunTrace; findings: Find
   const t = useTranslations("runs");
   const stats = trace.stats;
   const skillsBlocks = trace.prompt_assembly.skills_blocks ?? [];
+  const specsBlocks = trace.prompt_assembly.specs_blocks ?? [];
+  const specsSkipped = trace.prompt_assembly.specs_skipped ?? [];
   return (
     <>
       <TraceSection icon="Settings" title={t("trace.configuration")}>
@@ -89,8 +92,13 @@ export function TraceBody({ trace, findings }: { trace: RunTrace; findings: Find
         {trace.prompt_assembly.repo_map != null && (
           <PromptBlock label={t("trace.prompt.repoMap")} text={trace.prompt_assembly.repo_map} color={PROMPT_COLORS.repoMap} />
         )}
-        {trace.prompt_assembly.specs != null && (
-          <PromptBlock label={t("trace.prompt.specs")} text={trace.prompt_assembly.specs} color={PROMPT_COLORS.specs} />
+        {specsBlocks.length > 0 || specsSkipped.length > 0 ? (
+          <SpecsBlocks blocks={specsBlocks} skipped={specsSkipped} totalTokens={trace.prompt_assembly.specs_tokens ?? null} />
+        ) : (
+          // Pre-L05 traces carry only the joined `specs` text.
+          trace.prompt_assembly.specs != null && (
+            <PromptBlock label={t("trace.prompt.specs")} text={trace.prompt_assembly.specs} color={PROMPT_COLORS.specs} />
+          )
         )}
         {trace.prompt_assembly.callers != null && (
           <PromptBlock label={t("trace.prompt.callers")} text={trace.prompt_assembly.callers} color={PROMPT_COLORS.callers} />

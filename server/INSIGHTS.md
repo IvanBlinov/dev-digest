@@ -2,6 +2,24 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-18 — [Architectural decision] The project-context token budget is counted on the exact text reviewer-core joins
+Context: `specs_tokens` and the 8 000-token cap must match what the model sees, but reviewer-core adds the `## Project context` heading, a trusted frame line and `<untrusted>` wrappers around the server's texts.
+Decision: the server budgets on `texts.join(SPECS_JOINER)` (same rule as `skills_tokens`); the frame and wrappers are constant overhead outside the budget. `SPECS_JOINER` must stay equal to the `\n\n` join in `assemblePrompt`.
+Consequence: changing the joiner in either package without the other skews `specs_tokens`; adding a segment to the manifest (as `specs:frame`) means the manifest tests in reviewer-core must list it.
+Proof: `server/src/modules/reviews/project-context-prompt.ts:22`, `reviewer-core/src/prompt.ts:236`
+
+## 2026-10-18 — [Pitfall] `GitClient.readFile` cannot tell you a file is not UTF-8
+Symptom: a binary or Latin-1 `.md` read through the git adapter comes back as text full of U+FFFD instead of failing, so it would be listed and injected into a prompt as garbage.
+Cause: `readFile(..., 'utf8')` replaces invalid byte sequences silently; Node never throws for bad UTF-8 in that mode.
+Rule: when "is this valid UTF-8?" matters (project context documents, AC-7), read a Buffer and decode with `new TextDecoder('utf-8', { fatal: true })`, as the docs reader does; do not reuse `GitClient.readFile` for it.
+Proof: `server/src/adapters/git/simple-git.ts:130`, `server/src/adapters/docs/fs.ts:73`
+
+## 2026-10-18 — [Non-obvious behaviour] `repos.last_polled_at` is not "when the clone was synced"
+Symptom: a "repo synced 2 min ago" label built from `last_polled_at` can claim fresher documents than the clone on disk holds.
+Cause: the PR-list poll bumps `last_polled_at` without touching the clone; only the clone job also sets it together with `clone_path`.
+Rule: treat `last_polled_at` as "last contact with GitHub", not as the clone's content date. If a feature needs the clone's freshness, add a dedicated timestamp or read the clone's HEAD (SPEC-01 accepted `last_polled_at` knowingly, R4 rejected).
+Proof: `server/src/modules/polling/routes.ts:62`, `server/src/modules/repos/repository.ts:76`
+
 ## 2026-10-14 — [Pitfall] A reused `TEST_DATABASE_URL` database shows up as "N skipped", not as a failure
 Symptom: a second run of an `*.it.test.ts` against the same `TEST_DATABASE_URL` reported `Tests 5 skipped (5)`, which looks like "Docker is not available".
 Cause: `startPg()` migrates the existing database, then the file's `beforeAll` inserts its fixture repo again and hits `repos_ws_fullname_uq`; vitest reports a failed `beforeAll` as skipped tests plus a suite error further up the output.

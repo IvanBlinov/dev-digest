@@ -53,6 +53,39 @@ export const SkillPromptBlock = z.object({
 });
 export type SkillPromptBlock = z.infer<typeof SkillPromptBlock>;
 
+/** Where an attached project-context document came from: the agent itself or one of its skills. */
+export const ProjectContextOrigin = z.string();
+
+/** One project-context document as injected into the prompt, in prompt order (L05). */
+export const ProjectContextBlock = z.object({
+  path: z.string(),
+  kind: z.enum(['specs', 'insights', 'docs']),
+  /** `agent` or `skill:<name>`. */
+  origin: ProjectContextOrigin,
+  /** Tokens of this document's text alone (tokenizer count). */
+  tokens: z.number().int(),
+  text: z.string(),
+  truncated: z.boolean(),
+});
+export type ProjectContextBlock = z.infer<typeof ProjectContextBlock>;
+
+export const ProjectContextSkipReason = z.enum([
+  'not_found',
+  'unreadable',
+  'not_utf8',
+  'invalid_path',
+  'not_cloned',
+  'over_budget',
+]);
+export type ProjectContextSkipReason = z.infer<typeof ProjectContextSkipReason>;
+
+/** An attached document that was not injected, with the reason (L05). */
+export const ProjectContextSkip = z.object({
+  path: z.string(),
+  reason: ProjectContextSkipReason,
+});
+export type ProjectContextSkip = z.infer<typeof ProjectContextSkip>;
+
 export const PromptAssembly = z.object({
   system: z.string(),
   skills: z.string().nullish(),
@@ -62,6 +95,12 @@ export const PromptAssembly = z.object({
   skills_tokens: z.number().int().nullish(),
   memory: z.string().nullish(),
   specs: z.string().nullish(),
+  /** Per-document project-context blocks in prompt order (L05); absent on older traces. */
+  specs_blocks: z.array(ProjectContextBlock).nullish(),
+  /** Tokens of the whole project-context section (documents joined), not the whole prompt. */
+  specs_tokens: z.number().int().nullish(),
+  /** Attached documents that were not injected, with the reason. */
+  specs_skipped: z.array(ProjectContextSkip).nullish(),
   /** Callers-of-changed-symbols digest (T1.3); null when absent. */
   callers: z.string().nullish(),
   /** Repo skeleton / map (T3); null when absent. Enables per-slot token
@@ -103,6 +142,8 @@ export const RunTrace = z.object({
     source: z.enum(['local', 'ci']).default('local'),
     /** Correlates this run's `prompt.assembled` log events. Absent on older traces. */
     correlation_id: z.string().nullish(),
+    /** HEAD sha of the repo clone the project-context documents were read from (L05). */
+    clone_sha: z.string().nullish(),
   }),
   stats: RunStats,
   prompt_assembly: PromptAssembly,
