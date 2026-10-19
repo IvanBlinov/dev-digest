@@ -7,7 +7,7 @@ import { startPg, dockerAvailable, type PgFixture } from './helpers/pg.js';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/platform/config.js';
 import { seed } from '../src/db/seed.js';
-import { MockEmbedder } from '../src/adapters/mocks.js';
+import { MockEmbedder, MockDocsReader } from '../src/adapters/mocks.js';
 import * as t from '../src/db/schema.js';
 
 const hasDocker = await dockerAvailable();
@@ -155,5 +155,37 @@ d('L05 project-context listing and file routes (pg)', () => {
     expect(ms).toBeLessThan(500);
     await pg.handle.db.delete(t.repos).where(eq(t.repos.id, r!.id));
     rmSync(big, { recursive: true, force: true });
+  });
+
+  it('F-2: AC-5 the listing reads with bounded concurrency and stops once the cap is exceeded', async () => {
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 700; i++) files[`docs/d${String(i).padStart(4, '0')}.md`] = `# ${i}`;
+    class CountingDocs extends MockDocsReader {
+      inflight = 0;
+      peak = 0;
+      reads = 0;
+      override async read(...args: Parameters<MockDocsReader['read']>) {
+        this.reads++;
+        this.peak = Math.max(this.peak, ++this.inflight);
+        await new Promise((r) => setTimeout(r, 1));
+        this.inflight--;
+        return super.read(...args);
+      }
+    }
+    const docs = new CountingDocs(files);
+    const app2 = await buildApp({ config: config(), db: pg.handle.db, overrides: { embedder: new MockEmbedder(), docs } });
+    const [r] = await pg.handle.db
+      .insert(t.repos)
+      .values({ workspaceId, owner: 'acme', name: 'many', fullName: 'acme/many', clonePath: '/virtual' })
+      .returning();
+    const res = await app2.inject({ method: 'GET', url: `/repos/${r!.id}/context` });
+    const body = res.json();
+    expect(body.documents).toHaveLength(500);
+    expect(body.documents[0].path).toBe('docs/d0000.md');
+    expect(body.truncated).toBe(true);
+    expect(docs.peak).toBeLessThanOrEqual(16);
+    expect(docs.reads).toBeLessThan(700);
+    await pg.handle.db.delete(t.repos).where(eq(t.repos.id, r!.id));
+    await app2.close();
   });
 });

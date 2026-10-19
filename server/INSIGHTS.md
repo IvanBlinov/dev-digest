@@ -2,6 +2,12 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-18 — [Security] Run-time document reads are byte-bounded, not size-skipped
+Symptom: a multi-GB `.md` attached as project context would be loaded whole before the 20 000-char cut.
+Cause: `DocsReader.read` returned the full file; truncation happened in `formatDocument` afterwards.
+Rule: pass `prefixBytes` (CONTEXT_DOC_READ_MAX_BYTES) from the run path; the adapter clips at a UTF-8 character boundary and sets `truncated`. The listing reads in batches of 16 and stops after cap+1 documents; `list` stops walking at DOCS_WALK_MAX_FILES (so a huge clone is listed partially, without a flag).
+Proof: `server/src/adapters/docs/fs.ts:96`, `server/src/modules/reviews/project-context-prompt.ts:73`, `server/src/modules/project-context/service.ts:66`
+
 ## 2026-10-18 — [Architectural decision] The project-context token budget is counted on the exact text reviewer-core joins
 Context: `specs_tokens` and the 8 000-token cap must match what the model sees, but reviewer-core adds the `## Project context` heading, a trusted frame line and `<untrusted>` wrappers around the server's texts.
 Decision: the server budgets on `texts.join(SPECS_JOINER)` (same rule as `skills_tokens`); the frame and wrappers are constant overhead outside the budget. `SPECS_JOINER` must stay equal to the `\n\n` join in `assemblePrompt`.

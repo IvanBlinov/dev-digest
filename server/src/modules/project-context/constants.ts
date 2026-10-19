@@ -12,3 +12,10 @@ export const CONTEXT_DOC_MAX_CHARS = SKILL_BODY_MAX;
 export const PROJECT_CONTEXT_MAX_TOKENS = 8000;
 /** Directory names the walk never enters and no path may contain (AC-62). */
 export const EXCLUDED_DOC_DIRS = ['.git', 'node_modules'] as const;
+/**
+ * Max bytes a run reads of one document: enough for CONTEXT_DOC_MAX_CHARS characters
+ * (UTF-8 is at most 4 bytes per character) plus a margin; the rest is cut (EC-22).
+ */
+export const CONTEXT_DOC_READ_MAX_BYTES = CONTEXT_DOC_MAX_CHARS * 4 + 16;
+/** Concurrent file reads while building the listing. */
+export const CONTEXT_LISTING_READ_CONCURRENCY = 16;

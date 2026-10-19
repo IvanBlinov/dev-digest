@@ -1,6 +1,7 @@
 import type {
   ContextAttachments,
   ContextDocFile,
+  ContextDocItem,
   ContextListing,
   WorkspaceContextAttachments,
 } from '@devdigest/shared';
@@ -10,7 +11,7 @@ import { AppError, NotFoundError } from '../../platform/errors.js';
 import { RepoRepository } from '../repos/repository.js';
 import { scanSkillBody } from '../skills/injection.js';
 import { partitionBlockedSkills } from '../reviews/skills-prompt.js';
-import { CONTEXT_FILE_READ_MAX_BYTES, CONTEXT_LISTING_CAP } from './constants.js';
+import { CONTEXT_FILE_READ_MAX_BYTES, CONTEXT_LISTING_CAP, CONTEXT_LISTING_READ_CONCURRENCY } from './constants.js';
 import {
   composeListing,
   contextPathError,
@@ -52,13 +53,20 @@ export class ProjectContextService {
 
     const docs = this.container.docs;
     const entries = await docs.list(repo.clonePath, this.matcher);
-    const reads = new Map<string, DocRead>();
-    await Promise.all(
-      entries.map(async (e) => {
-        reads.set(e.path, await docs.read(repo.clonePath!, e.path, { maxBytes: CONTEXT_FILE_READ_MAX_BYTES }));
-      }),
-    );
-    const { documents, truncated } = composeListing(entries, reads, CONTEXT_LISTING_CAP);
+    // Path order, bounded concurrency, stop at the first cap+1 valid documents.
+    const documents: ContextDocItem[] = [];
+    for (let i = 0; i < entries.length && documents.length <= CONTEXT_LISTING_CAP; i += CONTEXT_LISTING_READ_CONCURRENCY) {
+      const batch = entries.slice(i, i + CONTEXT_LISTING_READ_CONCURRENCY);
+      const reads = new Map<string, DocRead>();
+      await Promise.all(
+        batch.map(async (e) => {
+          reads.set(e.path, await docs.read(repo.clonePath!, e.path, { maxBytes: CONTEXT_FILE_READ_MAX_BYTES }));
+        }),
+      );
+      documents.push(...composeListing(batch, reads, batch.length).documents);
+    }
+    const truncated = documents.length > CONTEXT_LISTING_CAP;
+    documents.length = Math.min(documents.length, CONTEXT_LISTING_CAP);
     return { cloned: true, roots, synced_at, truncated, documents };
   }
 

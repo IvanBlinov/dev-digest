@@ -10,7 +10,7 @@
 import type { ProjectContextBlock, ProjectContextSkip, ProjectContextSkipReason } from '@devdigest/shared';
 import type { DocRead, DocsReader } from '../../adapters/docs/index.js';
 import type { Tokenizer } from '../../adapters/tokenizer/index.js';
-import { CONTEXT_DOC_MAX_CHARS, PROJECT_CONTEXT_MAX_TOKENS } from '../project-context/constants.js';
+import { CONTEXT_DOC_MAX_CHARS, CONTEXT_DOC_READ_MAX_BYTES, PROJECT_CONTEXT_MAX_TOKENS } from '../project-context/constants.js';
 import { contextPathError, docKind, type RootMatcher } from '../project-context/helpers.js';
 import { hardenSkillBody } from './skills-prompt.js';
 
@@ -64,7 +64,8 @@ export function orderContextPaths(
   return out;
 }
 
-/** Reads every entry; a failure is a value, never a throw (AC-25). No size cap at run time (EC-22). */
+/** Reads every entry; a failure is a value, never a throw (AC-25).
+ * A file is never skipped for size (EC-22): it is read up to CONTEXT_DOC_READ_MAX_BYTES and cut. */
 export async function readProjectDocs(
   reader: DocsReader,
   clonePath: string | null,
@@ -77,13 +78,17 @@ export async function readProjectDocs(
         return { ...e, read: { ok: false, reason: 'invalid_path' } };
       }
       if (!clonePath) return { ...e, read: { ok: false, reason: 'not_cloned' } };
-      return { ...e, read: await reader.read(clonePath, e.path) };
+      return { ...e, read: await reader.read(clonePath, e.path, { prefixBytes: CONTEXT_DOC_READ_MAX_BYTES }) };
     }),
   );
 }
 
-function formatDocument(path: string, content: string): { text: string; truncated: boolean } {
-  const truncated = content.length > CONTEXT_DOC_MAX_CHARS;
+function formatDocument(
+  path: string,
+  content: string,
+  clipped: boolean,
+): { text: string; truncated: boolean } {
+  const truncated = clipped || content.length > CONTEXT_DOC_MAX_CHARS;
   const raw = truncated ? `${content.slice(0, CONTEXT_DOC_MAX_CHARS)}\n${TRUNCATION_MARKER}` : content;
   const header = `### Document: ${path.replace(UNTRUSTED_DELIMITER_RE, '&lt;$1')}`;
   return { text: `${header}\n${hardenSkillBody(raw)}`, truncated };
@@ -104,7 +109,7 @@ export function buildProjectContextPlan(reads: readonly ContextRead[], tokenizer
       skipped.push({ path: r.path, reason: skipReason(r.read) });
       continue;
     }
-    const { text, truncated } = formatDocument(r.path, r.read.content);
+    const { text, truncated } = formatDocument(r.path, r.read.content, r.read.truncated === true);
     if (overBudget || tokenizer.count([...texts, text].join(SPECS_JOINER)) > PROJECT_CONTEXT_MAX_TOKENS) {
       overBudget = true;
       skipped.push({ path: r.path, reason: 'over_budget' });

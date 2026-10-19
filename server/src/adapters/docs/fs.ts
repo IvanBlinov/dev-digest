@@ -1,4 +1,4 @@
-import { readdir, realpath, stat, readFile } from 'node:fs/promises';
+import { open, readdir, realpath, stat, readFile } from 'node:fs/promises';
 import { join, sep } from 'node:path';
 import type { DocEntry, DocRead, DocsReader } from './index.js';
 
@@ -14,7 +14,28 @@ function hasUnsafeSegment(path: string): boolean {
   return path.split('/').some((seg) => seg === '..' || EXCLUDED.has(seg));
 }
 
+/** Files visited (matched or not) before `list` stops walking a huge clone. */
+export const DOCS_WALK_MAX_FILES = 20_000;
+
+/** Length of `buf` without a trailing incomplete UTF-8 sequence (a clip must not break a character). */
+function completeUtf8Length(buf: Uint8Array): number {
+  const n = buf.length;
+  for (let back = 1; back <= Math.min(3, n); back++) {
+    const b = buf[n - back]!;
+    if ((b & 0xc0) === 0x80) continue; // continuation byte: keep looking for the lead
+    const need = b >= 0xf0 ? 4 : b >= 0xe0 ? 3 : b >= 0xc0 ? 2 : 1;
+    return need > back ? n - back : n;
+  }
+  return n;
+}
+
 export class FsDocsReader implements DocsReader {
+  private walkMaxFiles: number;
+
+  constructor(opts: { walkMaxFiles?: number } = {}) {
+    this.walkMaxFiles = opts.walkMaxFiles ?? DOCS_WALK_MAX_FILES;
+  }
+
   async list(root: string, match: (path: string) => boolean): Promise<DocEntry[]> {
     let realRoot: string;
     try {
@@ -23,6 +44,7 @@ export class FsDocsReader implements DocsReader {
       return [];
     }
     const out: DocEntry[] = [];
+    let visited = 0;
 
     const walk = async (rel: string): Promise<void> => {
       let entries;
@@ -31,7 +53,9 @@ export class FsDocsReader implements DocsReader {
       } catch {
         return;
       }
+      entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
       for (const e of entries) {
+        if (visited >= this.walkMaxFiles) return;
         if (EXCLUDED.has(e.name)) continue;
         const relPath = rel ? `${rel}/${e.name}` : e.name;
         // Symlinked directories are not followed (no loops, no escapes).
@@ -40,6 +64,7 @@ export class FsDocsReader implements DocsReader {
           continue;
         }
         if (!e.isFile() && !e.isSymbolicLink()) continue;
+        visited++;
         if (!match(relPath)) continue;
         try {
           const real = await realpath(join(realRoot, relPath));
@@ -57,7 +82,7 @@ export class FsDocsReader implements DocsReader {
     return out.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   }
 
-  async read(root: string, path: string, opts?: { maxBytes?: number }): Promise<DocRead> {
+  async read(root: string, path: string, opts?: { maxBytes?: number; prefixBytes?: number }): Promise<DocRead> {
     if (hasUnsafeSegment(path)) return { ok: false, reason: 'invalid_path' };
     try {
       const realRoot = await realpath(root);
@@ -68,10 +93,26 @@ export class FsDocsReader implements DocsReader {
       if (opts?.maxBytes !== undefined && st.size > opts.maxBytes) {
         return { ok: false, reason: 'too_large' };
       }
-      const buf = await readFile(real);
+      const clip = opts?.prefixBytes !== undefined && st.size > opts.prefixBytes ? opts.prefixBytes : null;
+      let buf: Uint8Array;
+      if (clip === null) {
+        buf = await readFile(real);
+      } else {
+        const fh = await open(real, 'r');
+        try {
+          const chunk = Buffer.alloc(clip);
+          const { bytesRead } = await fh.read(chunk, 0, clip, 0);
+          const got = chunk.subarray(0, bytesRead);
+          buf = got.subarray(0, completeUtf8Length(got));
+        } finally {
+          await fh.close();
+        }
+      }
       try {
         const content = new TextDecoder('utf-8', { fatal: true }).decode(buf);
-        return { ok: true, content, size: buf.byteLength };
+        return clip === null
+          ? { ok: true, content, size: buf.byteLength }
+          : { ok: true, content, size: st.size, truncated: true };
       } catch {
         return { ok: false, reason: 'not_utf8' };
       }

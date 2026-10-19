@@ -340,7 +340,7 @@ export class MockDocsReader implements DocsReader {
       .sort((a, b) => (a.path < b.path ? -1 : 1));
   }
 
-  async read(_root: string, path: string, opts?: { maxBytes?: number }): Promise<DocRead> {
+  async read(_root: string, path: string, opts?: { maxBytes?: number; prefixBytes?: number }): Promise<DocRead> {
     const doc = this.files[path];
     if (doc === undefined) return { ok: false, reason: 'not_found' };
     if (typeof doc === 'object' && !(doc instanceof Uint8Array)) {
@@ -349,6 +349,21 @@ export class MockDocsReader implements DocsReader {
     const size = this.sizeOf(doc);
     if (opts?.maxBytes !== undefined && size > opts.maxBytes) {
       return { ok: false, reason: 'too_large' };
+    }
+    if (opts?.prefixBytes !== undefined && size > opts.prefixBytes && typeof doc === 'string') {
+      // Clip at a character boundary, like the fs adapter.
+      const bytes = Buffer.from(doc).subarray(0, opts.prefixBytes);
+      let end = bytes.length;
+      const dec = new TextDecoder('utf-8', { fatal: true });
+      for (; end > 0; end--) {
+        try {
+          dec.decode(bytes.subarray(0, end));
+          break;
+        } catch {
+          // still inside a multi-byte character
+        }
+      }
+      return { ok: true, content: Buffer.from(bytes.subarray(0, end)).toString('utf8'), size, truncated: true };
     }
     if (typeof doc === 'string') return { ok: true, content: doc, size };
     try {

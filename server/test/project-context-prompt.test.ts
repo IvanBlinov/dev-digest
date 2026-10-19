@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { CONTEXT_DOC_READ_MAX_BYTES } from '../src/modules/project-context/constants.js';
 import { assemblePrompt } from '@devdigest/reviewer-core';
 import { MockDocsReader } from '../src/adapters/mocks.js';
 import { makeRootMatcher } from '../src/modules/project-context/helpers.js';
@@ -138,5 +139,28 @@ describe('prompt assembly with project context', () => {
       );
       expect(JSON.stringify(e)).not.toContain(SENTINEL);
     }
+  });
+});
+
+const cheapTokenizer = { count: (text: string) => Math.ceil(text.length / 100) };
+
+describe('readProjectDocs bounded read (F-1)', () => {
+  it('AC-23: a file far larger than the cap is truncated, not skipped, and read with a byte bound', async () => {
+    const big = 'y'.repeat(200_000);
+    const reader = new MockDocsReader({ 'specs/big.md': big });
+    const spy = vi.spyOn(reader, 'read');
+    const reads = await readProjectDocs(reader, '/clone', [{ path: 'specs/big.md', origin: 'agent' }], matcher);
+    expect(spy.mock.calls[0]![2]).toEqual({ prefixBytes: CONTEXT_DOC_READ_MAX_BYTES });
+    const p = buildProjectContextPlan(reads, cheapTokenizer);
+    expect(p.skipped).toEqual([]);
+    expect(p.blocks[0]!.truncated).toBe(true);
+    expect(p.blocks[0]!.text.endsWith('\n[truncated]')).toBe(true);
+  });
+
+  it('EC-22: a clipped read is marked truncated even when the clip is shorter than the cap', async () => {
+    const reader = new MockDocsReader({ 'specs/mb.md': '€'.repeat(30_000) }); // 90 000 bytes
+    const reads = await readProjectDocs(reader, '/clone', [{ path: 'specs/mb.md', origin: 'agent' }], matcher);
+    const p = buildProjectContextPlan(reads, cheapTokenizer);
+    expect(p.blocks[0]!.truncated).toBe(true);
   });
 });

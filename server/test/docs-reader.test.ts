@@ -95,6 +95,42 @@ describe('FsDocsReader', () => {
     expect(await reader.read(root, '/etc/passwd')).toEqual({ ok: false, reason: 'invalid_path' });
   });
 
+  it('F-1: prefixBytes clips a large file instead of skipping it', async () => {
+    await put(root, 'docs/big.md', 'x'.repeat(100));
+    expect(await reader.read(root, 'docs/big.md', { prefixBytes: 10 })).toEqual({
+      ok: true,
+      content: 'x'.repeat(10),
+      size: 100,
+      truncated: true,
+    });
+    expect(await reader.read(root, 'docs/big.md', { prefixBytes: 100 })).toEqual({
+      ok: true,
+      content: 'x'.repeat(100),
+      size: 100,
+    });
+  });
+
+  it('F-1: a clip inside a multi-byte character does not give not_utf8', async () => {
+    await put(root, 'docs/mb.md', 'a€€€'); // a + 3 x 3-byte chars
+    const r = await reader.read(root, 'docs/mb.md', { prefixBytes: 5 }); // cuts the 2nd euro sign
+    expect(r).toEqual({ ok: true, content: 'a€', size: 10, truncated: true });
+  });
+
+  it('F-1: genuinely invalid UTF-8 inside the prefix is still not_utf8', async () => {
+    await put(root, 'docs/bad.md', new Uint8Array([0x68, 0xff, 0x69, 0x69, 0x69]));
+    expect(await reader.read(root, 'docs/bad.md', { prefixBytes: 4 })).toEqual({
+      ok: false,
+      reason: 'not_utf8',
+    });
+  });
+
+  it('F-2: the walk stops after walkMaxFiles files', async () => {
+    for (let i = 0; i < 10; i++) await put(root, `docs/d${String(i).padStart(2, '0')}.md`, 'x');
+    const capped = new FsDocsReader({ walkMaxFiles: 4 });
+    const paths = (await capped.list(root, mdOnly)).map((e) => e.path);
+    expect(paths).toEqual(['docs/d00.md', 'docs/d01.md', 'docs/d02.md', 'docs/d03.md']);
+  });
+
   it('a missing root lists nothing', async () => {
     expect(await reader.list(join(root, 'nope'), mdOnly)).toEqual([]);
   });
