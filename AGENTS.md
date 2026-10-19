@@ -23,7 +23,7 @@ its own lockfile). Each has its own `AGENTS.md` — read it before working insid
 | `mcp/` | `@devdigest/mcp` | stdio MCP server: thin adapter over the HTTP API (no DB, no server imports) | — | [mcp/AGENTS.md](mcp/AGENTS.md) |
 | `server/src/vendor/shared/` | `@devdigest/shared` | Zod contracts used by every package (mirrored in `client/src/vendor/shared/`) | — | — |
 | `docs/`, `specs/`, `INSIGHTS.md` | — | Cross-module design docs, cross-module feature specs, project-wide lessons | — | — |
-| `scripts/` | — | `dev.sh` (full local stack), `e2e.sh` (hermetic e2e stack) | — | — |
+| `scripts/` | — | `dev.sh` (full local stack), `e2e.sh` (hermetic e2e stack), `gate.sh` (short-output test gate + evidence log), `it-db.sh` (throwaway DB for `*.it.test.ts`), `tree-fingerprint.sh`, `diff-digest.sh` | — | — |
 | `.claude/skills/` | — | Team skills catalog: [.claude/skills/README.md](.claude/skills/README.md) | — | — |
 
 Cross-package code is shared via **tsconfig path aliases only** (`@devdigest/shared`,
@@ -112,19 +112,25 @@ In Claude Code a Stop hook (`.claude/hooks/insights-reminder.sh`) also enforces 
 - [docs/](docs/README.md) — cross-module design; today: [docs/agent-prompts/](docs/agent-prompts/README.md)
 - [specs/](specs/README.md) — feature specs spanning more than one package
 - [INSIGHTS.md](INSIGHTS.md) — project-wide lessons learned; read before non-trivial changes
-- [.claude/agents/](.claude/agents/README.md) — project subagents: `researcher` (read-only research reports), `planner` (Development Plan), `implementer` (executes a plan, test-first), `test-writer` (writes/backfills tests, hook-limited), `architecture-reviewer` (read-only boundary findings), `plan-verifier` (read-only traceability check), `doc-writer` (writes Markdown docs, hook-limited); approved plans live in [specs/plans/](specs/plans/README.md)
+- [.claude/agents/](.claude/agents/README.md) — project subagents: `spec-writer` (draft SDD specs with EARS criteria, hook-limited), `researcher` (read-only research reports), `implementation-planner` (requirements review + Development Plan from an approved spec), `implementer` (executes a plan, test-first), `test-writer` (writes/backfills tests, hook-limited), `architecture-reviewer` (read-only boundary findings), `plan-verifier` (read-only traceability check), `doc-writer` (writes Markdown docs, hook-limited); approved plans live in [specs/plans/](specs/plans/README.md)
 - Each module: `README.md` (what/how to run) · `docs/` (why) · `specs/` (what to build) · `INSIGHTS.md` (lessons)
 
 ## Workflow
 
-1. Write or update a spec in the relevant `specs/` folder (module-level, or root for cross-module).
-   For multi-step work: `planner` agent → user approves → plan saved to `specs/plans/` →
-   optionally `test-writer` (red phase) → `implementer` agent → `plan-verifier` and
-   `architecture-reviewer` (in parallel) → `doc-writer` → a human commits. `test-writer` also
-   backfills tests for existing untested code outside this chain.
+1. Write or update a spec in the relevant `specs/` folder (module-level, or root for cross-module)
+   with the `spec-writer` agent (rules: [spec-writing skill](.claude/skills/spec-writing/SKILL.md)):
+   pass 1 returns questions and proposals, pass 2 writes a `Status: draft` spec; the user approves it
+   (`Status: approved`) before the implementation planner runs.
+   For multi-step work: `implementation-planner` agent (reviews the requirements, asks whether to
+   run in **single** mode — one `implementer` run — or **multi** mode — step ranges) → user
+   answers and approves → plan saved to `specs/plans/` → **`/implement <plan>`** (skill
+   [implement](.claude/skills/implement/SKILL.md)): `implementer` → `architecture-reviewer` →
+   fix loop (user triages findings, ≤ 3 rounds) → final gates → `plan-verifier` → stops before
+   commit; then, on request, `doc-writer`, `pr-self-review`, commit. Spec-writer and the
+   implementation planner are run by hand. `test-writer` is used by hand for backfill only.
    Keep the chain lean ([.claude/agents/README.md](.claude/agents/README.md) "Token budget"):
-   skip a repo `researcher` run whose only job is to map the repo for the planner; settle design
-   forks before the plan and ask the planner for a delta on revisions; run large plans as
+   skip a repo `researcher` run whose only job is to map the repo for the implementation planner; settle design
+   forks before the plan and ask the implementation planner for a delta on revisions; run large plans as
    implementer step ranges; handoff files (context pack, evidence log) live in the git-ignored
    `.claude/handoff/<slug>/`.
 2. Tests first, then implementation (see [TESTING.md](TESTING.md) for which suite).

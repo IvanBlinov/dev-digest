@@ -2,6 +2,12 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-14 — [Pitfall] A reused `TEST_DATABASE_URL` database shows up as "N skipped", not as a failure
+Symptom: a second run of an `*.it.test.ts` against the same `TEST_DATABASE_URL` reported `Tests 5 skipped (5)`, which looks like "Docker is not available".
+Cause: `startPg()` migrates the existing database, then the file's `beforeAll` inserts its fixture repo again and hits `repos_ws_fullname_uq`; vitest reports a failed `beforeAll` as skipped tests plus a suite error further up the output.
+Rule: one fresh database per `*.it.test.ts` run — use `scripts/it-db.sh run <file>`, never a hand-made database you run twice. When a DB test shows "skipped" with Docker up, read the suite error before suspecting Docker.
+Proof: `server/test/helpers/pg.ts:42`, `server/test/repo-intel-resolve-barrel.it.test.ts:17`, `scripts/it-db.sh`
+
 ## 2026-10-14 — [Pitfall] Reference resolution needs a hop through `index.*` barrels, or client callers vanish
 Symptom: the blast radius showed 0 callers on client PRs (e.g. `page.tsx` → `OverviewTab`), and only ~5% of client references had a `decl_file`.
 Cause: `resolveReferences` only matched a symbol in a file the importer has a direct `file_edges` edge to. Client components are imported through barrels (`./_components/OverviewTab` → `OverviewTab/index.ts`), and the symbol is declared one hop further, in `OverviewTab.tsx`.

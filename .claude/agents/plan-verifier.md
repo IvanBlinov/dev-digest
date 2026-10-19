@@ -44,19 +44,22 @@ Give every item an ID, drawn from:
   reviewer-core export changes, vendor/shared mirror state, current fingerprint). Open full hunks
   (`git diff <base> -- <file>`) only for items whose method is Inspection or Analysis — do not
   read the whole diff up front.
-- Run the plan's Verify commands and Verification matrix under this **evidence policy**. Quote
-  the command, its exit code and the key output line.
+- Run gates under this **evidence policy**, always through `scripts/gate.sh <slug> verify-<n> -- "<command>"`
+  (short output; it only appends to the git-ignored evidence log). Quote the gate's header line.
 
   | Gate | What you do |
   |------|-------------|
-  | Typecheck of every touched package; hermetic unit lanes; vendor/shared mirror | Always re-run yourself |
-  | Every test file **added or modified** in the diff (including `*.it.test.ts`, each on a fresh DB) | Always re-run yourself |
-  | Untouched DB-backed suites and e2e flows in the matrix | Accept the implementer's line in `.claude/handoff/<slug>/evidence.jsonl` **only if** its `fingerprint` equals `scripts/tree-fingerprint.sh` now, its `exit` is 0 and its command is the plan's. Otherwise re-run it |
+  | Typecheck of every touched package; vendor/shared mirror | Always re-run yourself (cheap) |
+  | Every test file **added or modified** in the diff | Always re-run yourself: one gate per package listing those files (`vitest run <files>`); each `*.it.test.ts` through `scripts/it-db.sh run <file>` |
+  | Full suites of the matrix (hermetic unit lanes, untouched DB suites, e2e flows) | Accept the implementer's `final` line in `.claude/handoff/<slug>/evidence.jsonl` **only if** its `fingerprint` equals `scripts/tree-fingerprint.sh` now, its `exit` is 0 and its command is the plan's. Otherwise re-run it |
 
   A logged result is the only implementer claim you may accept, because the fingerprint binds it
   to this exact tree; the implementer's prose report never is. Mark accepted items with method
-  `Evidence log` and status `met (logged)`. No log, or a mismatched fingerprint → re-run
-  everything as before.
+  `Evidence log` and status `met (logged)`. No log, or a mismatched fingerprint → re-run the full
+  suite as well.
+- **Find AC coverage cheaply:** tests that prove an AC carry its id in the title
+  (`test-strategy` rule 6), so start with `rg -n "AC-<n>\b" <pkg>/test <pkg>/src` and read only
+  the matching tests.
 - Choose a method per item [V2]: Test, Analysis, Inspection or Demonstration.
 - An item with no closure artifact cannot be `met`.
 

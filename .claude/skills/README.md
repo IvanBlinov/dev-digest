@@ -23,6 +23,8 @@ Reusable AI skills that provide specialized knowledge and workflows. Canonical l
 | [db-schema-change](db-schema-change/SKILL.md) | Backend | Schema → `db:generate --name` → `db:migrate`, never hand-edit migrations, `TEST_DATABASE_URL` for `.it.test.ts` |
 | [test-strategy](test-strategy/SKILL.md) | Process | Which test first, where it lives, how to stub, which command proves it; gates per package |
 | [e2e-flows](e2e-flows/SKILL.md) | E2E | Deterministic agent-browser flows in `e2e/specs/*.flow.json` over seeded data |
+| [implement](implement/SKILL.md) | Process (command) | `/implement <plan>`: runs an approved plan — implementer, architecture review, fix loop (user triage, ≤ 3 rounds), final gates, plan-verifier — and stops before commit |
+| [spec-writing](spec-writing/SKILL.md) | Process | Spec Driven Development specs: template (Spec ID, Status, EARS ACs, edge cases, NFRs, inputs and provenance, untrusted inputs, open questions), placement and naming, design analysis checklist, quality gate |
 | [mermaid-diagram](mermaid-diagram/SKILL.md) | Shared | Mermaid diagrams in markdown (flowcharts, sequence, ERD, …) |
 
 ## What Are Skills?

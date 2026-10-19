@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreToolUse guard for path-limited writer agents (test-writer, doc-writer).
+# PreToolUse guard for path-limited writer agents (test-writer, doc-writer, spec-writer).
 # Judges Edit/Write/MultiEdit/NotebookEdit only; any other tool exits 0.
 # Fails closed on: missing jq, unknown profile, empty path, path outside the repo, a `..`
 # segment, node_modules, or a symlink anywhere on the path (covers every CLAUDE.md and symlinked
@@ -22,7 +22,7 @@ case "$tool" in
 esac
 
 case "$profile" in
-  test-writer|doc-writer) ;;
+  test-writer|doc-writer|spec-writer) ;;
   *) block "unknown profile" ;;
 esac
 
@@ -86,5 +86,34 @@ case "$profile" in
       AGENTS.md|*/AGENTS.md) exit 0 ;;
     esac
     block "doc-writer may only write docs/**, <pkg>/docs/**, specs/** (not an approved dated plan), README.md files, AGENTS.md or INSIGHTS.md — got $rel"
+    ;;
+  spec-writer)
+    allowed="specs/, server/specs/, client/specs/, reviewer-core/specs/ or mcp/specs/ as LNN-short-name.md or XX-short-name.md"
+    # Deny patterns first.
+    case "$rel" in
+      specs/plans/*) block "specs/plans/ holds implementation-planner plans — allowed: $allowed" ;;
+      e2e/*) block "e2e/specs/ holds flow JSON, not specs — allowed: $allowed" ;;
+      specs/README.md|*/specs/README.md) block "spec folder READMEs are owned by doc-writer — propose the edit instead" ;;
+    esac
+    # The file must sit directly in one of the spec folders (no subfolders).
+    case "${rel%/*}" in
+      specs|server/specs|client/specs|reviewer-core/specs|mcp/specs) ;;
+      *) block "spec-writer may only write $allowed — got $rel" ;;
+    esac
+    case "${rel##*/}" in
+      L[0-9][0-9]*-*.md|XX-*.md) ;;
+      *) block "spec file names are LNN-short-name.md or XX-short-name.md — got ${rel##*/}" ;;
+    esac
+    # Only a draft may change. Legacy specs without a Status line count as approved.
+    if [ -e "$root/$rel" ]; then
+      status=$(sed -n 's/^Status:[[:space:]]*//p' "$root/$rel" | head -n 1 | tr -d '[:space:]')
+      [ "$status" = "draft" ] || block "only specs with 'Status: draft' may be edited (this one has '${status:-no Status line}') — write a new spec with 'Supersedes:' instead"
+    fi
+    # Approval is the user's: the new text may not set another status.
+    new_text=$(jq -r '[.tool_input.content, .tool_input.new_string, ((.tool_input.edits // [])[]?.new_string)] | map(select(. != null)) | join("\n")' <<<"$input")
+    if grep -qE '^Status:[[:space:]]*(approved|implemented)' <<<"$new_text"; then
+      block "spec-writer only writes 'Status: draft' — approved/implemented are set by the user and doc-writer"
+    fi
+    exit 0
     ;;
 esac

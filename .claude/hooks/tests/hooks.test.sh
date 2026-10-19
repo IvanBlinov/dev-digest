@@ -206,5 +206,76 @@ run_case "block test-writer: server/test symlink pointing into server/src" \
   guard-allowed-paths.sh test-writer Write "$ROOT/server/test/.hook-test-link/app.ts" 2
 rm -f "$ROOT/server/test/.hook-test-link"
 
+# --- guard-allowed-paths.sh: spec-writer profile ---
+
+# Like run_case, but for a Write/Edit whose new text matters (content / new_string).
+run_content_case() {
+  local name="$1" tool="$2" path="$3" field="$4" text="$5" expected_exit="$6"
+  local json stderr_out exit_code
+  json=$(jq -n --arg t "$tool" --arg p "$path" --arg f "$field" --arg x "$text" \
+    '{tool_name:$t, tool_input:({file_path:$p} + {($f):$x})}')
+  stderr_out=$(CLAUDE_PROJECT_DIR="$ROOT" bash "$ROOT/.claude/hooks/guard-allowed-paths.sh" spec-writer <<<"$json" 2>&1 1>/dev/null)
+  exit_code=$?
+  if [ "$exit_code" = "$expected_exit" ]; then
+    echo "PASS $name"
+    pass=$((pass + 1))
+  else
+    echo "FAIL $name (exit=$exit_code expected=$expected_exit stderr=$stderr_out)"
+    fail=$((fail + 1))
+  fi
+}
+
+run_case "allow spec-writer: new root spec" \
+  guard-allowed-paths.sh spec-writer Write "$ROOT/specs/L05-new-feature.md" 0
+run_case "allow spec-writer: new XX root spec" \
+  guard-allowed-paths.sh spec-writer Write "$ROOT/specs/XX-tooling.md" 0
+run_case "allow spec-writer: server spec" \
+  guard-allowed-paths.sh spec-writer Write "$ROOT/server/specs/L05-route.md" 0
+run_case "allow spec-writer: client spec" \
+  guard-allowed-paths.sh spec-writer Write "$ROOT/client/specs/L05-screen.md" 0
+run_case "allow spec-writer: reviewer-core spec" \
+  guard-allowed-paths.sh spec-writer Write "$ROOT/reviewer-core/specs/L05-prompt.md" 0
+run_case "allow spec-writer: new mcp/specs folder" \
+  guard-allowed-paths.sh spec-writer Write "$ROOT/mcp/specs/L05-tool.md" 0
+run_case "block spec-writer: approved plan folder" \
+  guard-allowed-paths.sh spec-writer Write "$ROOT/specs/plans/2026-10-14-x.md" 2
+run_case "block spec-writer: e2e flow folder" \
+  guard-allowed-paths.sh spec-writer Write "$ROOT/e2e/specs/L05-x.md" 2
+run_case "block spec-writer: spec folder README" \
+  guard-allowed-paths.sh spec-writer Edit "$ROOT/specs/README.md" 2
+run_case "block spec-writer: package spec README" \
+  guard-allowed-paths.sh spec-writer Edit "$ROOT/server/specs/README.md" 2
+run_case "block spec-writer: subfolder inside specs" \
+  guard-allowed-paths.sh spec-writer Write "$ROOT/specs/drafts/L05-x.md" 2
+run_case "block spec-writer: source code" \
+  guard-allowed-paths.sh spec-writer Write "$ROOT/server/src/modules/x/service.ts" 2
+run_case "block spec-writer: docs" \
+  guard-allowed-paths.sh spec-writer Write "$ROOT/docs/L05-x.md" 2
+run_case "block spec-writer: non-markdown in specs" \
+  guard-allowed-paths.sh spec-writer Write "$ROOT/specs/L05-x.json" 2
+run_case "block spec-writer: file name without LNN/XX prefix" \
+  guard-allowed-paths.sh spec-writer Write "$ROOT/specs/new-feature.md" 2
+run_case "block spec-writer: legacy spec without a Status line" \
+  guard-allowed-paths.sh spec-writer Edit "$ROOT/specs/L04-mcp-server.md" 2
+
+# Fixture specs for the Status rules; removed right after.
+DRAFT="$ROOT/specs/XX-hook-test-draft.md"
+APPROVED="$ROOT/specs/XX-hook-test-approved.md"
+printf '# Spec: x\nSpec ID: SPEC-99\nStatus: draft\n' >"$DRAFT"
+printf '# Spec: y\nSpec ID: SPEC-98\nStatus: approved\n' >"$APPROVED"
+run_case "allow spec-writer: edit a draft spec" \
+  guard-allowed-paths.sh spec-writer Edit "$DRAFT" 0
+run_case "block spec-writer: edit an approved spec" \
+  guard-allowed-paths.sh spec-writer Edit "$APPROVED" 2
+run_case "block spec-writer: overwrite an approved spec" \
+  guard-allowed-paths.sh spec-writer Write "$APPROVED" 2
+run_content_case "block spec-writer: Edit sets Status approved" \
+  Edit "$DRAFT" new_string "Status: approved" 2
+run_content_case "block spec-writer: Write creates an implemented spec" \
+  Write "$ROOT/specs/L05-new.md" content $'# Spec: z\nSpec ID: SPEC-97\nStatus: implemented\n' 2
+run_content_case "allow spec-writer: Write creates a draft spec" \
+  Write "$ROOT/specs/L05-new.md" content $'# Spec: z\nSpec ID: SPEC-97\nStatus: draft\n' 0
+rm -f "$DRAFT" "$APPROVED"
+
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]
