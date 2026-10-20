@@ -24,11 +24,14 @@ export interface SkillBlockInfo {
 export interface PromptAssembledInput {
   correlationId: string;
   runId?: string;
-  prId: string;
+  /** Set for review / intent prompts. */
+  prId?: string;
+  /** Set for repo-level prompts (onboarding). */
+  repoId?: string;
   agent?: string;
   provider: string;
   model: string;
-  promptKind: 'review' | 'intent';
+  promptKind: 'review' | 'intent' | 'onboarding';
   promptVersion?: string;
   mode?: 'single-pass' | 'map-reduce';
   chunk?: { index: number; total: number; file: string };
@@ -50,11 +53,14 @@ export interface PromptEventSection {
 export interface PromptAssembledEvent {
   correlationId: string;
   runId?: string;
-  prId: string;
+  /** Set for review / intent prompts. */
+  prId?: string;
+  /** Set for repo-level prompts (onboarding). */
+  repoId?: string;
   agent?: string;
   provider: string;
   model: string;
-  promptKind: 'review' | 'intent';
+  promptKind: 'review' | 'intent' | 'onboarding';
   promptVersion?: string;
   mode?: 'single-pass' | 'map-reduce';
   chunk?: { index: number; total: number; file?: string };
@@ -128,7 +134,8 @@ export function buildPromptAssembledEvent(
   return {
     correlationId: r(input.correlationId),
     ...(input.runId ? { runId: r(input.runId) } : {}),
-    prId: r(input.prId),
+    ...(input.prId ? { prId: r(input.prId) } : {}),
+    ...(input.repoId ? { repoId: r(input.repoId) } : {}),
     ...(input.agent ? { agent: r(input.agent) } : {}),
     provider: r(input.provider),
     model: r(input.model),

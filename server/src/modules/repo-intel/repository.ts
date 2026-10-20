@@ -214,6 +214,8 @@ export class RepoIntelRepository {
       const stats = (row.stats ?? {}) as Record<string, unknown>;
       const durationMs = typeof stats.durationMs === 'number' ? stats.durationMs : 0;
       const reason = typeof stats.reason === 'string' ? stats.reason : undefined;
+      const filesTotal = typeof stats.totalCandidates === 'number' ? stats.totalCandidates : null;
+      const bounded = typeof stats.bounded === 'number' ? stats.bounded : 0;
       // A persisted row is the "real" index state. We only mark it `degraded`
       // when the indexer itself stamped status='degraded'|'failed' (e.g. the
       // graph fell over). 'partial' is still a working index — no degraded flag.
@@ -225,6 +227,8 @@ export class RepoIntelRepository {
         filesSkipped: row.filesSkipped,
         durationMs,
         reason,
+        filesTotal,
+        bounded,
         lastIndexedSha: row.lastIndexedSha,
         indexerVersion: row.indexerVersion,
         updatedAt: row.updatedAt,
@@ -479,7 +483,8 @@ export class RepoIntelRepository {
       .select({ path: t.fileRank.filePath, rank: t.fileRank.rank })
       .from(t.fileRank)
       .where(eq(t.fileRank.repoId, repoId))
-      .orderBy(desc(t.fileRank.rank))
+      // Tie-break on path so equal ranks give a reproducible order (onboarding reading path).
+      .orderBy(desc(t.fileRank.rank), asc(t.fileRank.filePath))
       .limit(limit);
   }
 
@@ -566,6 +571,24 @@ export class RepoIntelRepository {
       })
       .from(t.fileFacts)
       .where(and(eq(t.fileFacts.repoId, repoId), inArray(t.fileFacts.filePath, files)));
+    return rows.map((r) => ({
+      filePath: r.filePath,
+      endpoints: (r.endpoints as string[]) ?? [],
+      crons: (r.crons as string[]) ?? [],
+    }));
+  }
+
+  /** Every per-file facts row (endpoints/crons) of a repo. */
+  async getAllFileFacts(repoId: string): Promise<IndexerFileFactsRow[]> {
+    const rows = await this.db
+      .select({
+        filePath: t.fileFacts.filePath,
+        endpoints: t.fileFacts.endpoints,
+        crons: t.fileFacts.crons,
+      })
+      .from(t.fileFacts)
+      .where(eq(t.fileFacts.repoId, repoId))
+      .orderBy(asc(t.fileFacts.filePath));
     return rows.map((r) => ({
       filePath: r.filePath,
       endpoints: (r.endpoints as string[]) ?? [],

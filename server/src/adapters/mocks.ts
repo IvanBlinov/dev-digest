@@ -317,6 +317,16 @@ export class MockGitClient implements GitClient {
   async readFile(_repo: RepoRef, path: string): Promise<string> {
     return this.opts.files?.[path] ?? '';
   }
+  async listDir(_repo: RepoRef, dir: string): Promise<string[]> {
+    const prefix = dir === '' ? '' : `${dir.replace(/\/+$/, '')}/`;
+    const names = new Set<string>();
+    for (const key of Object.keys(this.opts.files ?? {})) {
+      if (!key.startsWith(prefix)) continue;
+      const first = key.slice(prefix.length).split('/')[0];
+      if (first) names.add(first);
+    }
+    return [...names].sort();
+  }
 }
 
 // ---------- Mock CodeIndex ----------

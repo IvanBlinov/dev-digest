@@ -8,4 +8,11 @@ describe('feature model defaults', () => {
       model: 'openai/gpt-4.1-mini',
     });
   });
+
+  it('AC-17: onboarding default is openrouter / openai/gpt-4.1-mini', () => {
+    expect(defaultFeatureModel('onboarding')).toEqual({
+      provider: 'openrouter',
+      model: 'openai/gpt-4.1-mini',
+    });
+  });
 });

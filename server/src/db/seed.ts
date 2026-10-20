@@ -8,6 +8,7 @@ import {
   PERFORMANCE_REVIEWER_PROMPT,
 } from './seed-prompts.js';
 import { seedSkillsLab } from './seed-skills/index.js';
+import { seedOnboarding } from './seed-onboarding.js';
 import { INTENT_PROMPT_VERSION } from '@devdigest/reviewer-core';
 import { intentInputHash } from '../modules/intent/helpers.js';
 
@@ -173,6 +174,7 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       .returning();
   }
   const repoId = repo!.id;
+  await seedOnboarding(db, repoId);
 
   // ---- PR #482 (rate limiting) ----
   let [pr] = await db

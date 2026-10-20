@@ -2,6 +2,12 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-19 — [Security] `wrapUntrusted` only escapes an exact `</untrusted>`; onboarding uses the strict wrapper
+Symptom: `</UNTRUSTED >` or `< /untrusted` inside a README survives `wrapUntrusted` and looks like a delimiter to a model.
+Cause: `wrapUntrusted` does `replaceAll('</untrusted>', ...)` only (case- and whitespace-sensitive).
+Rule: fence repo-derived text for new prompts with `wrapUntrustedStrict` (turns every `<` before an untrusted look-alike into `&lt;`); `INJECTION_GUARD` bytes must stay unchanged, so only its first sentence is exported as `UNTRUSTED_DATA_RULE`.
+Proof: `reviewer-core/src/prompt.ts:74`, `reviewer-core/src/prompt.ts:90`
+
 ## 2026-10-08 — [Architectural decision] The prompt meter is injected, so the core stays crypto- and env-free
 Context: logging a prompt manifest needs token counts and digests, but the core is pure (no `node:crypto`, no env, no tokenizer dependency).
 Decision: `assemblePrompt(parts, meter?)` and `buildIntentMessages(input, meter?)` take an injected `SectionMeter {tokens?, digest?}`; the manifest (`PromptSection`) never stores section text and only constants authored here carry a `preview`. `reviewPullRequest` exposes `promptMeter` and `onPromptAssembled` (fired before each LLM call).

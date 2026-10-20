@@ -199,6 +199,8 @@ export class RepoIntelService implements RepoIntel {
       lastIndexedSha: '',
       indexerVersion: INDEXER_VERSION,
       updatedAt: new Date(0),
+      filesTotal: null,
+      bounded: 0,
       degraded: true,
       degradedReason: 'no_data',
     };
@@ -655,6 +657,28 @@ export class RepoIntelService implements RepoIntel {
     return out;
   }
 
+  /** All ranked files and import edges in one read each (onboarding graph facts). */
+  async getOnboardingGraph(repoId: string): Promise<{
+    files: { path: string; rank: number }[];
+    edges: { from: string; to: string }[];
+  }> {
+    if (!this.container.config.repoIntelEnabled) return { files: [], edges: [] };
+    const [files, edges] = await Promise.all([
+      this.repo.getRankedPaths(repoId, ONBOARDING_MAX_RANKED_FILES),
+      this.repo.getEdges(repoId),
+    ]);
+    return { files, edges: edges.map((e) => ({ from: e.fromFile, to: e.toFile })) };
+  }
+
+  /** Endpoints and crons for every file with facts (onboarding critical paths). */
+  async getAllFileFacts(
+    repoId: string,
+  ): Promise<{ path: string; endpoints: string[]; crons: string[] }[]> {
+    if (!this.container.config.repoIntelEnabled) return [];
+    const rows = await this.repo.getAllFileFacts(repoId);
+    return rows.map((r) => ({ path: r.filePath, endpoints: r.endpoints, crons: r.crons }));
+  }
+
   /**
    * Dependency chains from the highest-ranked files (onboarding reading-path).
    * For each of the top roots, greedily follow the highest-ranked import target
@@ -701,6 +725,9 @@ export class RepoIntelService implements RepoIntel {
     return paths;
   }
 }
+
+/** Upper bound of ranked files `getOnboardingGraph` reads (the indexer bounds well below this). */
+const ONBOARDING_MAX_RANKED_FILES = 100_000;
 
 /** How many top-ranked files seed `getCriticalPaths` dependency chains. */
 const CRITICAL_PATH_ROOTS = 5;

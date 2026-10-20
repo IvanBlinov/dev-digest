@@ -233,6 +233,12 @@ export interface GitClient {
   blame(repo: RepoRef, path: string): Promise<BlameLine[]>;
   log(repo: RepoRef, path?: string): Promise<GitCommit[]>;
   readFile(repo: RepoRef, path: string): Promise<string>;
+  /**
+   * Entry NAMES (not contents) of one directory of the clone, sorted, non-recursive.
+   * `dir` is relative to the repo root (`''` = root). A missing directory returns `[]`;
+   * a `..` segment or an absolute path is rejected.
+   */
+  listDir(repo: RepoRef, dir: string): Promise<string[]>;
   clonePathFor(repo: RepoRef): string;
 }
 

@@ -44,6 +44,10 @@ export interface IndexState extends IndexResult {
   lastIndexedSha: string;
   indexerVersion: number;
   updatedAt: Date;
+  /** Walk candidates before bounding (`stats.totalCandidates`); null when the indexer did not record it. */
+  filesTotal?: number | null;
+  /** Files dropped by the MAX_INDEXED_FILES bound (`stats.bounded`). */
+  bounded?: number;
   /** True when the layer is running on the ripgrep fallback. */
   degraded?: boolean;
   degradedReason?: DegradedReason;
@@ -169,4 +173,14 @@ export interface RepoIntel {
     opts?: { exclude?: string[] },
   ): Promise<string[]>;
   getCriticalPaths(repoId: string): Promise<string[][]>;
+
+  // --- L05b: onboarding generator reads ----------------------------------
+  /** Every ranked file (rank desc, ties by path asc) plus all import edges. Empty when degraded/flag off. */
+  getOnboardingGraph(
+    repoId: string,
+  ): Promise<{ files: { path: string; rank: number }[]; edges: { from: string; to: string }[] }>;
+  /** Endpoints and crons for every file that has facts. Empty when degraded/flag off. */
+  getAllFileFacts(
+    repoId: string,
+  ): Promise<{ path: string; endpoints: string[]; crons: string[] }[]>;
 }

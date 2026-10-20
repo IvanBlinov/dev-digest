@@ -15,10 +15,22 @@
 export {
   assemblePrompt,
   wrapUntrusted,
+  wrapUntrustedStrict,
+  escapeUntrustedMarkers,
+  UNTRUSTED_DATA_RULE,
   type PromptParts,
   type ReviewIntent,
   type AssembledPrompt,
 } from './prompt.js';
+
+// Onboarding narrative prompt (L05b).
+export {
+  buildOnboardingMessages,
+  ONBOARDING_PROMPT_VERSION,
+  type OnboardingFacts,
+  type OnboardingDropped,
+  type OnboardingPromptResult,
+} from './onboarding/prompt.js';
 
 // Prompt manifest (content-free description of an assembled prompt).
 export {

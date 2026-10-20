@@ -10,6 +10,8 @@ import {
   SmartDiff,
   Conformance,
   Onboarding,
+  OnboardingTour,
+  OnboardingTourState,
   EvalRun,
   MemoryItem,
   RunTrace,
@@ -322,5 +324,53 @@ describe('BlastRadius', () => {
   });
   it('rejects an unknown reason', () => {
     expect(() => BlastRadius.parse({ ...base, degraded: true, reason: 'bogus' })).toThrow();
+  });
+});
+
+describe('L05b onboarding contracts', () => {
+  const tour = () => ({
+    status: 'ready',
+    index_sha: null,
+    prompt_version: 'v1',
+    generated_at: '2026-10-19T10:00:00.000Z',
+    coverage: { files_indexed: 6, files_total: null, partial: false },
+    reasons: [],
+    known_paths: ['src/app.ts'],
+    generation: { provider: 'openrouter', model: 'm', llm_calls: 1, tokens_in: 1, tokens_out: 1, cost_usd: null, duration_ms: 3 },
+    sections: {
+      architecture: { source: 'llm', unavailable_reason: null, narrative: 'n', diagram: null },
+      critical_paths: { source: 'llm', unavailable_reason: null, items: [{ path: 'src/app.ts', fact: 'f', reason: null }] },
+      run_commands: { source: 'deterministic', unavailable_reason: null, items: [{ id: 'install', command: 'npm install', comment: null, script_body: null }] },
+      reading_path: { source: 'llm', unavailable_reason: null, items: [{ path: 'src/app.ts', why: 'w', why_source: 'llm' }] },
+      first_tasks: { source: 'llm', unavailable_reason: 'invalid_output', items: [] },
+    },
+  });
+
+  it('AC-69: OnboardingTour parses a full sample', () => {
+    expect(OnboardingTour.safeParse(tour()).success).toBe(true);
+  });
+
+  it("AC-69: rejects status 'generating' in OnboardingTour", () => {
+    expect(OnboardingTour.safeParse({ ...tour(), status: 'generating' }).success).toBe(false);
+  });
+
+  it('AC-11: requires index_sha (nullable), prompt_version, generated_at, coverage, reasons, generation', () => {
+    for (const k of ['index_sha', 'prompt_version', 'generated_at', 'coverage', 'reasons', 'generation']) {
+      const t = tour() as Record<string, unknown>;
+      delete t[k];
+      expect(OnboardingTour.safeParse(t).success, k).toBe(false);
+    }
+  });
+
+  it('AC-2: OnboardingTourState accepts tour null and stale_reason null', () => {
+    expect(
+      OnboardingTourState.safeParse({
+        status: 'none', cloned: true, tour: null, stale: false, stale_reason: null, index_updated_at: null, last_error: null,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('AC-69: existing Onboarding schema still parses {sections: []}', () => {
+    expect(Onboarding.safeParse({ sections: [] }).success).toBe(true);
   });
 });

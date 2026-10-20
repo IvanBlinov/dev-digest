@@ -12,4 +12,10 @@ describe("client feature-model registry", () => {
     expect(def?.defaultProvider).toBe("openrouter");
     expect(def?.defaultModel).toBe("openai/gpt-4.1-mini");
   });
+
+  it("AC-17: onboarding defaults to openrouter / openai/gpt-4.1-mini", () => {
+    const def = FEATURE_MODELS.find((m) => m.id === "onboarding");
+    expect(def?.defaultProvider).toBe("openrouter");
+    expect(def?.defaultModel).toBe("openai/gpt-4.1-mini");
+  });
 });

@@ -2,6 +2,30 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-19 — [Pitfall] `JobRunner` retries the whole handler, so an LLM call inside it can be sent 3 times
+Symptom: a job that makes one LLM request can hit the provider up to 3 times, on top of the SDK's own retries.
+Cause: `JobRunner` defaults to 2 retries around the entire handler, and the OpenAI/Anthropic adapters add `withRetry` plus SDK `maxRetries` underneath.
+Rule: a feature that must make exactly one request runs as a background promise (like conventions and onboarding), never through `JobRunner`, and takes `container.llm(id, { retries: 0 })` (one transport attempt, cached separately from the default instance).
+Proof: `server/src/platform/jobs.ts:42`, `server/src/adapters/llm/openai.ts:54`, `server/src/platform/container.ts:184`, `server/src/modules/onboarding/service.ts:94`
+
+## 2026-10-19 — [Non-obvious behaviour] Per-route `config.rateLimit` is inert under `NODE_ENV=test`
+Symptom: a 429 test on a rate-limited route never sees a 429 in the default test app.
+Cause: `@fastify/rate-limit` is registered only when `nodeEnv !== 'test'`, so route-level `config.rateLimit` does nothing there.
+Rule: test a route limit with `loadConfig({ NODE_ENV: 'development' })`.
+Proof: `server/src/app.ts:101`, `server/test/onboarding.it.test.ts` (AC-6)
+
+## 2026-10-19 — [Non-obvious behaviour] `isJunkPath` misses root-level `test/` and `migrations/`
+Symptom: `getTopFilesByRank` can return `test/…` or `migrations/…` files at the repo root.
+Cause: the patterns are `'/test/'` and `'/migrations/'` with a leading slash, so a path that starts with the directory does not match.
+Rule: features that need a stricter filter (onboarding) use their own exclusion (`isOnboardingExcluded`); do not widen the shared helper without checking blast and conventions.
+Proof: `server/src/modules/repo-intel/service.ts:746`, `server/src/modules/onboarding/sections.ts:43`
+
+## 2026-10-19 — [Non-obvious behaviour] `OnboardingRepository.failStale` keeps `started_at`
+Symptom: the NFR-2 test requires `started_at` to be unchanged by GET, even for a row that GET turns from `generating` into `failed`.
+Cause: the stale sweep only flips status and `last_error`; clearing `started_at` would make a read look like a write.
+Rule: do not null `started_at` in `failStale`; only `startIfIdle` and the finish methods own that column.
+Proof: `server/src/modules/onboarding/repository.ts:103`, `server/test/onboarding.it.test.ts` (NFR-2)
+
 ## 2026-10-14 — [Pitfall] A reused `TEST_DATABASE_URL` database shows up as "N skipped", not as a failure
 Symptom: a second run of an `*.it.test.ts` against the same `TEST_DATABASE_URL` reported `Tests 5 skipped (5)`, which looks like "Docker is not available".
 Cause: `startPg()` migrates the existing database, then the file's `beforeAll` inserts its fixture repo again and hits `repos_ws_fullname_uq`; vitest reports a failed `beforeAll` as skipped tests plus a suite error further up the output.

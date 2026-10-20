@@ -1,6 +1,6 @@
 import { simpleGit, type SimpleGit } from 'simple-git';
-import { join } from 'node:path';
-import { mkdir, readFile, access, rm } from 'node:fs/promises';
+import { join, isAbsolute } from 'node:path';
+import { mkdir, readFile, readdir, access, rm } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import type {
   GitClient,
@@ -128,6 +128,20 @@ export class SimpleGitClient implements GitClient {
 
   async readFile(repo: RepoRef, path: string): Promise<string> {
     return readFile(join(this.clonePathFor(repo), path), 'utf8');
+  }
+
+  async listDir(repo: RepoRef, dir: string): Promise<string[]> {
+    if (isAbsolute(dir) || dir.split(/[\\/]/).includes('..')) {
+      throw new Error('listDir: dir must be relative and must not contain ".."');
+    }
+    try {
+      const names = await readdir(join(this.clonePathFor(repo), dir));
+      return names.sort();
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT' || code === 'ENOTDIR') return [];
+      throw err;
+    }
   }
 }
 

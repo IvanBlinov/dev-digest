@@ -121,6 +121,13 @@ export const onboarding = pgTable('onboarding', {
   repoId: uuid('repo_id')
     .primaryKey()
     .references(() => repos.id, { onDelete: 'cascade' }),
-  json: jsonb('json').notNull(),
+  /** The stored OnboardingTour; null while the first generation runs. */
+  json: jsonb('json'),
   generatedAt: timestamp('generated_at', { withTimezone: true }).defaultNow().notNull(),
+  // L05b: none | generating | ready | partial | skeleton | failed
+  status: text('status').notNull().default('none'),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  lastError: jsonb('last_error'),
+  promptVersion: text('prompt_version'),
+  indexSha: text('index_sha'),
 });

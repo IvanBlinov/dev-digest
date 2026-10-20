@@ -47,13 +47,28 @@ function tuningParams(
 export class OpenAIProvider implements LLMProvider {
   readonly id = 'openai' as const;
   private client: OpenAI;
+  /** Our own `withRetry` budget; undefined keeps the default (3). */
+  private retries?: number;
 
-  constructor(apiKey: string) {
-    this.client = new OpenAI({ apiKey });
+  /**
+   * `opts.retries` caps BOTH the SDK `maxRetries` and our `withRetry` loop (0 = exactly one
+   * transport attempt). Unset = the historical defaults.
+   */
+  constructor(apiKey: string, opts: { retries?: number; baseURL?: string } = {}) {
+    this.retries = opts.retries;
+    this.client = new OpenAI({
+      apiKey,
+      ...(opts.baseURL ? { baseURL: opts.baseURL } : {}),
+      ...(opts.retries !== undefined ? { maxRetries: opts.retries } : {}),
+    });
+  }
+
+  private retry<T>(fn: () => Promise<T>): Promise<T> {
+    return withRetry(fn, { retries: this.retries });
   }
 
   async listModels(): Promise<ModelInfo[]> {
-    return withRetry(async () => {
+    return this.retry(async () => {
       const res = await this.client.models.list();
       return res.data
         .filter((m) => m.id.startsWith('gpt') || m.id.includes('o1') || m.id.includes('o3'))
@@ -62,7 +77,7 @@ export class OpenAIProvider implements LLMProvider {
   }
 
   async complete(req: CompletionRequest): Promise<CompletionResult> {
-    return withRetry(() =>
+    return this.retry(() =>
       withTimeout(this.doComplete(req), req.timeoutMs ?? DEFAULT_TIMEOUT),
     );
   }
@@ -94,7 +109,7 @@ export class OpenAIProvider implements LLMProvider {
     let lastRaw = '';
 
     for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
-      const res = await withRetry(() =>
+      const res = await this.retry(() =>
         withTimeout(
           this.client.chat.completions.create({
             model: req.model,
@@ -136,7 +151,7 @@ export class OpenAIProvider implements LLMProvider {
 
   async embed(texts: string[]): Promise<number[][]> {
     if (texts.length === 0) return [];
-    return withRetry(async () => {
+    return this.retry(async () => {
       const res = await withTimeout(
         this.client.embeddings.create({ model: EMBED_MODEL, input: texts }),
         DEFAULT_TIMEOUT,

@@ -16,7 +16,7 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     label: "Onboarding Tour",
     description: "Writes the per-repo onboarding tour.",
     defaultProvider: "openrouter",
-    defaultModel: "deepseek/deepseek-v4-flash",
+    defaultModel: "openai/gpt-4.1-mini",
   },
   {
     id: "review_intent",
