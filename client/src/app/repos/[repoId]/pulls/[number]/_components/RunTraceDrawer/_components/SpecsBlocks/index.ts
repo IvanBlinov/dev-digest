@@ -1,0 +1,1 @@
+export { SpecsBlocks } from "./SpecsBlocks";

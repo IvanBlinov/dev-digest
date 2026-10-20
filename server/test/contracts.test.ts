@@ -20,6 +20,8 @@ import {
   Settings,
   Repo,
   PrDetail,
+  PutContextAttachmentsBody,
+  ContextListing,
 } from '@devdigest/shared';
 
 /**
@@ -322,5 +324,55 @@ describe('BlastRadius', () => {
   });
   it('rejects an unknown reason', () => {
     expect(() => BlastRadius.parse({ ...base, degraded: true, reason: 'bogus' })).toThrow();
+  });
+});
+
+describe('Project context contracts (L05)', () => {
+  const trace = {
+    config: { agent: 'a', model: 'm' },
+    stats: { duration_ms: 1, tokens_in: 1, tokens_out: 1, findings: 0, grounding: '0/0' },
+    prompt_assembly: { system: 's', user: 'u' },
+    tool_calls: [],
+    raw_output: '',
+    memory_pulled: [],
+    specs_read: [],
+    log: [],
+  };
+  it('AC-15: an old trace without the new keys parses', () => {
+    const t = RunTrace.parse(trace);
+    expect(t.prompt_assembly.specs_blocks).toBeUndefined();
+    expect(t.config.clone_sha).toBeUndefined();
+  });
+  it('AC-15: the new trace keys parse', () => {
+    const t = RunTrace.parse({
+      ...trace,
+      config: { ...trace.config, clone_sha: 'abc' },
+      prompt_assembly: {
+        system: 's',
+        user: 'u',
+        specs_tokens: 3,
+        specs_blocks: [
+          { path: 'a.md', kind: 'docs', origin: 'agent', tokens: 3, text: 't', truncated: false },
+        ],
+        specs_skipped: [{ path: 'b.md', reason: 'not_found' }],
+      },
+    });
+    expect(t.prompt_assembly.specs_blocks).toHaveLength(1);
+  });
+  it('AC-15: PutContextAttachmentsBody rejects 101 paths and duplicates', () => {
+    const paths = Array.from({ length: 101 }, (_, i) => `docs/${i}.md`);
+    expect(() => PutContextAttachmentsBody.parse({ paths })).toThrow();
+    expect(() => PutContextAttachmentsBody.parse({ paths: ['a.md', 'a.md'] })).toThrow();
+    expect(PutContextAttachmentsBody.parse({ paths: ['a.md', 'b.md'] }).paths).toHaveLength(2);
+  });
+  it('AC-15: ContextListing accepts synced_at null', () => {
+    const l = ContextListing.parse({
+      cloned: false,
+      roots: ['docs/**/*.md'],
+      synced_at: null,
+      truncated: false,
+      documents: [],
+    });
+    expect(l.synced_at).toBeNull();
   });
 });

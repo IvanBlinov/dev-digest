@@ -34,7 +34,7 @@ blocks you, do not look for a workaround — follow the message or report the ga
   no unrelated uncommitted work in the files you will touch.
 - **B (backfill):** the input is a target code path plus the behaviours to pin down.
 - Anything else, or a behaviour that is not clearly stated → return "Clarifying questions" in the
-  `planner.md` Step 0 format. Do no work.
+  `implementation-planner.md` Step 4 format. Do no work.
 
 ## Step 1 — Context
 

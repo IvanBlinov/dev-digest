@@ -104,6 +104,8 @@ already rejected in Step 0; the rest route through the placement table below.
 
 ## Before returning
 
+- When the work implements an approved spec (`Status: approved`), set its `Status:` line to
+  `implemented` and report it under Pages. Never change a `draft` spec.
 - Every page has a Diátaxis type and a placement row.
 - Every claim links to `file:line`.
 - Relative links resolve (checked with Glob).

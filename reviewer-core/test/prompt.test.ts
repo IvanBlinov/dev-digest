@@ -4,7 +4,7 @@
  * truncation, and ordering (before the diff).
  */
 import { describe, it, expect } from 'vitest';
-import { assemblePrompt } from '../src/prompt.js';
+import { assemblePrompt, PROJECT_CONTEXT_FRAME } from '../src/prompt.js';
 
 function userOf(parts: Parameters<typeof assemblePrompt>[0]): string {
   const { messages } = assemblePrompt(parts);
@@ -110,5 +110,46 @@ describe('assemblePrompt — ## PR intent (unverified hypothesis)', () => {
     expect(a.messages[1]!.content).not.toContain('## PR intent');
     expect(a.assembly.intent).toBeNull();
     expect(a.messages[0]!.content).toBe(systemOf({ system: 'sys', diff: 'DIFF', prDescription: 'd' }));
+  });
+});
+
+describe('assemblePrompt — ## Project context framing', () => {
+  const specs = ['### Document: specs/a.md\nRule A', '### Document: docs/b.md\nRule B'];
+
+  it('AC-21: the line right after the heading is the trusted constant', () => {
+    const user = userOf({ system: 'sys', diff: 'DIFF', specs });
+    expect(user).toContain(`## Project context\n${PROJECT_CONTEXT_FRAME}\n\n<untrusted`);
+    expect(PROJECT_CONTEXT_FRAME).toMatch(/documented rules/i);
+    expect(PROJECT_CONTEXT_FRAME).toMatch(/reference/i);
+    expect(PROJECT_CONTEXT_FRAME).toMatch(/path/i);
+  });
+
+  it('AC-21: the manifest has a trusted specs:frame segment', () => {
+    const { sections } = assemblePrompt({ system: 'sys', diff: 'DIFF', specs });
+    const frame = sections.find((s) => s.name === 'specs:frame');
+    expect(frame?.trust).toBe('trusted');
+    expect(frame?.source).toBe('reviewer-core');
+    expect(frame?.preview).toBe(PROJECT_CONTEXT_FRAME);
+    const total = sections.reduce((n, s) => n + s.chars, 0);
+    const { messages } = assemblePrompt({ system: 'sys', diff: 'DIFF', specs });
+    expect(total).toBe(messages[0]!.content.length + messages[1]!.content.length);
+  });
+
+  it('AC-22: without specs the prompt carries no project-context trace', () => {
+    for (const s of [undefined, []]) {
+      const { messages, assembly, sections } = assemblePrompt({ system: 'sys', diff: 'DIFF', specs: s });
+      expect(messages[1]!.content).toBe(`## Diff to review\n<untrusted source="diff">\nDIFF\n</untrusted>`.replace(/^/, '') );
+      expect(assembly.specs).toBeNull();
+      expect(sections.map((x) => x.name)).toEqual(['system:agent', 'system:guard', 'diff']);
+    }
+  });
+
+  it('AC-20: each spec is in its own untrusted block and the guard is in the system message', () => {
+    const { messages, assembly } = assemblePrompt({ system: 'sys', diff: 'DIFF', specs });
+    const user = messages[1]!.content;
+    expect(user).toContain('<untrusted source="spec-0">');
+    expect(user).toContain('<untrusted source="spec-1">');
+    expect(messages[0]!.content).toMatch(/DATA to be analyzed/);
+    expect(assembly.specs).not.toContain(PROJECT_CONTEXT_FRAME);
   });
 });

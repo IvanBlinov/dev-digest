@@ -51,6 +51,18 @@
       "memory": "Memory (dynamic)",
       "repoMap": "Repo skeleton — repo-intel (dynamic)",
       "specs": "Project context (dynamic)",
+      "specsSection": "Project context — attached specs (untrusted)",
+      "specsSummary": "{count, plural, one {# doc} other {# docs}} · {tokens} tokens",
+      "specBlock": "{path} · {origin} · {tokens} tokens",
+      "specsSkipped": "Skipped documents",
+      "skipReason": {
+        "not_found": "not found",
+        "unreadable": "unreadable",
+        "not_utf8": "not UTF-8 text",
+        "invalid_path": "invalid path",
+        "not_cloned": "repository not cloned",
+        "over_budget": "over budget"
+      },
       "callers": "Callers of changed symbols — repo-intel (dynamic)",
       "user": "User / diff (dynamic)",
       "copy": "Copy",

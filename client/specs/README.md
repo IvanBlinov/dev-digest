@@ -7,19 +7,16 @@ Naming: `LNN-short-name.md` (course lesson prefix) or `XX-short-name.md`.
 
 ## Template
 
-```markdown
-# <Screen / feature>
+Every spec uses the shared template from the [spec-writing skill](../../.claude/skills/spec-writing/SKILL.md)
+(`Spec ID: SPEC-NN`, `Status: draft | approved | implemented`, EARS acceptance criteria, edge cases,
+NFRs, inputs and provenance, untrusted inputs, open questions). Write new specs with the
+[`spec-writer`](../../.claude/agents/spec-writer.md) agent. Older specs written before 2026-10-14
+keep their original shape and count as approved.
 
-## Goal
-## Route(s)
-`src/app/...` paths touched or added.
-## Data
-Hooks used/added in `src/lib/hooks/`, API endpoints, contracts from `@devdigest/shared`.
-## UI
-States: loading / empty / error / success. Components in `_components/<Name>/`.
-## Tests
-- `*.test.tsx`: …
-- e2e flow (if a main journey changes): `../../e2e/specs/NN-*.flow.json`
-## Acceptance criteria
-- [ ] …
-```
+## What a client spec must pin down
+
+- Route(s) under `src/app/...` touched or added.
+- Data: hooks in `src/lib/hooks/`, API endpoints, contracts from `@devdigest/shared`.
+- UI states: loading / empty / error / degraded / success, and narrow-screen behaviour.
+- Strings: keys in `messages/en/<feature>.json`.
+- Whether a main journey changes (then an e2e flow in `../../e2e/specs/`).

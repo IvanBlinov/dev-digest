@@ -40,6 +40,7 @@ describe('assemblePrompt — sections manifest', () => {
       'skill:1',
       'memory',
       'repo-map',
+      'specs:frame',
       'spec:0',
       'spec:1',
       'callers',
@@ -91,10 +92,10 @@ describe('assemblePrompt — sections manifest', () => {
     }
   });
 
-  it('previews only the constant guard and scope rule, capped', () => {
+  it('previews only the constant guard, scope rule and project-context frame, capped', () => {
     const { sections } = assemblePrompt(FULL);
     const withPreview = sections.filter((s) => s.preview !== undefined).map((s) => s.name);
-    expect(withPreview).toEqual(['system:guard', 'system:scope-rule']);
+    expect(withPreview).toEqual(['system:guard', 'system:scope-rule', 'specs:frame']);
     for (const s of sections) {
       if (s.preview) expect(s.preview.length).toBeLessThanOrEqual(PREVIEW_MAX_CHARS);
     }

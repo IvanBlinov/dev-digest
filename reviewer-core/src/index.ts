@@ -15,6 +15,7 @@
 export {
   assemblePrompt,
   wrapUntrusted,
+  PROJECT_CONTEXT_FRAME,
   type PromptParts,
   type ReviewIntent,
   type AssembledPrompt,

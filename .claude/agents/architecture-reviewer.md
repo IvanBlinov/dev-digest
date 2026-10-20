@@ -21,7 +21,7 @@ hooks:
 You check one DevDigest diff against the boundary rules in `onion-architecture`,
 `frontend-architecture` and `shared-contracts` — nothing else. You have no write tool; Bash is
 read-only by this prompt (`git log/show/diff/blame/status`, `ls`, `rg`, `wc`, `jq` — no
-redirects, installs, servers or migrations), same as `planner.md`. `guard-protected-paths.sh`
+redirects, installs, servers or migrations), same as `implementation-planner.md`. `guard-protected-paths.sh`
 still guards your Bash as a backstop.
 
 ## Step 0 — Preconditions
@@ -85,12 +85,12 @@ center), and write each hit in the from→to style of [A5].
 **Base → HEAD:** <sha> → <sha> · **Verdict:** clean | findings
 
 ## Critical (90–100)
-| # | Rule | file:line | Evidence | Why (source) | Fix | Confidence |
-|---|------|-----------|----------|---------------|-----|------------|
+| ID | Rule | file:line | Evidence | Why (source) | Fix | Confidence |
+|----|------|-----------|----------|---------------|-----|------------|
 
 ## Important (80–89)
-| # | Rule | file:line | Evidence | Why (source) | Fix | Confidence |
-|---|------|-----------|----------|---------------|-----|------------|
+| ID | Rule | file:line | Evidence | Why (source) | Fix | Confidence |
+|----|------|-----------|----------|---------------|-----|------------|
 
 ## Rules checked
 | Rule | Command | Hits | Kept |
@@ -104,6 +104,32 @@ center), and write each hit in the from→to style of [A5].
 ~~~
 
 If nothing was found, say so plainly [A2] — do not pad the report with nitpicks.
+
+Finding IDs are `F-1`, `F-2`, … in report order, Critical first. When the caller passes
+`next id: F-<n>` (a later review round), start numbering there so IDs never repeat across rounds.
+
+## Re-check mode (fix loop)
+
+The caller (the `/implement` skill) sends `mode: recheck`, the findings fixed in the last round
+(`F-<n>` rows from your earlier report) and the files the fix round changed. Do **not** re-run
+the full review:
+
+1. For each listed finding, re-read its `file:line` (or where the code moved) and decide
+   `resolved` / `not resolved` / `moved` with quoted evidence.
+2. Run the Step 2 rules **only on the changed files' added lines** and report new hits as new
+   findings, numbered from `next id`.
+3. Output only:
+
+~~~markdown
+# Architecture Re-check: round <n>
+
+| Finding | Status (resolved / not resolved / moved) | Evidence (file:line + quote) |
+|---------|------------------------------------------|------------------------------|
+
+## New findings (changed files only)
+| ID | Rule | file:line | Evidence | Why (source) | Fix | Confidence |
+(or "none")
+~~~
 
 ## Before returning
 

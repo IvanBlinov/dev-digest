@@ -2,6 +2,36 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-18 — [Security] Run-time document reads are byte-bounded, not size-skipped
+Symptom: a multi-GB `.md` attached as project context would be loaded whole before the 20 000-char cut.
+Cause: `DocsReader.read` returned the full file; truncation happened in `formatDocument` afterwards.
+Rule: pass `prefixBytes` (CONTEXT_DOC_READ_MAX_BYTES) from the run path; the adapter clips at a UTF-8 character boundary and sets `truncated`. The listing reads in batches of 16 and stops after cap+1 documents; `list` stops walking at DOCS_WALK_MAX_FILES (so a huge clone is listed partially, without a flag).
+Proof: `server/src/adapters/docs/fs.ts:96`, `server/src/modules/reviews/project-context-prompt.ts:73`, `server/src/modules/project-context/service.ts:66`
+
+## 2026-10-18 — [Architectural decision] The project-context token budget is counted on the exact text reviewer-core joins
+Context: `specs_tokens` and the 8 000-token cap must match what the model sees, but reviewer-core adds the `## Project context` heading, a trusted frame line and `<untrusted>` wrappers around the server's texts.
+Decision: the server budgets on `texts.join(SPECS_JOINER)` (same rule as `skills_tokens`); the frame and wrappers are constant overhead outside the budget. `SPECS_JOINER` must stay equal to the `\n\n` join in `assemblePrompt`.
+Consequence: changing the joiner in either package without the other skews `specs_tokens`; adding a segment to the manifest (as `specs:frame`) means the manifest tests in reviewer-core must list it.
+Proof: `server/src/modules/reviews/project-context-prompt.ts:22`, `reviewer-core/src/prompt.ts:236`
+
+## 2026-10-18 — [Pitfall] `GitClient.readFile` cannot tell you a file is not UTF-8
+Symptom: a binary or Latin-1 `.md` read through the git adapter comes back as text full of U+FFFD instead of failing, so it would be listed and injected into a prompt as garbage.
+Cause: `readFile(..., 'utf8')` replaces invalid byte sequences silently; Node never throws for bad UTF-8 in that mode.
+Rule: when "is this valid UTF-8?" matters (project context documents, AC-7), read a Buffer and decode with `new TextDecoder('utf-8', { fatal: true })`, as the docs reader does; do not reuse `GitClient.readFile` for it.
+Proof: `server/src/adapters/git/simple-git.ts:130`, `server/src/adapters/docs/fs.ts:73`
+
+## 2026-10-18 — [Non-obvious behaviour] `repos.last_polled_at` is not "when the clone was synced"
+Symptom: a "repo synced 2 min ago" label built from `last_polled_at` can claim fresher documents than the clone on disk holds.
+Cause: the PR-list poll bumps `last_polled_at` without touching the clone; only the clone job also sets it together with `clone_path`.
+Rule: treat `last_polled_at` as "last contact with GitHub", not as the clone's content date. If a feature needs the clone's freshness, add a dedicated timestamp or read the clone's HEAD (SPEC-01 accepted `last_polled_at` knowingly, R4 rejected).
+Proof: `server/src/modules/polling/routes.ts:62`, `server/src/modules/repos/repository.ts:76`
+
+## 2026-10-14 — [Pitfall] A reused `TEST_DATABASE_URL` database shows up as "N skipped", not as a failure
+Symptom: a second run of an `*.it.test.ts` against the same `TEST_DATABASE_URL` reported `Tests 5 skipped (5)`, which looks like "Docker is not available".
+Cause: `startPg()` migrates the existing database, then the file's `beforeAll` inserts its fixture repo again and hits `repos_ws_fullname_uq`; vitest reports a failed `beforeAll` as skipped tests plus a suite error further up the output.
+Rule: one fresh database per `*.it.test.ts` run — use `scripts/it-db.sh run <file>`, never a hand-made database you run twice. When a DB test shows "skipped" with Docker up, read the suite error before suspecting Docker.
+Proof: `server/test/helpers/pg.ts:42`, `server/test/repo-intel-resolve-barrel.it.test.ts:17`, `scripts/it-db.sh`
+
 ## 2026-10-14 — [Pitfall] Reference resolution needs a hop through `index.*` barrels, or client callers vanish
 Symptom: the blast radius showed 0 callers on client PRs (e.g. `page.tsx` → `OverviewTab`), and only ~5% of client references had a `decl_file`.
 Cause: `resolveReferences` only matched a symbol in a file the importer has a direct `file_edges` edge to. Client components are imported through barrels (`./_components/OverviewTab` → `OverviewTab/index.ts`), and the symbol is declared one hop further, in `OverviewTab.tsx`.

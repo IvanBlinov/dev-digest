@@ -35,6 +35,7 @@ import type {
   FetchedTextFile,
 } from '@devdigest/shared';
 import { parseUnifiedDiff } from './git/diff-parser.js';
+import type { DocsReader, DocEntry, DocRead, DocReadFailure } from './docs/index.js';
 
 /**
  * Deterministic MOCK adapters for tests/dev — NO real network. Each mirrors the
@@ -316,6 +317,60 @@ export class MockGitClient implements GitClient {
   }
   async readFile(_repo: RepoRef, path: string): Promise<string> {
     return this.opts.files?.[path] ?? '';
+  }
+}
+
+// ---------- Mock DocsReader (L05) ----------
+/** A mock file: UTF-8 text, raw bytes (to model invalid UTF-8) or a forced read failure. */
+export type MockDoc = string | Uint8Array | { error: DocReadFailure };
+
+export class MockDocsReader implements DocsReader {
+  constructor(private files: Record<string, MockDoc> = {}) {}
+
+  private sizeOf(doc: MockDoc): number {
+    if (typeof doc === 'string') return Buffer.byteLength(doc);
+    if (doc instanceof Uint8Array) return doc.byteLength;
+    return 0;
+  }
+
+  async list(_root: string, match: (path: string) => boolean): Promise<DocEntry[]> {
+    return Object.entries(this.files)
+      .filter(([path]) => match(path))
+      .map(([path, doc]) => ({ path, size: this.sizeOf(doc) }))
+      .sort((a, b) => (a.path < b.path ? -1 : 1));
+  }
+
+  async read(_root: string, path: string, opts?: { maxBytes?: number; prefixBytes?: number }): Promise<DocRead> {
+    const doc = this.files[path];
+    if (doc === undefined) return { ok: false, reason: 'not_found' };
+    if (typeof doc === 'object' && !(doc instanceof Uint8Array)) {
+      return { ok: false, reason: doc.error };
+    }
+    const size = this.sizeOf(doc);
+    if (opts?.maxBytes !== undefined && size > opts.maxBytes) {
+      return { ok: false, reason: 'too_large' };
+    }
+    if (opts?.prefixBytes !== undefined && size > opts.prefixBytes && typeof doc === 'string') {
+      // Clip at a character boundary, like the fs adapter.
+      const bytes = Buffer.from(doc).subarray(0, opts.prefixBytes);
+      let end = bytes.length;
+      const dec = new TextDecoder('utf-8', { fatal: true });
+      for (; end > 0; end--) {
+        try {
+          dec.decode(bytes.subarray(0, end));
+          break;
+        } catch {
+          // still inside a multi-byte character
+        }
+      }
+      return { ok: true, content: Buffer.from(bytes.subarray(0, end)).toString('utf8'), size, truncated: true };
+    }
+    if (typeof doc === 'string') return { ok: true, content: doc, size };
+    try {
+      return { ok: true, content: new TextDecoder('utf-8', { fatal: true }).decode(doc), size };
+    } catch {
+      return { ok: false, reason: 'not_utf8' };
+    }
   }
 }
 
