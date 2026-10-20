@@ -5,7 +5,7 @@
 **Execution mode:** multi (chosen by the user 2026-10-19) · **Red phase:** test-writer — S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11, S12, S13
 **Gate slug:** `l05b-onboarding-plan-2` · **`R`** = `client/src/app/repos/[repoId]/onboarding`
 
-Approved by the user 2026-10-19 (Q1 = B; R1–R7 adopted as planner choices). Cross-model review: `2026-10-19-l05b-onboarding-plan-2-review.md`.
+Approved by the user 2026-10-19 (Q1 = B; R1–R7 adopted as planner choices). Revised 2026-10-20 after the cross-model review ([review](2026-10-19-l05b-onboarding-plan-2-review.md); rows 1, 5, 7 accepted → S1, S2, S12, S13, S14).
 
 ## Goal
 On `/repos/:repoId/onboarding` the user reads the five-section tour, generates or regenerates it (one model call), sees an honest status, staleness and cost, and copies commands, a share link or Markdown. Plan 1's server answers the requests. The seeded tour renders in e2e with no model call.
@@ -47,6 +47,9 @@ On `/repos/:repoId/onboarding` the user reads the five-section tour, generates o
 | R5 | `no_clone` in AC-41 but not in `OnboardingReason` (`server/src/vendor/shared/contracts/onboarding.ts:8-18`) | Reported for the record; the client adds the label anyway; no contract change | S2 |
 | R6 | AC-50 | Poll GET every 2 s until `cloned` is true (`useRefreshRepo` does not invalidate onboarding, `client/src/lib/hooks/core.ts:82`) | S1, S12, S13 |
 | R7 | AC-66 | ICU plural for calls; `formatUsd` for cost (`client/src/lib/format-usd.ts:7`) | S2, S10 |
+| Review 1 | Real index status in the not-cloned state (cross-model review row 1, accepted 2026-10-20) | `NotClonedState` renders the real `GET /repos/:id/index-state` result (`full`, `partial`, `degraded` with or without `no_data`, `failed`, plus loading and error); "Clone and index" calls `useRefreshRepo().mutate` (`POST /repos/:id/refresh`), never resync | S1, S2, S12, S13 |
+| Review 5 | No model call in e2e (row 5, accepted partly) | Flow 11 proves no "Generate onboarding tour" control is shown; the model-name wait stays | S14 |
+| Review 7 | Bounded clone poll (row 7, accepted) | Stops on `cloned`, on refresh error, on unmount/repo change, and after `ONBOARDING_CLONE_POLL_MAX_MS = 600_000` with a "still cloning" note; fake-timer tests | S1, S2, S12, S13 |
 
 ## Key constraints
 | Source (file:line) | Rule or insight | Effect on this plan |
@@ -80,13 +83,23 @@ On `/repos/:repoId/onboarding` the user reads the five-section tour, generates o
 - **Skills:** frontend-architecture, react-best-practices, react-testing-library, test-strategy
 - **Files:** create `client/src/lib/hooks/onboarding.ts`; modify `client/src/lib/hooks/index.ts` (add `export * from "./onboarding"`).
 - **API (pinned for test-writer):**
-  - `ONBOARDING_POLL_MS = 2000`; `onboardingKey(repoId) = ["onboarding", repoId]`; `isTourGenerating(state)`.
-  - `useOnboardingTour(repoId, opts?: { pollUntilCloned?: boolean })`: `useQuery` on `GET /repos/:id/onboarding`; polls every 2000 ms while `status==="generating"`, or while `pollUntilCloned && !cloned`.
+  - `ONBOARDING_POLL_MS = 2000`; `ONBOARDING_CLONE_POLL_MAX_MS = 600_000`; `onboardingKey(repoId) = ["onboarding", repoId]`; `isTourGenerating(state)`.
+  - `useOnboardingTour(repoId, opts?: { pollUntilCloned?: boolean })` returns the `useQuery` result on `GET /repos/:id/onboarding`, spread together with `clonePollTimedOut: boolean`.
+    - It polls every 2000 ms while `status==="generating"`.
+    - It also polls every 2000 ms while `pollUntilCloned` is true, `cloned` is false, and less than `ONBOARDING_CLONE_POLL_MAX_MS` has passed since `pollUntilCloned` last became true for this `repoId`.
+    - The window start is kept in a ref; it resets when `repoId` changes or `pollUntilCloned` turns false.
+    - `clonePollTimedOut` becomes true when the window runs out and `cloned` is still false.
+    - Unmounting stops polling (React Query clears the interval).
   - `useGenerateOnboarding(repoId)`: `useMutation` resolving `"started" | "running" | "rate_limited"`. On `started`/`running` it writes `{...prev, status:"generating"}` (keeping `tour`) into the cache and invalidates the key; on `rate_limited` the cache is unchanged.
-- **Test first:** `client/src/lib/hooks/onboarding.test.tsx` (pattern of `blast.test.tsx:7-26`, keep the real `ApiError`: `vi.mock("../api", async (o) => ({ ...(await o()), api: { get: vi.fn(), post: vi.fn() } }))`):
+- **Test first:** `client/src/lib/hooks/onboarding.test.tsx` (pattern of `blast.test.tsx:7-26`, keep the real `ApiError`: `vi.mock("../api", async (o) => ({ ...(await o()), api: { get: vi.fn(), post: vi.fn() } }))`; `vi.useFakeTimers({ shouldAdvanceTime: true })` wherever time matters):
   - "AC-68: a rejected GET surfaces as isError"; "GETs /repos/r1/onboarding".
-  - "AC-53: refetches every 2000 ms while generating and stops after ready" (fake timers).
-  - "AC-50: pollUntilCloned polls while cloned is false and stops once cloned".
+  - "AC-53: refetches every 2000 ms while generating and stops after ready".
+  - "AC-50: pollUntilCloned polls every 2000 ms while cloned is false and stops once cloned".
+  - "AC-50: pollUntilCloned false → no polling while cloned is false".
+  - "R6: the clone poll stops after ONBOARDING_CLONE_POLL_MAX_MS (600000) and clonePollTimedOut becomes true" (advance 600 000 ms, then 10 000 ms more: no further GETs).
+  - "R6: the clone poll stops on unmount" (after unmount, advancing 10 000 ms adds no GET).
+  - "R6: a repo change moves the poll" (rerender with `r2`: GETs go to `/repos/r2/onboarding`, `r1` gets no more, the window restarts for `r2`).
+  - "AC-50: useRefreshRepo (from ./core) mutate('r1') posts /repos/r1/refresh and never /repos/r1/resync" (tests the existing hook at `client/src/lib/hooks/core.ts:82`).
   - "AC-54: 202 → 'started', cached status generating, tour kept".
   - "AC-54: 409 onboarding_generation_running → 'running', cached status generating, no rejection".
   - "AC-54: 429 → 'rate_limited', cache unchanged, no rejection".
@@ -94,7 +107,7 @@ On `/repos/:repoId/onboarding` the user reads the five-section tour, generates o
   - "EC-14: onboardingKey differs per repo".
 - **Verify:** `scripts/gate.sh l05b-onboarding-plan-2 S1 -- "cd client && pnpm exec vitest run src/lib/hooks/onboarding.test.tsx && pnpm typecheck"`
 - **Depends on:** —
-- **Done when:** hook parts of AC-53, AC-54, AC-68.
+- **Done when:** the hook parts of AC-50, AC-53, AC-54 and AC-68, and the R6 bounded poll.
 
 ### S2 — i18n namespace  [package: client · layer: messages] (red phase)
 - **Skills:** frontend-architecture (i18n), test-strategy
@@ -111,12 +124,12 @@ On `/repos/:repoId/onboarding` the user reads the five-section tour, generates o
   - `sections`: `architecture` "Architecture overview", `criticalPaths` "Critical paths", `runCommands` "How to run locally", `readingPath` "Guided reading path", `firstTasks` "First tasks".
   - `card`: `deterministic` "Deterministic"; `unavailable` "Unavailable: {reason}"; `collapse` "Collapse {title}"; `expand` "Expand {title}".
   - `empty`: `diagramUnavailable` "Diagram unavailable"; `noCommands` "No run commands found in package.json, compose files or Makefile"; `noGraph` "Not available: the import graph covers JS/TS sources only"; `noTasks` "First tasks are written by the narrative step — Regenerate to try again".
-  - `notCloned`: `title` "Clone and index this repository to generate a tour"; `index` "Index status: {status}"; `cta` "Clone and index"; `requested` "Clone requested — this page updates when it finishes".
+  - `notCloned`: `title` "Clone and index this repository to generate a tour"; `index` "Index status: {status}"; `cta` "Clone and index"; `requested` "Clone requested — this page updates when it finishes"; `stillCloning` "Still cloning — refresh the page to check"; `failed` "Couldn't start the clone — try again".
   - `noRepo`: `title` "Add a repository to see its onboarding tour"; `cta` "Add repository".
   - `loadError`: `title` "Couldn't load the onboarding tour"; `retry` "Retry".
   - `reasons.<code>` (all 10 AC-41 codes): `no_clone` "Repository not cloned", `index_degraded` "Index unavailable", `index_partial` "Index partial", `no_graph` "No import graph", `llm_timeout` "Model timed out", `llm_error` "Model error", `invalid_output` "Invalid model output", `no_api_key` "No API key configured", `budget_trimmed` "Input trimmed to fit the budget", `interrupted` "Interrupted".
-  - `indexStatus`: `full` "indexed", `partial` "partially indexed", `degraded` "not indexed", `failed` "index failed".
-- **Test first:** `R/messages.test.ts`: "NFR-8: the stale `generate.body` key is gone"; "NFR-8: reasons has a label for every AC-41 code (10)"; "NFR-8: sections has the five titles in spec order".
+  - `indexStatus`: `full` "indexed", `partial` "partially indexed", `degraded` "degraded", `notIndexed` "not indexed", `failed` "index failed", `loading` "checking…", `unknown` "unavailable".
+- **Test first:** `R/messages.test.ts`: "NFR-8: the stale `generate.body` key is gone"; "NFR-8: reasons has a label for every AC-41 code (10)"; "NFR-8: sections has the five titles in spec order"; "NFR-8: indexStatus covers full, partial, degraded, notIndexed, failed, loading and unknown; notCloned has requested, stillCloning and failed".
 - **Verify:** `scripts/gate.sh l05b-onboarding-plan-2 S2 -- "cd client && pnpm exec vitest run onboarding/messages.test && pnpm typecheck"`
 - **Depends on:** —
 - **Done when:** the NFR-8 namespace exists.
@@ -216,22 +229,54 @@ On `/repos/:repoId/onboarding` the user reads the five-section tour, generates o
 
 ### S12 — `NotClonedState`  [package: client · layer: component] (red phase)
 - **Skills:** frontend-architecture, react-testing-library, test-strategy
-- **Files:** `R/_components/NotClonedState/*`.
-- **API:** `NotClonedState({ indexStatus, onClone, pending, requested })`, `indexStatus` a `RepoIntelState["status"]` or undefined.
-- **Test first:** "AC-50: title + 'Index status: not indexed' for degraded"; "AC-50: 'Clone and index' → onClone; no 'Generate onboarding tour' button"; "requested → the 'Clone requested' note is shown and the button is disabled".
+- **Files:** `R/_components/NotClonedState/{NotClonedState.tsx,index.ts,helpers.ts,NotClonedState.test.tsx}`.
+- **API:** `NotClonedState({ indexState, onClone, pending, cloneState })`.
+  - `indexState` is `{ data?: RepoIntelState; isLoading: boolean; isError: boolean }`, passed straight from `useRepoIntelStatus` (`client/src/lib/hooks/repo-intel.ts:31`).
+  - `cloneState` is `"idle" | "requested" | "timed_out" | "failed"`.
+  - `helpers.ts` exports `indexStatusKey(indexState)`: loading → `loading`; error → `unknown`; `degraded` with `degradedReason` or `reason === "no_data"` → `notIndexed`; any other status → its own key. Status values are the API's `full | partial | degraded | failed` (`server/src/modules/repo-intel/types.ts:25`; a missing row is `degraded/no_data`, `server/src/modules/repo-intel/service.ts:189-204`).
+  - The button is disabled while `pending` or `cloneState === "requested"`.
+  - Notes: `requested` → `notCloned.requested`; `timed_out` → `notCloned.stillCloning`; `failed` → `notCloned.failed` (`role="alert"`).
+- **Test first:**
+  - "AC-50: shows 'Clone and index this repository to generate a tour'".
+  - "AC-50: full → 'Index status: indexed'"; "partial → 'Index status: partially indexed'"; "degraded with reason no_data → 'Index status: not indexed'"; "degraded with another reason → 'Index status: degraded'"; "failed → 'Index status: index failed'"; "loading → 'Index status: checking…'"; "error → 'Index status: unavailable'".
+  - "AC-50: 'Clone and index' → onClone; no 'Generate onboarding tour' button".
+  - "R6: requested → 'Clone requested — this page updates when it finishes' and the button is disabled".
+  - "R6: timed_out → 'Still cloning — refresh the page to check' and the button is enabled".
+  - "R6: failed → alert 'Couldn't start the clone — try again' and the button is enabled".
 - **Verify:** `scripts/gate.sh l05b-onboarding-plan-2 S12 -- "cd client && pnpm exec vitest run onboarding/_components/NotClonedState && pnpm typecheck"`
 - **Depends on:** S2
-- **Done when:** the AC-50 UI.
+- **Done when:** the AC-50 UI with the real index status, and the R6 notes.
 
 ### S13 — `OnboardingTourView` + route page  [package: client · layer: page] (red phase)
 - **Skills:** frontend-architecture, react-best-practices, next-best-practices, react-testing-library, e2e-flows, test-strategy
 - **Files:** `R/page.tsx` (`"use client"`; `useParams` → `<OnboardingTourView repoId />`), `R/_components/OnboardingTourView/{OnboardingTourView.tsx,index.ts,styles.ts,OnboardingTourView.test.tsx}`.
-- **Imports (pinned so `vi.mock` works):** `useOnboardingTour`, `useGenerateOnboarding` from `@/lib/hooks/onboarding`; `useRepoIntelStatus` from `@/lib/hooks/repo-intel`; `useRefreshRepo` from `@/lib/hooks/core`; `useActiveRepo`, `useRepoNotFound` from `@/lib/repo-context`; `AppShell` from `@/components/app-shell` with `crumb=[{label: full_name, mono:true}, {label: t("breadcrumb")}]`.
-- **Implement:** branch on `tourViewMode`. Generating → 5 `Skeleton` cards (`data-testid="tour-placeholder"`). Tour → `TourToc` + five `SectionCard`s in `TOUR_SECTIONS` order. Share copies `${window.location.origin}/repos/${repoId}/onboarding`; Copy as Markdown copies `tourToMarkdown`; command copy toasts `commandCopied`. Q1 shows `lastFailed`.
-- **Test first** (mock the modules above; the AppShell mock renders crumb labels joined with " › "): "AC-48: breadcrumb 'acme/payments-api › Onboarding Tour'"; "AC-68: GET error → 'Couldn't load the onboarding tour'; Retry → refetch"; "EC-1: unknown repo → 'Add a repository to see its onboarding tour' with a control to /onboarding"; "AC-50: not cloned, no tour → 'Clone and index' calls refreshRepo.mutate('r1'); onboarding query gets pollUntilCloned true; no Generate"; "AC-52: none → Generate → generate.mutate()"; "AC-53: generating → 5 placeholders + 'Generating…'"; "AC-54: mutate resolves 'rate_limited' → the alert is shown"; "AC-55 / AC-41: ready → five cards in spec order with the five anchors"; "AC-64: Share link → writeText(`${location.origin}/repos/r1/onboarding`) + 'Link copied'"; "AC-65: Copy as Markdown → text starts '# Onboarding for payments-api' + 'Markdown copied'"; "AC-61: Copy pnpm run dev → writeText('pnpm run dev')"; "Q1: failed + tour null → Generate + 'Last generation failed: Interrupted'"; "NFR-2: no state calls generate.mutate without a click".
+- **Imports (pinned so `vi.mock` works):** `useOnboardingTour`, `useGenerateOnboarding` from `@/lib/hooks/onboarding`; `useRepoIntelStatus` from `@/lib/hooks/repo-intel` (the view never imports `useResyncRepoIntel`); `useRefreshRepo` from `@/lib/hooks/core`; `useActiveRepo`, `useRepoNotFound` from `@/lib/repo-context`; `AppShell` from `@/components/app-shell` with `crumb=[{label: full_name, mono:true}, {label: t("breadcrumb")}]`.
+- **Implement:**
+  - Branch on `tourViewMode`. Generating → 5 `Skeleton` cards (`data-testid="tour-placeholder"`). Tour → `TourToc` + five `SectionCard`s in `TOUR_SECTIONS` order.
+  - Share copies `${window.location.origin}/repos/${repoId}/onboarding`; Copy as Markdown copies `tourToMarkdown`; command copy toasts `commandCopied`. Q1 shows `lastFailed`.
+  - Clone flow (R6): local `cloneState` starts `"idle"` and resets to `"idle"` when `repoId` changes; "Clone and index" → `refreshRepo.mutate(repoId, { onSuccess: () => set("requested"), onError: () => set("failed") })`; `useOnboardingTour(repoId, { pollUntilCloned: cloneState === "requested" })`; `clonePollTimedOut` → `"timed_out"`. The global mutation toast for a refresh error stays (`client/src/lib/providers.tsx:42`); the inline note is the lasting state.
+- **Test first** (mock the modules above; `useResyncRepoIntel` is a spy in the `@/lib/hooks/repo-intel` mock; the AppShell mock renders the crumb labels joined with " › "):
+  - "AC-48: breadcrumb 'acme/payments-api › Onboarding Tour'".
+  - "AC-68: GET error → 'Couldn't load the onboarding tour'; Retry → refetch".
+  - "EC-1: unknown repo → 'Add a repository to see its onboarding tour' with a control to /onboarding".
+  - "AC-50: not cloned, no tour → NotClonedState gets the useRepoIntelStatus result (shows 'Index status: not indexed' for degraded/no_data); no Generate".
+  - "AC-50: 'Clone and index' calls useRefreshRepo().mutate with 'r1' (POST /repos/:id/refresh); the useResyncRepoIntel spy is never called".
+  - "R6: after the refresh succeeds, useOnboardingTour is called with pollUntilCloned true and 'Clone requested …' shows".
+  - "R6: refresh mutation errors → pollUntilCloned false, alert 'Couldn't start the clone — try again', button enabled".
+  - "R6: clonePollTimedOut true → 'Still cloning — refresh the page to check' and pollUntilCloned false".
+  - "R6: a repoId change (rerender r2) resets to idle with pollUntilCloned false".
+  - "AC-52: none → Generate → generate.mutate()".
+  - "AC-53: generating → 5 placeholders + 'Generating…'".
+  - "AC-54: mutate resolves 'rate_limited' → the alert is shown".
+  - "AC-55 / AC-41: ready → five cards in spec order with the five anchors".
+  - "AC-64: Share link → writeText(`${location.origin}/repos/r1/onboarding`) + 'Link copied'".
+  - "AC-65: Copy as Markdown → text starts '# Onboarding for payments-api' + 'Markdown copied'".
+  - "AC-61: Copy pnpm run dev → writeText('pnpm run dev')".
+  - "Q1: failed + tour null → Generate + 'Last generation failed: Interrupted'".
+  - "NFR-2: no state calls generate.mutate without a click".
 - **Verify:** `scripts/gate.sh l05b-onboarding-plan-2 S13 -- "cd client && pnpm exec vitest run onboarding/_components/OnboardingTourView && pnpm typecheck"`
 - **Depends on:** S1, S3–S12
-- **Done when:** AC-48, AC-50, AC-52–AC-54, AC-64, AC-65, AC-68 wired end to end.
+- **Done when:** AC-48, AC-50, AC-52–AC-54, AC-64, AC-65 and AC-68 wired end to end, and R6 bounded.
 
 ### S14 — e2e flow over the seeded tour  [package: e2e · layer: e2e]
 - **Skills:** e2e-flows, test-strategy
@@ -241,13 +286,21 @@ On `/repos/:repoId/onboarding` the user reads the five-section tour, generates o
   2. `find text "Onboarding Tour" click`, wait for the url `/onboarding`, `wait --load networkidle`;
   3. wait for "Onboarding for payments-api" and the five section titles;
   4. wait for card content: "Guards every public route", "pnpm run dev", "Where settings and limits are defined", "Document the rate limit headers";
-  5. wait for "Clone the repository to regenerate" (AC-51: no Generate control, so no model call, NFR-2);
-  6. wait for "openai/gpt-4.1-mini" (the footnote).
+  5. wait for "Clone the repository to regenerate" (AC-51);
+  6. **no Generate control (AC-70 "no model call", NFR-2).** The runner fails only on a non-zero exit plus an optional `assert.stdoutIncludes` (`e2e/lib/assert.ts:15`, `e2e/run.ts:73`), so this step runs `eval` and checks a count:
+     ```json
+     { "cmd": ["eval", "'generate_controls=' + [...document.querySelectorAll('button,[role=button]')].filter(b => /Generate onboarding tour/.test((b.textContent || '') + ' ' + (b.getAttribute('aria-label') || ''))).length"],
+       "assert": { "stdoutIncludes": "generate_controls=0" },
+       "label": "no Generate onboarding tour control is shown (no model call possible)" }
+     ```
+     The expression's own text never contains `generate_controls=0`, so an echoed command cannot pass the check;
+  7. wait for "openai/gpt-4.1-mini" (the footnote; seeded data).
 
-  The `description` names the seed data and says no model is called. Flow 06 stays unchanged and proves AC-47.
+  The `description` names the seed data and states that no model is called. Flow 06 stays unchanged and proves AC-47.
+- **Fallback:** the implementer checks `agent-browser --help` first. If `eval` is missing: add `stdoutExcludes?: string` next to `stdoutIncludes` in `e2e/lib/assert.ts:15`, checked in `e2e/run.ts:73` the same way; make step 6 `["snapshot"]` with `"assert": { "stdoutExcludes": "Generate onboarding tour" }`; report which form was used in the deviations.
 - **Verify:** `scripts/gate.sh l05b-onboarding-plan-2 S14 -- "cd e2e && npm run typecheck && npm run e2e:hermetic"`; without Docker or agent-browser record "not run: <reason>".
 - **Depends on:** S13
-- **Done when:** AC-70 (e2e part).
+- **Done when:** AC-70 (e2e part), including the no-Generate-control check.
 
 ### S15 — Insights  [package: client, e2e · layer: docs]
 - **Skills:** engineering-insights
