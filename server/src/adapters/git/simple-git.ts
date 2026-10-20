@@ -1,6 +1,6 @@
 import { simpleGit, type SimpleGit } from 'simple-git';
-import { join, isAbsolute } from 'node:path';
-import { mkdir, readFile, readdir, access, rm } from 'node:fs/promises';
+import { join, isAbsolute, sep } from 'node:path';
+import { mkdir, readdir, access, rm, realpath, stat, open } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import type {
   GitClient,
@@ -18,6 +18,9 @@ import { parseUnifiedDiff } from './diff-parser.js';
  * when it isn't, the indexer falls back to a full reindex.
  */
 const RESYNC_FETCH_DEPTH = 50;
+
+/** Upper bound on bytes `readFile` returns; larger files yield their truncated prefix. */
+export const READ_FILE_MAX_BYTES = 1024 * 1024;
 
 /**
  * GitClient over simple-git. Repos clone to
@@ -126,8 +129,36 @@ export class SimpleGitClient implements GitClient {
     }));
   }
 
+  /**
+   * Reads a file from the clone. A cloned repo is untrusted: it may ship symlinks
+   * pointing outside the clone, so the real path must stay inside the real clone
+   * root and be a regular file. Reads at most READ_FILE_MAX_BYTES (truncated prefix).
+   */
   async readFile(repo: RepoRef, path: string): Promise<string> {
-    return readFile(join(this.clonePathFor(repo), path), 'utf8');
+    if (isAbsolute(path) || path.split(/[\\/]/).includes('..')) {
+      throw new Error('readFile: path must be relative and must not contain ".."');
+    }
+    const root = await realpath(this.clonePathFor(repo));
+    const target = await realpath(join(root, path));
+    if (target !== root && !target.startsWith(root.endsWith(sep) ? root : root + sep)) {
+      throw new Error('readFile: path resolves outside the repository');
+    }
+    if (!(await stat(target)).isFile()) {
+      throw new Error('readFile: not a regular file');
+    }
+    const fh = await open(target, 'r');
+    try {
+      const buf = Buffer.alloc(READ_FILE_MAX_BYTES);
+      let total = 0;
+      while (total < READ_FILE_MAX_BYTES) {
+        const { bytesRead } = await fh.read(buf, total, READ_FILE_MAX_BYTES - total, total);
+        if (bytesRead === 0) break;
+        total += bytesRead;
+      }
+      return buf.subarray(0, total).toString('utf8');
+    } finally {
+      await fh.close();
+    }
   }
 
   async listDir(repo: RepoRef, dir: string): Promise<string[]> {
