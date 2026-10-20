@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from "next-intl";
 import type { FindingRecord, PrFile, ReviewRecord, SmartDiffResponse } from "@devdigest/shared";
 import prReview from "../../../../../../../../messages/en/prReview.json";
 import shell from "../../../../../../../../messages/en/shell.json";
+import brief from "../../../../../../../../messages/en/brief.json";
 
 const mutate = vi.fn();
 const state: { reviews: ReviewRecord[]; smart: { data?: SmartDiffResponse; isLoading?: boolean; isError?: boolean } } = {
@@ -88,7 +89,7 @@ const review = (findings: FindingRecord[]): ReviewRecord =>
 
 function ui(props: Partial<React.ComponentProps<typeof DiffTab>> = {}) {
   return (
-    <NextIntlClientProvider locale="en" messages={{ prReview, shell }}>
+    <NextIntlClientProvider locale="en" messages={{ prReview, shell, brief }}>
       <DiffTab
         prId="p1"
         filesCount={9}
@@ -192,5 +193,81 @@ describe("DiffTab order toggle and fallback", () => {
     render(ui());
     expect(screen.queryByText("Boilerplate")).not.toBeInTheDocument();
     expect(screen.getByText("src/config.ts")).toBeInTheDocument();
+  });
+});
+
+describe("DiffTab file/line navigation (?tab=diff&file=&line=)", () => {
+  const scrolled: Element[] = [];
+  const original = Element.prototype.scrollIntoView;
+  beforeEach(() => {
+    scrolled.length = 0;
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+      scrolled.push(this);
+    });
+  });
+  afterEach(() => {
+    Element.prototype.scrollIntoView = original;
+  });
+
+  const DOC_PATCH = patch(["@@ -0,0 +1,3 @@", "+new doc 1", "+new doc 2", "+new doc 3"]);
+  const withDoc = FILES.map((f) => (f.path === "docs/rate-limiting.md" ? file(f.path, 16, 0, DOC_PATCH) : f));
+  const scrolledToCardOf = (path: string) => scrolled.some((el) => el.textContent?.includes(path));
+
+  it("AC-57: a file in the collapsed docs group opens its group, shows the file, scrolls to it and takes focus", () => {
+    render(ui({ files: withDoc, targetFile: "docs/rate-limiting.md", targetLine: null }));
+    expect(screen.getByText("docs/rate-limiting.md")).toBeInTheDocument();
+    expect(screen.getByText(/new doc 3/)).toBeInTheDocument();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).toContainElement(screen.getByText("docs/rate-limiting.md"));
+    expect(scrolledToCardOf("docs/rate-limiting.md")).toBe(true);
+    expect(screen.queryByText("File not in this PR's diff")).not.toBeInTheDocument();
+    expect(screen.queryByText("Line not shown in this diff")).not.toBeInTheDocument();
+  });
+
+  it("AC-58: a line the patch renders is scrolled into view", () => {
+    render(ui({ targetFile: "src/config.ts", targetLine: 12 }));
+    expect(scrolled.some((el) => el.getAttribute("data-line") === "12")).toBe(true);
+    expect(screen.queryByText("Line not shown in this diff")).not.toBeInTheDocument();
+  });
+
+  it("AC-59: a file that is not in the diff shows the notice at the top", () => {
+    render(ui({ targetFile: "src/not-in-this-pr.ts", targetLine: 3 }));
+    expect(screen.getByText("File not in this PR's diff")).toBeInTheDocument();
+  });
+
+  it("AC-60: a file without a patch plus a line scrolls to the card and says the line is not shown", () => {
+    render(ui({ targetFile: "src/api/users.ts", targetLine: 5 }));
+    expect(screen.getByText("Line not shown in this diff")).toBeInTheDocument();
+    expect(scrolledToCardOf("src/api/users.ts")).toBe(true);
+    expect(document.activeElement).toContainElement(screen.getByText("src/api/users.ts"));
+  });
+
+  it("AC-60: a line outside every hunk is not shown either", () => {
+    render(ui({ targetFile: "src/config.ts", targetLine: 999 }));
+    expect(screen.getByText("Line not shown in this diff")).toBeInTheDocument();
+    expect(scrolledToCardOf("src/config.ts")).toBe(true);
+  });
+
+  it("EC-20: the same behaviour in original order", () => {
+    const first = render(ui({ order: "original", files: withDoc, targetFile: "docs/rate-limiting.md", targetLine: 3 }));
+    expect(screen.getByText(/new doc 3/)).toBeInTheDocument();
+    expect(scrolledToCardOf("docs/rate-limiting.md")).toBe(true);
+    first.unmount();
+
+    render(ui({ order: "original", targetFile: "src/api/users.ts", targetLine: 5 }));
+    expect(screen.getByText("Line not shown in this diff")).toBeInTheDocument();
+    cleanup();
+
+    render(ui({ order: "original", targetFile: "src/not-in-this-pr.ts", targetLine: null }));
+    expect(screen.getByText("File not in this PR's diff")).toBeInTheDocument();
+  });
+
+  it("without a target nothing is scrolled and no notice is shown", () => {
+    render(ui());
+    expect(scrolled).toHaveLength(0);
+    expect(screen.queryByText("File not in this PR's diff")).not.toBeInTheDocument();
+    expect(screen.queryByText("Line not shown in this diff")).not.toBeInTheDocument();
+    // docs stays collapsed by default
+    expect(screen.queryByText("docs/rate-limiting.md")).not.toBeInTheDocument();
   });
 });

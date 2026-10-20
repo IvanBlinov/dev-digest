@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { FindingRecord, PrFile, SmartDiffResponse } from "@devdigest/shared";
 import { COLLAPSED_ROLES } from "./constants";
-import { filesWithFindings, findingKey, joinGroups, lineLabelKey, totals } from "./helpers";
+import { filesWithFindings, findingKey, joinGroups, lineLabelKey, totals, parseLineParam, resolveTarget } from "./helpers";
 
 const file = (path: string, additions = 1, deletions = 0): PrFile =>
   ({ path, status: "modified", additions, deletions, patch: null }) as PrFile;
@@ -68,5 +68,46 @@ describe("totals + constants", () => {
   });
   it("collapses docs and boilerplate by default", () => {
     expect([...COLLAPSED_ROLES].sort()).toEqual(["boilerplate", "docs"]);
+  });
+});
+
+describe("parseLineParam", () => {
+  it("AC-57 / security: only a positive integer is a line; anything else is ignored", () => {
+    expect(parseLineParam("7")).toBe(7);
+    expect(parseLineParam("0")).toBeNull();
+    expect(parseLineParam("-3")).toBeNull();
+    expect(parseLineParam("x")).toBeNull();
+    expect(parseLineParam("7.5")).toBeNull();
+    expect(parseLineParam("")).toBeNull();
+    expect(parseLineParam(null)).toBeNull();
+  });
+});
+
+describe("resolveTarget", () => {
+  const patched = (path: string, p: string | null): PrFile =>
+    ({ path, status: "modified", additions: 3, deletions: 0, patch: p }) as PrFile;
+  const files = [
+    patched("src/config.ts", ["@@ -10,2 +10,3 @@", " a", " b", "+c"].join("\n")),
+    patched("src/big.bin", null),
+  ];
+
+  it("none: no file param", () => {
+    expect(resolveTarget(files, null, null).status).toBe("none");
+    expect(resolveTarget(files, null, 5).status).toBe("none");
+  });
+
+  it("AC-59: not_in_diff: the file is not among the PR files", () => {
+    expect(resolveTarget(files, "src/nope.ts", 3).status).toBe("not_in_diff");
+  });
+
+  it("AC-57 / AC-58: ok: the file, with no line or with a rendered line", () => {
+    expect(resolveTarget(files, "src/config.ts", null)).toMatchObject({ status: "ok", path: "src/config.ts" });
+    expect(resolveTarget(files, "src/config.ts", 12)).toMatchObject({ status: "ok", path: "src/config.ts" });
+    expect(resolveTarget(files, "src/big.bin", null)).toMatchObject({ status: "ok", path: "src/big.bin" });
+  });
+
+  it("AC-60: line_not_shown: patch null, or a line outside every hunk", () => {
+    expect(resolveTarget(files, "src/big.bin", 5)).toMatchObject({ status: "line_not_shown", path: "src/big.bin" });
+    expect(resolveTarget(files, "src/config.ts", 999)).toMatchObject({ status: "line_not_shown", path: "src/config.ts" });
   });
 });
