@@ -123,8 +123,8 @@ Tags: **[P1]**, **[P2]**, **[P3]** map to the course acceptance items in the bri
   blast callers (lowest rank first) → hunk headers → changed-file list tail (smallest additions +
   deletions first); the intent and the blast summary line shall never be trimmed.
 - AC-21 — The model's output shall be bounded by `max_tokens` 2 000.
-- AC-22 [P1] — The PR title, PR body, issue text, document text, commit subjects, file paths, symbol
-  names and hunk headings shall reach the model only inside `wrapUntrusted` blocks of a system prompt
+- AC-22 [P1] — The PR title, PR body, issue text, document text, file paths, symbol names and hunk
+  headings shall reach the model only inside `wrapUntrusted` blocks of a system prompt
   that carries `INJECTION_GUARD`.
 
 ### Post-validation (before storing)
@@ -177,7 +177,9 @@ Tags: **[P1]**, **[P2]**, **[P3]** map to the course acceptance items in the bri
   the Blast radius block; a full-width **Review focus — read these first** card with a count badge;
   the Description last.
 - AC-39 [P1] — WHEN Intent or Blast radius is not available, the Overview tab shall still render the
-  brief and show a "Missing: …" line naming each input whose provenance status is not `ok`.
+  brief and show a "Missing: …" line naming each input whose provenance status is `missing`,
+  `unavailable`, `degraded` or `stale`; inputs with status `truncated` or `over_budget` shall appear
+  only in the "Built from" line (AC-54).
 - AC-40 [P3] — WHERE the PR has at least one review, the Overview tab shall show the VerdictBanner
   (verdict, findings and blockers count, PR score) of the latest review above the PR Brief.
 - AC-41 [P1] — Each Risk areas row shall show a severity icon, the title and its first ref as
@@ -185,10 +187,18 @@ Tags: **[P1]**, **[P2]**, **[P3]** map to the course acceptance items in the bri
 - AC-42 [P3] — WHEN the user activates a risk row, it shall expand to show the explanation and all refs;
   the row shall expose `aria-expanded`.
 - AC-43 [P1] — Each Review focus row shall show `file:line — reason` with the `file:line` as a link.
-- AC-44 [P1] — WHEN the user activates a Review focus link, the page shall navigate to
-  `?tab=diff&file=<path>&line=<n>`.
-- AC-45 [P3] — WHEN the user activates a risk ref, the page shall navigate to
-  `?tab=diff&file=<path>` plus `&line=<start_line>` when the ref has a line.
+  WHERE the item's file is among the PR's changed files (as returned by `GET /pulls/:id` at render
+  time), the link target shall be Files changed (AC-44); WHERE the file is only in the blast radius,
+  the link target shall be the file on GitHub at the PR's head SHA,
+  `https://github.com/<owner>/<repo>/blob/<head_sha>/<path>#L<line>`, opened in a new tab with
+  `rel="noopener noreferrer"`. IF the repository's `owner/name` is not known, THEN a blast-only file
+  shall render as plain text, not as a link.
+- AC-44 [P1] — WHEN the user activates a Review focus link whose file is among the PR's changed
+  files, the page shall navigate to `?tab=diff&file=<path>&line=<n>`.
+- AC-45 [P3] — WHEN the user activates a risk ref whose file is among the PR's changed files, the page
+  shall navigate to `?tab=diff&file=<path>` plus `&line=<start_line>` when the ref has a line; WHEN the
+  ref's file is only in the blast radius, the ref shall open the file on GitHub at the PR's head SHA
+  (with `#L<start_line>` when it has a line) in a new tab with `rel="noopener noreferrer"`, as in AC-43.
 - AC-46 [P1] — WHEN the page loads with a stored brief, the brief shall render from `GET` with no
   `POST` request.
 - AC-47 [P1] — WHEN the user activates the refresh (↻) button, the client shall call
@@ -219,8 +229,9 @@ Tags: **[P1]**, **[P2]**, **[P3]** map to the course acceptance items in the bri
   with a highlight border, and move keyboard focus to it.
 - AC-58 [P2] — WHEN `line=<n>` is also present and the file's patch renders that line, the tab shall
   scroll that line into view and highlight it.
-- AC-59 [P3] — IF the `file` is not among the PR's changed files, THEN the tab shall show "File not in
-  this PR's diff" at the top of the tab.
+- AC-59 [P3] — IF the Files changed tab opens with a `file` query param that is not among the PR's
+  changed files (e.g. a hand-edited or outdated deep link), THEN the tab shall show "File not in this
+  PR's diff" at the top of the tab. Brief links never lead here for blast-only files (AC-43, AC-45).
 - AC-60 — IF the file has no patch or the line is not rendered, THEN the tab shall scroll to the file
   card and show "Line not shown in this diff".
 - AC-61 — WHEN the user navigates back from Files changed, the browser shall return to the Overview tab.
@@ -252,8 +263,13 @@ Tags: **[P1]**, **[P2]**, **[P3]** map to the course acceptance items in the bri
   not the head SHA) → the brief stores the stored head SHA and validates against the `pr_files` rows
   read in the same request; staleness follows the stored head SHA only (AC-7).
 - EC-19 — A stored brief cites a file that left the PR after a new commit → the brief is stale (AC-49);
-  clicking shows "File not in this PR's diff" (AC-59).
+  the file is no longer among the changed files at render time, so its link opens the file on GitHub
+  at the current head SHA (AC-43, AC-45); a deep link already copied to it shows "File not in this
+  PR's diff" (AC-59).
 - EC-20 — Direct link or reload on `?tab=diff&file=…&line=…` → same behaviour as AC-57–AC-60.
+- EC-24 — Review focus item or risk ref on a file that is only in the blast radius (a caller file) →
+  opens on GitHub at the PR head SHA in a new tab (AC-43, AC-45), never the "File not in this PR's
+  diff" notice; without a known `owner/name` it is plain text.
 - EC-21 — Very long paths and titles → truncated in the middle with the full value on hover and focus.
 - EC-22 — Prompt-injection text in the PR body, an issue or a spec → fenced (AC-22); output paths still
   pass AC-23; output rendered as plain text (AC-56).
@@ -299,11 +315,11 @@ Tags: **[P1]**, **[P2]**, **[P3]** map to the course acceptance items in the bri
 ## Untrusted inputs
 | Input | Who controls it | Required handling |
 |---|---|---|
-| PR title, description, commit subjects | PR author | Fenced with `wrapUntrusted` under `INJECTION_GUARD`; description ≤ 1 500 tokens; hashed for staleness, never logged |
+| PR title, description | PR author | Fenced with `wrapUntrusted` under `INJECTION_GUARD`; description ≤ 1 500 tokens; hashed for staleness, never logged |
 | Linked issue text | Issue author | Fenced; ≤ `MAX_ISSUE_CHARS` and ≤ 2 000 tokens; never logged |
 | Spec / plan document text | Repo contributors | Fenced and hardened like project-context docs; ≤ 4 000 tokens total; never logged |
 | File paths, symbol names, hunk headings | PR author / repo | Fenced; headings cut to 160 characters; refs in provenance ≤ 200 characters |
-| Model output (summary, risks, focus items, paths, lines) | LLM | Zod-validated (AC-5), paths checked (AC-23), lines checked (AC-25), clamped (AC-28), rendered as plain text (AC-56); never echoed in error messages |
+| Model output (summary, risks, focus items, paths, lines) | LLM | Zod-validated (AC-5), paths checked (AC-23), lines checked (AC-25), clamped (AC-28), rendered as plain text (AC-56); never echoed in error messages; a path used in a GitHub link (AC-43) is a validated blast-radius path, percent-encoded per path segment |
 | `file` / `line` query params on Files changed | Anyone with a link | Matched against the PR's file list; non-matching → AC-59; `line` must be a positive integer, else ignored |
 
 ## Designs
@@ -353,6 +369,11 @@ footer is AC-53); design 2 → AC-57–AC-61; design 3 → tags on AC-40, AC-41,
 | 2026-10-19 | Review findings not a model input | User, Q15 | Non-goals |
 | 2026-10-19 | e2e: one flow on seeded PR #482 (Generate visible, deep link to file); no seeded brief | User, Q16 | Non-goals, AC-37, AC-57 |
 | 2026-10-19 | Proposals P1–P21 accepted | User | AC-26–AC-35, AC-50–AC-54, AC-57–AC-61, EC-8–EC-21, NFR-5–NFR-7 |
+| 2026-10-19 | R14: commit subjects removed from the untrusted prompt inputs (commits are not a brief input) | User, planner review | AC-22, Untrusted inputs |
+| 2026-10-19 | R15: "Missing: …" lists only `missing`, `unavailable`, `degraded`, `stale`; `truncated` / `over_budget` only in "Built from" | User, planner review | AC-39 |
+| 2026-10-19 | R16: a brief file that is only in the blast radius links to GitHub at the PR head SHA (new tab, `rel="noopener noreferrer"`); "File not in this PR's diff" stays for deep links to files outside the diff | User, planner review | AC-43, AC-44, AC-45, AC-59, EC-19, EC-24 |
+| 2026-10-19 | The 429 response body carries `details.retry_after_s`; the client's "try again in N s" uses it | Planner implementation choice | AC-35, AC-50 |
+| 2026-10-19 | The concurrent-generation guard (409 `brief_in_progress`) is per PR inside the API process; assumes one API instance (as the boot reaper does) | Planner implementation choice | AC-34 |
 
 ## Open questions
 None.
