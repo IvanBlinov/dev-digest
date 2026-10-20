@@ -1,17 +1,98 @@
 {
-  "title": "Onboarding Tour",
-  "sections": "Sections",
-  "sectionCount": "{count} sections",
-  "regenerate": "Regenerate",
-  "regenerating": "Regenerating…",
-  "unknownError": "Unknown error",
-  "generate": {
-    "title": "Generate onboarding tour",
-    "body": "DevDigest indexes the repo and specs, then writes a 5-section guided tour: overview, architecture, key modules, getting started, and conventions & gotchas.",
-    "cta": "Generate onboarding tour",
-    "generating": "Generating…"
+  "breadcrumb": "Onboarding Tour",
+  "title": "Onboarding for {name}",
+  "subtitle": {
+    "coverage": "Generated from index of {count} files",
+    "coveragePartial": "Generated from index of {count} of {total} files (partial)",
+    "coveragePartialNoTotal": "Generated from index of {count} files (partial)",
+    "generatedAt": "generated {when}",
+    "indexAt": "index {when}"
+  },
+  "footnote": "{model} · {calls, plural, one {# call} other {# calls}} · {cost}",
+  "costUnknown": "cost unknown",
+  "actions": {
+    "generate": "Generate onboarding tour",
+    "generateNote": "Makes one model call",
+    "regenerate": "Regenerate",
+    "generating": "Generating…",
+    "cloneToRegenerate": "Clone the repository to regenerate",
+    "share": "Share link",
+    "copyMarkdown": "Copy as Markdown",
+    "rateLimited": "Too many generations — try again in a minute",
+    "lastFailed": "Last generation failed: {reason}"
+  },
+  "copy": {
+    "linkCopied": "Link copied",
+    "markdownCopied": "Markdown copied",
+    "commandCopied": "Command copied",
+    "failed": "Couldn't copy to the clipboard",
+    "copyCommand": "Copy {command}",
+    "openPath": "Open {path}",
+    "open": "Open"
+  },
+  "stale": {
+    "badge": "Stale",
+    "index_moved": "Index moved since this tour",
+    "prompt_changed": "Tour format changed"
+  },
+  "failedBanner": "Regeneration failed {when}: {reason} — showing the tour from {tourWhen}",
+  "toc": {
+    "title": "On this page"
+  },
+  "sections": {
+    "architecture": "Architecture overview",
+    "criticalPaths": "Critical paths",
+    "runCommands": "How to run locally",
+    "readingPath": "Guided reading path",
+    "firstTasks": "First tasks"
+  },
+  "card": {
+    "deterministic": "Deterministic",
+    "unavailable": "Unavailable: {reason}",
+    "collapse": "Collapse {title}",
+    "expand": "Expand {title}"
+  },
+  "empty": {
+    "diagramUnavailable": "Diagram unavailable",
+    "noCommands": "No run commands found in package.json, compose files or Makefile",
+    "noGraph": "Not available: the import graph covers JS/TS sources only",
+    "noTasks": "First tasks are written by the narrative step — Regenerate to try again"
+  },
+  "notCloned": {
+    "title": "Clone and index this repository to generate a tour",
+    "index": "Index status: {status}",
+    "cta": "Clone and index",
+    "requested": "Clone requested — this page updates when it finishes",
+    "stillCloning": "Still cloning — refresh the page to check",
+    "failed": "Couldn't start the clone — try again"
+  },
+  "noRepo": {
+    "title": "Add a repository to see its onboarding tour",
+    "cta": "Add repository"
   },
   "loadError": {
-    "title": "Couldn’t load the onboarding tour"
+    "title": "Couldn't load the onboarding tour",
+    "retry": "Retry"
+  },
+  "reasons": {
+    "no_clone": "Repository not cloned",
+    "index_degraded": "Index unavailable",
+    "index_partial": "Index partial",
+    "no_graph": "No import graph",
+    "llm_timeout": "Model timed out",
+    "llm_error": "Model error",
+    "invalid_output": "Invalid model output",
+    "no_api_key": "No API key configured",
+    "budget_trimmed": "Input trimmed to fit the budget",
+    "interrupted": "Interrupted"
+  },
+  "indexStatus": {
+    "full": "indexed",
+    "partial": "partially indexed",
+    "degraded": "degraded",
+    "notIndexed": "not indexed",
+    "failed": "index failed",
+    "loading": "checking…",
+    "unknown": "unavailable"
   }
 }

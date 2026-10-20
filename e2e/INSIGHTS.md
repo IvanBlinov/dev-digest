@@ -2,6 +2,12 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-20 — [Non-obvious behaviour] The runner cannot assert that text is absent without `stdoutExcludes`
+Symptom: a flow cannot prove a control is not shown; `wait --text` only proves presence.
+Cause: the runner fails on a non-zero exit or a missing `stdoutIncludes` only.
+Rule: use `"assert": { "stdoutExcludes": … }` on a `snapshot` step for absence checks (flow 11: no Generate control, so no model call). The onboarding table of contents repeats the section titles, so also wait on card-only seed text.
+Proof: `e2e/run.ts:78`, `e2e/specs/11-onboarding-tour.flow.json`
+
 ## 2026-09-17 — [Pitfall] `agent-browser` is a global CLI, not a package dependency
 Symptom: `npm ci` in `e2e/` succeeds but `npm test` / `npm run e2e:hermetic` cannot find `agent-browser`.
 Cause: the runner shells out to a globally installed binary (`npm i -g agent-browser && agent-browser install`).

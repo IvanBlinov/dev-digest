@@ -14,7 +14,7 @@ No Playwright, no LLM, no API key. How flows work and how to run: [README.md](RE
 
 ## Layout
 
-- `specs/NN-name.flow.json` — **test flows**, not documentation. Each is an ordered list of agent-browser commands. Current: 01 app boot, 02 repo pulls detail, 03 agents, 04 PR findings, 05 PR diff, 06 onboarding, 07 settings, 08 PR intent, 09 smart diff, 10 blast radius.
+- `specs/NN-name.flow.json` — **test flows**, not documentation. Each is an ordered list of agent-browser commands. Current: 01 app boot, 02 repo pulls detail, 03 agents, 04 PR findings, 05 PR diff, 06 onboarding, 07 settings, 08 PR intent, 09 smart diff, 10 blast radius, 11 onboarding tour.
 - `run.ts` — runs every flow in order against one shared browser session; a non-zero exit fails the step.
 - `lib/` — helpers for `run.ts`.
 - `agent-browser.json` — CLI config.
@@ -32,7 +32,7 @@ npm run typecheck
 ## Conventions
 
 - **Deterministic locators only:** `wait --url`, `wait --text`, `find role|text|label`. Never the AI `chat` command.
-- **`wait` is the assertion.** It times out with non-zero exit; add `"assert": { "stdoutIncludes": … }` only when a substring check adds value.
+- **`wait` is the assertion.** It times out with non-zero exit; add `"assert": { "stdoutIncludes": … }` (or `stdoutExcludes`) only when a substring check adds value.
 - **Seeded data only:** demo repo `acme/payments-api`, PR #482, the two built-in agents. Nothing may trigger a model call.
 - **`{BASE}`** is substituted with `E2E_BASE_URL`.
 - One flow per main user journey; keep flows short and label every step.

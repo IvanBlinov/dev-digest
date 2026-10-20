@@ -2,6 +2,24 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-20 — [Pitfall] A mutation error is toasted globally; expected 409/429 must resolve inside `mutationFn`
+Symptom: a "generation already running" (409) or rate-limit (429) answer would raise a red toast on top of the page's own inline message.
+Cause: `MutationCache.onError` toasts every rejected mutation, with no per-hook opt-out.
+Rule: map expected API outcomes to a return value inside `mutationFn` (as `useGenerateOnboarding` does) and let only real failures throw.
+Proof: `client/src/lib/providers.tsx:42`, `client/src/lib/hooks/onboarding.ts:78`
+
+## 2026-10-20 — [Non-obvious behaviour] jsdom has no IntersectionObserver or scrollIntoView, and the global setup stubs only ResizeObserver
+Symptom: a component using `IntersectionObserver` or `element.scrollIntoView` throws in vitest although it works in the browser.
+Cause: jsdom implements neither; `src/test/setup.ts` stubs `ResizeObserver` only.
+Rule: guard with `typeof IntersectionObserver !== "undefined"` in the component and stub both in the test that needs them.
+Proof: `client/src/test/setup.ts:3`, `client/src/app/repos/[repoId]/onboarding/_components/TourToc/TourToc.tsx:22`
+
+## 2026-10-20 — [Pitfall] `activeKeyFor` matched `/onboarding` by substring, so the tour page lit up "Add repo"
+Symptom: on `/repos/:id/onboarding` the Add-repository nav item was active instead of the tour item.
+Cause: `pathname.includes("/onboarding")` matched both the add-repo screen and the per-repo tour.
+Rule: match routes with anchored patterns (`/^\/repos\/[^/]+\/onboarding(\/|$)/`) and check the more specific route first.
+Proof: `client/src/components/app-shell/helpers.ts:29`
+
 ## 2026-10-12 — [Security] react-markdown shows raw HTML as escaped text unless `skipHtml` is set
 Symptom: the PR Description box showed `<!-- demo video goes here -->` literally after switching it to `<Markdown>`.
 Cause: react-markdown without `rehype-raw` never executes HTML (safe), but by default it renders raw HTML nodes as escaped text instead of dropping them.

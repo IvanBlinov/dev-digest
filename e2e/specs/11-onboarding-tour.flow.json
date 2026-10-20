@@ -1,0 +1,28 @@
+{
+  "name": "Onboarding Tour renders the seeded tour without a model call",
+  "description": "From the sidebar, opens the Onboarding Tour of the seeded acme/payments-api repo. The seed stores a ready tour (server/src/db/seed-onboarding.ts) and the repo has no clone, so the page shows the five sections from stored data and Regenerate is disabled with 'Clone the repository to regenerate'. No 'Generate onboarding tour' control is shown, so no model can be called. Read-only. Waits on card-only seed content because the table of contents repeats the section titles. Assumes a freshly-seeded DB (see e2e/README.md).",
+  "steps": [
+    { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "land on the PR list" },
+    { "cmd": ["find", "text", "Onboarding Tour", "click"], "label": "open the Onboarding Tour sidebar item" },
+    { "cmd": ["wait", "--url", "/onboarding"], "label": "tour route reached" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "tour fetch settles" },
+    { "cmd": ["wait", "--text", "Onboarding for payments-api"], "label": "the tour title renders" },
+    { "cmd": ["wait", "--text", "Architecture overview"], "label": "architecture section title renders" },
+    { "cmd": ["wait", "--text", "Critical paths"], "label": "critical paths section title renders" },
+    { "cmd": ["wait", "--text", "How to run locally"], "label": "run commands section title renders" },
+    { "cmd": ["wait", "--text", "Guided reading path"], "label": "reading path section title renders" },
+    { "cmd": ["wait", "--text", "First tasks"], "label": "first tasks section title renders" },
+    { "cmd": ["wait", "--text", "Guards every public route"], "label": "critical path card content renders" },
+    { "cmd": ["wait", "--text", "pnpm run dev"], "label": "run command card content renders" },
+    { "cmd": ["wait", "--text", "Where settings and limits are defined"], "label": "reading path card content renders" },
+    { "cmd": ["wait", "--text", "Document the rate limit headers"], "label": "first task card content renders" },
+    { "cmd": ["wait", "--text", "Clone the repository to regenerate"], "label": "Regenerate is disabled for the uncloned repo (AC-51)" },
+    {
+      "cmd": ["snapshot"],
+      "assert": { "stdoutExcludes": "Generate onboarding tour" },
+      "label": "no Generate onboarding tour control is shown (no model call possible)"
+    },
+    { "cmd": ["wait", "--text", "openai/gpt-4.1-mini"], "label": "the generation footnote renders from seeded data" }
+  ]
+}

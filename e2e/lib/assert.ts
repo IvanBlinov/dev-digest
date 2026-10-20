@@ -12,7 +12,7 @@ export interface Step {
   /** Human label for logs (defaults to the joined cmd). */
   label?: string;
   /** Optional extra check on the command's stdout (beyond its exit code). */
-  assert?: { stdoutIncludes?: string };
+  assert?: { stdoutIncludes?: string; stdoutExcludes?: string };
 }
 
 export interface Flow {

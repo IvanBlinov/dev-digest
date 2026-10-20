@@ -27,7 +27,7 @@ A spec lives in `specs/NN-name.flow.json`:
 - Each `cmd` is passed verbatim to `agent-browser`. A non-zero exit fails the
   step and the flow — so `wait --text` / `wait --url` **are** the assertions
   (they time out and exit non-zero if the condition never holds).
-- Optional `"assert": { "stdoutIncludes": "…" }` adds a substring check on the
+- Optional `"assert": { "stdoutIncludes": "…" }` (or `"stdoutExcludes"`, which fails when the substring is present) adds a substring check on the
   command's stdout.
 - Locators are deterministic only (`--url`, `--text`, `find role|text|label`).
   We never use the AI `chat` command, so runs are stable and key-free.

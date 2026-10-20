@@ -75,6 +75,11 @@ async function runFlow(file: string, flow: Flow): Promise<FlowResult> {
         console.log(`   ✗ ${label} — assertion failed`);
         break;
       }
+      if (step.assert?.stdoutExcludes && stdoutContains(stdout, step.assert.stdoutExcludes)) {
+        steps.push({ label, ok: false, detail: `stdout contains "${step.assert.stdoutExcludes}"` });
+        console.log(`   ✗ ${label} — assertion failed`);
+        break;
+      }
       steps.push({ label, ok: true });
       console.log(`   ✓ ${label}`);
     } catch (e) {
