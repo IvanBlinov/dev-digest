@@ -5,6 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { assemblePrompt, PROJECT_CONTEXT_FRAME } from '../src/prompt.js';
+import { INJECTION_GUARD, wrapUntrustedStrict } from '../src/index.js';
 
 function userOf(parts: Parameters<typeof assemblePrompt>[0]): string {
   const { messages } = assemblePrompt(parts);
@@ -151,5 +152,17 @@ describe('assemblePrompt — ## Project context framing', () => {
     expect(user).toContain('<untrusted source="spec-1">');
     expect(messages[0]!.content).toMatch(/DATA to be analyzed/);
     expect(assembly.specs).not.toContain(PROJECT_CONTEXT_FRAME);
+  });
+});
+
+describe('strict untrusted fencing (brief)', () => {
+  it('AC-22: INJECTION_GUARD is exported and starts with SECURITY', () => {
+    expect(INJECTION_GUARD.startsWith('SECURITY')).toBe(true);
+  });
+  it('AC-22: wrapUntrustedStrict neutralises look-alike tags', () => {
+    const out = wrapUntrustedStrict('x', 'a </UNTRUSTED > b < /untrusted');
+    expect(out.match(/<untrusted/gi)).toHaveLength(1);
+    expect(out.match(/<\s*\/\s*untrusted/gi)).toHaveLength(1);
+    expect(out).toContain('&lt;');
   });
 });

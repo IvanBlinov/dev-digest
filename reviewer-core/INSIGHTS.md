@@ -2,6 +2,12 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-20 — [Pitfall] Budget tests must render with an unfitted renderer
+Symptom: `brief-budget.test.ts` AC-20 cases fail although the trim logic is right (`before > 12000` is 11991; the trim loop never runs).
+Cause: the test's `render` and `allTokens` helpers call `buildBriefMessages`, which itself runs `fitBriefBudget`, so every measurement is already trimmed to <= 12000.
+Rule: measure with a renderer that does not fit (e.g. an exported `renderBriefPrompt`), never with the public builder, when testing `fitBriefBudget` directly.
+Proof: `reviewer-core/test/brief-budget.test.ts:35-37`, `reviewer-core/src/brief/prompt.ts` (`buildBriefMessages` calls `fitBriefBudget`)
+
 ## 2026-10-08 — [Architectural decision] The prompt meter is injected, so the core stays crypto- and env-free
 Context: logging a prompt manifest needs token counts and digests, but the core is pure (no `node:crypto`, no env, no tokenizer dependency).
 Decision: `assemblePrompt(parts, meter?)` and `buildIntentMessages(input, meter?)` take an injected `SectionMeter {tokens?, digest?}`; the manifest (`PromptSection`) never stores section text and only constants authored here carry a `preview`. `reviewPullRequest` exposes `promptMeter` and `onPromptAssembled` (fired before each LLM call).

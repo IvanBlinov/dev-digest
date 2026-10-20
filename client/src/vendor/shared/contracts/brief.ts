@@ -108,12 +108,19 @@ export type BlastRadius = z.infer<typeof BlastRadius>;
 export const RiskSeverity = z.enum(['high', 'medium', 'low']);
 export type RiskSeverity = z.infer<typeof RiskSeverity>;
 
+export const RiskRef = z.object({
+  file: z.string(),
+  start_line: z.number().int().nullable(),
+  end_line: z.number().int().nullable(),
+});
+export type RiskRef = z.infer<typeof RiskRef>;
+
 export const Risk = z.object({
   kind: z.string(),
   title: z.string(),
   explanation: z.string(),
   severity: RiskSeverity,
-  file_refs: z.array(z.string()),
+  refs: z.array(RiskRef).min(1),
 });
 export type Risk = z.infer<typeof Risk>;
 
@@ -173,11 +180,83 @@ export const SmartDiff = z.object({
 });
 export type SmartDiff = z.infer<typeof SmartDiff>;
 
+// ---- Review focus ----
+export const ReviewFocusItem = z.object({
+  file: z.string(),
+  line: z.number().int(),
+  reason: z.string(),
+});
+export type ReviewFocusItem = z.infer<typeof ReviewFocusItem>;
+
+// ---- Brief provenance ----
+export const BriefInputKind = z.enum(['intent', 'blast', 'files', 'pr_description', 'issue', 'spec']);
+export type BriefInputKind = z.infer<typeof BriefInputKind>;
+
+export const BriefInputStatus = z.enum([
+  'ok',
+  'missing',
+  'stale',
+  'degraded',
+  'truncated',
+  'over_budget',
+  'unavailable',
+]);
+export type BriefInputStatus = z.infer<typeof BriefInputStatus>;
+
+export const BriefInput = z.object({
+  kind: BriefInputKind,
+  ref: z.string().max(200),
+  status: BriefInputStatus,
+  reason: BlastDegradedReason.nullish(),
+  shown: z.number().int().nullish(),
+  total: z.number().int().nullish(),
+});
+export type BriefInput = z.infer<typeof BriefInput>;
+
 // ---- Composed PR Brief (pr_brief.json) ----
 export const PrBrief = z.object({
-  intent: Intent,
-  blast: BlastRadius,
-  risks: Risks,
-  history: PrHistory,
+  summary: z.string(),
+  risks: z.array(Risk),
+  review_focus: z.array(ReviewFocusItem),
+  head_sha: z.string(),
+  generated_at: z.string(),
+  prompt_version: z.string(),
+  input_hash: z.string(),
+  provider: z.string(),
+  model: z.string(),
+  tokens_in: z.number().int(),
+  tokens_out: z.number().int(),
+  cost_usd: z.number().nullable(),
+  duration_ms: z.number().int(),
+  attempts: z.number().int(),
+  inputs: z.array(BriefInput),
+  dropped: z.object({ risks: z.number().int(), review_focus: z.number().int() }),
 });
 export type PrBrief = z.infer<typeof PrBrief>;
+
+/** Own enum: importing review-api's staleness enum here would be circular. */
+export const BriefStaleReason = z.enum(['head_moved', 'description_changed', 'prompt_updated']);
+export type BriefStaleReason = z.infer<typeof BriefStaleReason>;
+
+export const PrBriefResponse = z.object({
+  brief: PrBrief.nullable(),
+  stale: z.boolean(),
+  stale_reason: BriefStaleReason.nullable(),
+});
+export type PrBriefResponse = z.infer<typeof PrBriefResponse>;
+
+/** LLM output (strict json_schema: all required, no length limits; refs may be empty before post-validation). */
+export const BriefModelOutput = z.object({
+  summary: z.string(),
+  risks: z.array(
+    z.object({
+      kind: z.string(),
+      title: z.string(),
+      explanation: z.string(),
+      severity: RiskSeverity,
+      refs: z.array(RiskRef),
+    }),
+  ),
+  review_focus: z.array(ReviewFocusItem),
+});
+export type BriefModelOutput = z.infer<typeof BriefModelOutput>;

@@ -91,3 +91,24 @@ export {
   isProtectedFromScopeFilter,
   type ScopePartition,
 } from './review/scope.js';
+
+// Brief (L06): prompt guard + strict untrusted fencing.
+export { INJECTION_GUARD, wrapUntrustedStrict, escapeUntrustedMarkers } from './prompt.js';
+
+// Brief (L06): prompt builder + budget/trim.
+export {
+  buildBriefMessages,
+  BRIEF_PROMPT_VERSION,
+  type BriefPromptInput,
+  type BriefPromptFile,
+  type BriefPromptIntent,
+  type BriefPromptBlast,
+  type BriefPromptText,
+  type BriefPromptOptions,
+} from './brief/prompt.js';
+export {
+  fitBriefBudget,
+  BRIEF_BUDGET,
+  BRIEF_MAX_OUTPUT_TOKENS,
+  type BriefTrimReport,
+} from './brief/budget.js';

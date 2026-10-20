@@ -32,9 +32,12 @@ const base: BriefPromptInput = {
   docs: [],
 };
 
-const render = (i: BriefPromptInput) => buildBriefMessages(i, { countTokens }).messages.map((m) => m.content).join('\n');
-const allTokens = (i: BriefPromptInput) =>
-  buildBriefMessages(i, { countTokens }).messages.reduce((n, m) => n + countTokens(m.content), 0);
+// buildBriefMessages already fits the budget, so measuring through it would always read <= 12000.
+// A zero-cost counter makes it a pure renderer: no description/issue/doc clipping and no
+// over-budget trim (files/callers/headers stay inside their own caps in these inputs), so
+// `render` shows the prompt BEFORE fitBriefBudget touches it. Sizes below are chars == tokens.
+const render = (i: BriefPromptInput) => buildBriefMessages(i, { countTokens: () => 0 }).messages.map((m) => m.content).join('\n');
+const allTokens = (i: BriefPromptInput) => countTokens(render(i));
 
 const callers = (n: number) =>
   Array.from({ length: n }, (_, i) => ({ symbol: 's', name: `c${i}`, file: `src/c${i}.ts`, line: i + 1 }));
@@ -133,8 +136,11 @@ describe('fitBriefBudget', () => {
     expect(trim.totalTokens).toBeLessThanOrEqual(BRIEF_BUDGET.totalTokens);
   });
 
+  // Measured overhead (render above): empty prompt + fences ~2150; a header-less file line ~24.6;
+  // 50 callers ~1380; one 2-header file ~72; each doc/issue adds ~60-120 of fence.
   it('AC-20: over budget, whole documents go first (last first) before anything else is touched', () => {
-    // Pad with callers so total just exceeds 12000 only because of documents.
+    // 2150 + body 1400 + 100 files 2460 + 50 callers 1380 + issue 1900 + docs 4000 ~ 13.5k > 12k;
+    // without the docs ~9.4k fits, so only documents have to go.
     const input0: BriefPromptInput = {
       ...base,
       body: 'x'.repeat(1400),
@@ -143,32 +149,31 @@ describe('fitBriefBudget', () => {
         { ref: 'specs/b.md', text: 'b'.repeat(100) },
       ],
       issues: [{ ref: '#1', text: 'i'.repeat(1900) }],
-      files: Array.from({ length: 300 }, (_, i) => mkFile(i, 5, 1, 0)),
+      files: Array.from({ length: 100 }, (_, i) => mkFile(i, 5, 1, 0)),
       blast: { ...base.blast!, callers: callers(50) },
     };
-    const before = allTokens(input0);
-    expect(before).toBeGreaterThan(BRIEF_BUDGET.totalTokens);
+    expect(allTokens(input0)).toBeGreaterThan(BRIEF_BUDGET.totalTokens);
     const { input, trim } = fitBriefBudget(input0, render, countTokens);
     expect(allTokens(input)).toBeLessThanOrEqual(BRIEF_BUDGET.totalTokens);
-    // the last document went before the issue text was shortened
-    expect(trim.docsDropped[0]).toBe('specs/b.md');
-    if (trim.docsDropped.length < input0.docs.length) {
-      expect(trim.issuesTruncated).toBe(false);
-      expect(trim.issuesDropped).toEqual([]);
-    }
+    // the last document went first, and the issue text was not shortened before documents were gone
+    expect(trim.docsDropped).toEqual(['specs/b.md', 'specs/a.md']);
+    expect(trim.issuesTruncated).toBe(false);
+    expect(trim.issuesDropped).toEqual([]);
     expect(trim.callersShown).toBe(50);
-    expect(trim.filesShown).toBe(300);
+    expect(trim.filesShown).toBe(100);
   });
 
   it('AC-20: with documents gone, issue text is trimmed before callers', () => {
+    // 2150 + body 1400 + 250 files 6150 + 50 callers 1380 + issue 1960 ~ 13.0k > 12k;
+    // the ~1k excess is smaller than the issue text, so issues absorb it and callers stay.
     const input0: BriefPromptInput = {
       ...base,
       body: 'x'.repeat(1400),
       issues: [{ ref: '#1', text: 'i'.repeat(1900) }],
-      files: Array.from({ length: 300 }, (_, i) => mkFile(i, 5, 1, 0)),
+      files: Array.from({ length: 250 }, (_, i) => mkFile(i, 5, 1, 0)),
       blast: { ...base.blast!, callers: callers(50) },
     };
-    expect(allTokens(input0)).toBeGreaterThan(BRIEF_BUDGET.totalTokens - 1);
+    expect(allTokens(input0)).toBeGreaterThan(BRIEF_BUDGET.totalTokens);
     const { input, trim } = fitBriefBudget(input0, render, countTokens);
     expect(allTokens(input)).toBeLessThanOrEqual(BRIEF_BUDGET.totalTokens);
     expect(trim.issuesTruncated || trim.issuesDropped.length > 0).toBe(true);
@@ -176,12 +181,15 @@ describe('fitBriefBudget', () => {
   });
 
   it('AC-20: callers go tail first (lowest rank last in the list), before hunk headers', () => {
+    // 2150 + body 1400 + 110 files x 2 headers 7880 + 50 callers 1380 ~ 12.8k > 12k;
+    // the ~0.8k excess is about 30 callers, so callers absorb it and headers stay.
     const input0: BriefPromptInput = {
       ...base,
       body: 'x'.repeat(1400),
-      files: Array.from({ length: 300 }, (_, i) => mkFile(i, 5, 1, 2)),
+      files: Array.from({ length: 110 }, (_, i) => mkFile(i, 5, 1, 2)),
       blast: { ...base.blast!, callers: callers(50) },
     };
+    expect(allTokens(input0)).toBeGreaterThan(BRIEF_BUDGET.totalTokens);
     const { input, trim } = fitBriefBudget(input0, render, countTokens);
     expect(allTokens(input)).toBeLessThanOrEqual(BRIEF_BUDGET.totalTokens);
     expect(trim.callersShown).toBeLessThan(50);
@@ -194,16 +202,19 @@ describe('fitBriefBudget', () => {
   });
 
   it('AC-20: hunk headers go next, then files (smallest +/- first)', () => {
-    const files = Array.from({ length: 300 }, (_, i) => mkFile(i, 100 + i, 0, 10));
+    // Long paths (~40 extra chars): 300 files without headers ~ 300 x 65 = 19.5k > 12k, so
+    // dropping the headers (300 x 10 lines, ~100k) is not enough and files must go too.
+    const longFile = (i: number): BriefPromptFile => ({ ...mkFile(i, 100 + i, 0, 10), path: `src/${'p'.repeat(40)}/f${i}.ts` });
+    const files = Array.from({ length: 300 }, (_, i) => longFile(i));
     const input0: BriefPromptInput = { ...base, files, blast: { ...base.blast!, callers: [] } };
+    expect(allTokens(input0)).toBeGreaterThan(BRIEF_BUDGET.totalTokens);
     const { input, trim } = fitBriefBudget(input0, render, countTokens);
     expect(allTokens(input)).toBeLessThanOrEqual(BRIEF_BUDGET.totalTokens);
     expect(trim.headersDropped).toBe(true);
-    if (input.files.length < 300) {
-      // smallest dropped first: the biggest file always survives
-      expect(input.files.some((f) => f.path === 'src/f299.ts')).toBe(true);
-      expect(input.files.some((f) => f.path === 'src/f0.ts')).toBe(false);
-    }
+    expect(input.files.length).toBeLessThan(300);
+    // smallest dropped first: the biggest file always survives
+    expect(input.files.some((f) => f.path.endsWith('/f299.ts'))).toBe(true);
+    expect(input.files.some((f) => f.path.endsWith('/f0.ts'))).toBe(false);
   });
 
   it('AC-20: intent and the blast summary line are never removed', () => {

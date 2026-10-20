@@ -41,13 +41,25 @@ function splitSystem(messages: ChatMessage[]): {
 export class AnthropicProvider implements LLMProvider {
   readonly id = 'anthropic' as const;
   private client: Anthropic;
+  /** Our own `withRetry` budget; undefined keeps the default (3). */
+  private retries?: number;
 
-  constructor(apiKey: string) {
-    this.client = new Anthropic({ apiKey });
+  /** `opts.retries` caps BOTH the SDK `maxRetries` and our `withRetry` loop (0 = one attempt). */
+  constructor(apiKey: string, opts: { retries?: number; baseURL?: string } = {}) {
+    this.retries = opts.retries;
+    this.client = new Anthropic({
+      apiKey,
+      ...(opts.baseURL ? { baseURL: opts.baseURL } : {}),
+      ...(opts.retries !== undefined ? { maxRetries: opts.retries } : {}),
+    });
+  }
+
+  private retry<T>(fn: () => Promise<T>): Promise<T> {
+    return withRetry(fn, { retries: this.retries });
   }
 
   async listModels(): Promise<ModelInfo[]> {
-    return withRetry(async () => {
+    return this.retry(async () => {
       // SDK 0.33 exposes models.list()
       const res = await this.client.models.list();
       return res.data.map((m) => ({
@@ -59,7 +71,7 @@ export class AnthropicProvider implements LLMProvider {
   }
 
   async complete(req: CompletionRequest): Promise<CompletionResult> {
-    return withRetry(() => withTimeout(this.doComplete(req), req.timeoutMs ?? DEFAULT_TIMEOUT));
+    return this.retry(() => withTimeout(this.doComplete(req), req.timeoutMs ?? DEFAULT_TIMEOUT));
   }
 
   private async doComplete(req: CompletionRequest): Promise<CompletionResult> {
@@ -97,7 +109,7 @@ export class AnthropicProvider implements LLMProvider {
     let lastRaw = '';
 
     for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
-      const res = await withRetry(() =>
+      const res = await this.retry(() =>
         withTimeout(
           this.client.messages.create({
             model: req.model,

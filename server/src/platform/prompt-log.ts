@@ -28,7 +28,7 @@ export interface PromptAssembledInput {
   agent?: string;
   provider: string;
   model: string;
-  promptKind: 'review' | 'intent';
+  promptKind: 'review' | 'intent' | 'brief';
   promptVersion?: string;
   mode?: 'single-pass' | 'map-reduce';
   chunk?: { index: number; total: number; file: string };
@@ -54,7 +54,7 @@ export interface PromptAssembledEvent {
   agent?: string;
   provider: string;
   model: string;
-  promptKind: 'review' | 'intent';
+  promptKind: 'review' | 'intent' | 'brief';
   promptVersion?: string;
   mode?: 'single-pass' | 'map-reduce';
   chunk?: { index: number; total: number; file?: string };

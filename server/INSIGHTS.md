@@ -2,6 +2,12 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-20 — [Security] A rate-limit errorResponseBuilder must return an AppError, and error details reach the client
+Symptom: the 429 body of a rate-limited route would otherwise be the plugin's default shape, not the standard error envelope.
+Cause: `app.setErrorHandler` serialises `AppError.details` verbatim (`app.ts:161`), so whatever goes in `details` is public.
+Rule: build the 429 with `rateLimitError(ctx.ttl)` (details = `{retry_after_s}` only); wrap provider errors in a new `ExternalServiceError` without `details` (`brief/service.ts`) because adapter errors carry `details.raw` = model output derived from PR text. The same leak still exists in `intent/service.ts` (`AppError` rethrown as-is).
+Proof: `server/src/modules/brief/routes.ts:34`, `server/src/modules/brief/service.ts` (catch around `completeStructured`), `server/src/app.ts:161`
+
 ## 2026-10-18 — [Security] Run-time document reads are byte-bounded, not size-skipped
 Symptom: a multi-GB `.md` attached as project context would be loaded whole before the 20 000-char cut.
 Cause: `DocsReader.read` returned the full file; truncation happened in `formatDocument` afterwards.
