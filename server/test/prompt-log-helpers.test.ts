@@ -133,3 +133,36 @@ describe('meter', () => {
     expect(makeMeter(tk as never, true).digest!('abc')).toBe(sha12('abc'));
   });
 });
+
+describe('buildPromptAssembledEvent — onboarding (L05b)', () => {
+  const onboardingInput = {
+    correlationId: UUID,
+    repoId: 'repo-1',
+    provider: 'openrouter',
+    model: 'openai/gpt-4.1-mini',
+    promptKind: 'onboarding' as const,
+    promptVersion: 'onboarding-v1',
+    sections: [
+      { name: 'system:rule', source: 'reviewer-core', trust: 'trusted' as const, chars: 400, tokens: 100 },
+      { name: 'readme', source: 'repo', trust: 'untrusted' as const, chars: 4000, tokens: 1000 },
+    ],
+  };
+
+  it("AC-21: promptKind 'onboarding' event without prId carries repoId and no text", () => {
+    for (const verbose of [false, true]) {
+      const e = buildPromptAssembledEvent(onboardingInput as never, { verbose }) as unknown as Record<string, unknown>;
+      expect(e.promptKind).toBe('onboarding');
+      expect(e.repoId).toBe('repo-1');
+      expect(e.prId).toBeUndefined();
+      expect(JSON.stringify(e)).not.toContain('"prId"');
+      expect(JSON.stringify(e)).not.toMatch(/"(text|content)"\s*:/);
+      expect(e.totals).toEqual({ sections: 2, chars: 4400, tokens: 1100 });
+    }
+  });
+
+  it('AC-21: review events keep their prId and carry no repoId key', () => {
+    const e = buildPromptAssembledEvent(input, { verbose: false }) as unknown as Record<string, unknown>;
+    expect(e.prId).toBe('p1');
+    expect(e.repoId).toBeUndefined();
+  });
+});
