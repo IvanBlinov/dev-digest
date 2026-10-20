@@ -102,8 +102,16 @@ The user decides how the plan will run. Unless the caller already passed `execut
 | `multi` | `implementer` over step ranges (a fresh context per range) → `architecture-reviewer` → fix loop → `plan-verifier` | Size L, cross-package, new contracts or schema, many steps |
 
 Both modes run through the `/implement` skill, which also runs the review fix loop (the user
-triages findings, at most 3 rounds). `test-writer` is not part of the pipeline; it is used by
-hand for backfill.
+triages findings, at most 3 rounds).
+
+**Red phase (optional, recommend it for user-visible behaviour):** `test-writer` writes the
+acceptance tests from the spec's ACs before the implementer runs, without seeing any code. Ask
+the user whether to use it, and list the step IDs it covers in the plan header (`**Red phase:**
+test-writer — S3, S6, …`); the implementer then makes those tests pass without editing them.
+
+**Cross-model review:** before `/implement`, the user may run `/plan-review <plan>` (a
+non-Claude model checks the plan against the spec); accepted comments come back to you as a
+revision.
 
 ## Step 4 — Review report (return this and stop, unless no answer is needed)
 
@@ -175,7 +183,7 @@ If an answer changes the spec itself (a new or reworded AC), do not plan around 
 
 **Spec:** <path> (SPEC-NN, approved) · **Base commit:** <git rev-parse --short HEAD>
 **Packages:** <server, client, …> · **Size:** <S | M | L> (<N> steps)
-**Execution mode:** <single | multi> (chosen by the user <date>)
+**Execution mode:** <single | multi> (chosen by the user <date>) · **Red phase:** <test-writer — S#, … | none>
 
 ## Goal
 <1–3 sentences: user-visible outcome, taken from the spec>
