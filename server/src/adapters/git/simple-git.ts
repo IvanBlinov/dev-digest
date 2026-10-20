@@ -1,6 +1,6 @@
 import { simpleGit, type SimpleGit } from 'simple-git';
-import { join, isAbsolute, sep } from 'node:path';
-import { mkdir, readdir, access, rm, realpath, stat, open } from 'node:fs/promises';
+import { join, isAbsolute, sep, relative } from 'node:path';
+import { mkdir, readdir, access, rm, realpath, open } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import type {
   GitClient,
@@ -135,19 +135,30 @@ export class SimpleGitClient implements GitClient {
    * root and be a regular file. Reads at most READ_FILE_MAX_BYTES (truncated prefix).
    */
   async readFile(repo: RepoRef, path: string): Promise<string> {
-    if (isAbsolute(path) || path.split(/[\\/]/).includes('..')) {
+    const segments = path.split(/[\\/]/);
+    if (isAbsolute(path) || segments.includes('..')) {
       throw new Error('readFile: path must be relative and must not contain ".."');
+    }
+    if (hasGitSegment(segments)) {
+      throw new Error('readFile: access to .git is not allowed');
     }
     const root = await realpath(this.clonePathFor(repo));
     const target = await realpath(join(root, path));
     if (target !== root && !target.startsWith(root.endsWith(sep) ? root : root + sep)) {
       throw new Error('readFile: path resolves outside the repository');
     }
-    if (!(await stat(target)).isFile()) {
-      throw new Error('readFile: not a regular file');
+    // The clone URL embeds the GitHub token (stored in .git/config), so a symlink
+    // into .git must not be readable either.
+    if (hasGitSegment(relative(root, target).split(/[\\/]/))) {
+      throw new Error('readFile: access to .git is not allowed');
     }
-    const fh = await open(target, 'r');
+    // O_NOFOLLOW closes the realpath→open race on the final component; O_NONBLOCK
+    // keeps a FIFO from blocking open(). Regular-file check is done on the handle.
+    const fh = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     try {
+      if (!(await fh.stat()).isFile()) {
+        throw new Error('readFile: not a regular file');
+      }
       const buf = Buffer.alloc(READ_FILE_MAX_BYTES);
       let total = 0;
       while (total < READ_FILE_MAX_BYTES) {
@@ -174,6 +185,10 @@ export class SimpleGitClient implements GitClient {
       throw err;
     }
   }
+}
+
+function hasGitSegment(segments: string[]): boolean {
+  return segments.some((s) => s.toLowerCase() === '.git');
 }
 
 function parseBlamePorcelain(raw: string): BlameLine[] {

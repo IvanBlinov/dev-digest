@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { mkdtemp, mkdir, writeFile, rm, symlink } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SimpleGitClient, READ_FILE_MAX_BYTES } from '../src/adapters/git/simple-git.js';
@@ -52,6 +53,23 @@ describe('GitClient.readFile containment and bound', () => {
   it('rejects a directory', async () => {
     await expect(git.readFile(REPO, 'src')).rejects.toThrow();
   });
+
+  it('F-3: rejects .git paths, case-insensitively, and symlinks into .git', async () => {
+    const root = git.clonePathFor(REPO);
+    await mkdir(join(root, '.git'), { recursive: true });
+    await writeFile(join(root, '.git', 'config'), '[remote "origin"] url = https://x-token@github.com/a/b');
+    await symlink(join('.git', 'config'), join(root, 'README-link.md'));
+    await expect(git.readFile(REPO, 'README-link.md')).rejects.toThrow();
+    await expect(git.readFile(REPO, '.git/config')).rejects.toThrow();
+    await expect(git.readFile(REPO, '.GIT/config')).rejects.toThrow();
+    await expect(git.readFile(REPO, 'src/.Git/config')).rejects.toThrow();
+  });
+
+  it.skipIf(process.platform === 'win32')('F-4: rejects a FIFO without hanging', async () => {
+    const root = git.clonePathFor(REPO);
+    execFileSync('mkfifo', [join(root, 'pipe')]);
+    await expect(git.readFile(REPO, 'pipe')).rejects.toThrow();
+  }, 5000);
 
   it('F-2: returns only the first READ_FILE_MAX_BYTES of a larger file', async () => {
     const out = await git.readFile(REPO, 'big.txt');

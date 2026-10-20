@@ -6,7 +6,8 @@ Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-
 Symptom: a cloned repo could ship `README.md` as a symlink to a local secrets file; onboarding facts would read it, send it to the LLM and store it.
 Cause: `join(clonePath, path)` follows symlinks and `readFile` slurped whole files; only `listDir` had a `..` guard.
 Rule: read repo files only through `GitClient.readFile`, which rejects absolute/`..` paths, requires the `realpath` to stay inside the real clone root and be a regular file, and returns at most `READ_FILE_MAX_BYTES` (truncated prefix, no throw).
-Proof: `server/src/adapters/git/simple-git.ts:137`, `server/test/git-read-file.test.ts`
+Also: `.git` is off limits (any case, requested path or resolved path): the clone URL embeds the GitHub token (`server/src/modules/repos/helpers.ts:29`) and git stores it in `.git/config`, so a relative symlink into `.git` would otherwise pass containment. The file is opened with `O_NOFOLLOW | O_NONBLOCK` and checked with `fh.stat()` (no path stat, no FIFO hang).
+Proof: `server/src/adapters/git/simple-git.ts:137,142,152,157`, `server/test/git-read-file.test.ts`
 
 ## 2026-10-19 — [Pitfall] `JobRunner` retries the whole handler, so an LLM call inside it can be sent 3 times
 Symptom: a job that makes one LLM request can hit the provider up to 3 times, on top of the SDK's own retries.
