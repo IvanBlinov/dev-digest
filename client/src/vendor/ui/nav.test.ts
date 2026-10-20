@@ -42,3 +42,21 @@ describe("NAV (L03 req 44)", () => {
     expect(SHORTCUTS.some((s) => s.keys === "g c")).toBe(true);
   });
 });
+
+describe("NAV (L05b req AC-46)", () => {
+  it("AC-46: WORKSPACE = [pulls, onboarding-tour] with label, href '/repos/:repoId/onboarding', gKey 'o'", () => {
+    const ws = section("WORKSPACE");
+    expect(ws?.items.map((i) => i.key)).toEqual(["pulls", "onboarding-tour"]);
+    const item = ws?.items.find((i) => i.key === "onboarding-tour");
+    expect(item?.label).toBe("Onboarding Tour");
+    expect(item?.href).toBe("/repos/:repoId/onboarding");
+    expect(item?.gKey).toBe("o");
+  });
+
+  it("AC-46: SHORTCUTS has 'g o'; g-keys stay unique", () => {
+    const sc = SHORTCUTS.find((s) => s.keys === "g o");
+    expect(sc).toEqual({ keys: "g o", label: "Go to Onboarding Tour", group: "Navigation" });
+    const keys = NAV.flatMap((g) => g.items).map((i) => i.gKey).filter(Boolean);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+});
