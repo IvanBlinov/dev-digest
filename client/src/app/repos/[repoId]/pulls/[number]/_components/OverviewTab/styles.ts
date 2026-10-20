@@ -17,4 +17,5 @@ export const s = {
     gap: 16,
     alignItems: "stretch",
   } satisfies CSSProperties,
+  leftCol: { display: "flex", flexDirection: "column", gap: 16, minWidth: 0 } satisfies CSSProperties,
 } as const;

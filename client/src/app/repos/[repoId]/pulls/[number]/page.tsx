@@ -15,6 +15,7 @@ import { OverviewTab } from "./_components/OverviewTab";
 import { FindingsTab } from "./_components/FindingsTab";
 import { DiffTab } from "./_components/DiffTab";
 import { IntentCard } from "./_components/IntentCard";
+import { latestReviewFor } from "./_components/OverviewTab/helpers";
 import RunTraceDrawer from "./_components/RunTraceDrawer";
 import { usePullDetail, usePulls } from "../../../../../lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
@@ -95,6 +96,9 @@ export default function PRDetailPage() {
   // PR summary = newest review per agent, dismissed excluded (same rule as the list).
   const severityCounts = React.useMemo(() => prSeverityCounts(runs), [reviews]);
 
+  const changedFiles = React.useMemo(() => (pr?.files ?? []).map((f) => f.path), [pr]);
+  const latestReview = React.useMemo(() => latestReviewFor(runs), [reviews]);
+
   const repoName = activeRepo?.full_name ?? repoId;
   // The real "owner/repo" (null until the repo is loaded) — used to build
   // github.com deep-links for the header and finding file references.
@@ -159,7 +163,19 @@ export default function PRDetailPage() {
         {/* L03 — what the PR is trying to do; sits above the results on Agent runs and beside the blast radius on Overview. */}
         {tab === "findings" && <IntentCard prId={prId} />}
 
-        {tab === "overview" && <OverviewTab prBody={pr.body} prId={prId} repoId={repoId} repoFullName={repoFullName} headSha={pr.head_sha} intentSlot={<IntentCard prId={prId} />} />}
+        {tab === "overview" && (
+          <OverviewTab
+            prBody={pr.body}
+            prId={prId}
+            repoId={repoId}
+            repoFullName={repoFullName}
+            headSha={pr.head_sha}
+            changedFiles={changedFiles}
+            latestReview={latestReview}
+            onNavigate={(href) => router.push(`/repos/${repoId}/pulls/${number}${href}`)}
+            intentSlot={<IntentCard prId={prId} />}
+          />
+        )}
 
         {tab === "findings" && (
           <FindingsTab

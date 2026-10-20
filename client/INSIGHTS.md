@@ -2,6 +2,12 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-20 — [Non-obvious behaviour] Every mutation error is toasted globally unless `meta.silentError` is set
+Symptom: a mutation that renders its own inline error (PR Brief card) would also pop a toast, so the user sees the failure twice.
+Cause: `MutationCache.onError` toasts all mutation errors; there is no per-hook opt-out other than the mutation's `meta`.
+Rule: a hook whose component shows the error inline sets `meta: { silentError: true }`; the cache handler skips the toast for it.
+Proof: `client/src/lib/providers.tsx:44`, `client/src/lib/hooks/brief.ts:30`
+
 ## 2026-10-12 — [Security] react-markdown shows raw HTML as escaped text unless `skipHtml` is set
 Symptom: the PR Description box showed `<!-- demo video goes here -->` literally after switching it to `<Markdown>`.
 Cause: react-markdown without `rehype-raw` never executes HTML (safe), but by default it renders raw HTML nodes as escaped text instead of dropping them.

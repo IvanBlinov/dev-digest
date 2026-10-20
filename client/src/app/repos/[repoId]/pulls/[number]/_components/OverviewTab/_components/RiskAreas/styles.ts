@@ -1,0 +1,46 @@
+import type { CSSProperties } from "react";
+
+export const s = {
+  list: { display: "flex", flexDirection: "column", gap: 8 } satisfies CSSProperties,
+  item: {
+    border: "1px solid var(--border)",
+    borderRadius: 8,
+    background: "var(--bg-surface)",
+    overflow: "hidden",
+  } satisfies CSSProperties,
+  row: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    width: "100%",
+    padding: "9px 12px",
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+    textAlign: "left",
+    color: "var(--text-primary)",
+    fontSize: 14,
+  } satisfies CSSProperties,
+  title: { fontWeight: 600, flex: "0 1 auto" } satisfies CSSProperties,
+  ref: {
+    marginLeft: "auto",
+    fontSize: 12.5,
+    color: "var(--accent-text)",
+    minWidth: 0,
+    overflow: "hidden",
+    whiteSpace: "nowrap",
+  } satisfies CSSProperties,
+  chevron: { color: "var(--text-muted)", flexShrink: 0 } satisfies CSSProperties,
+  details: {
+    padding: "0 12px 12px 40px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    fontSize: 13.5,
+    color: "var(--text-secondary)",
+    lineHeight: 1.5,
+  } satisfies CSSProperties,
+  refs: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4, fontSize: 12.5 } satisfies CSSProperties,
+  muted: { fontSize: 13.5, color: "var(--text-muted)" } satisfies CSSProperties,
+  skeletons: { display: "flex", flexDirection: "column", gap: 8 } satisfies CSSProperties,
+} as const;

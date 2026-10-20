@@ -30,7 +30,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           },
         },
         // Global error surfacing (errors anywhere → toast). Mutations always
-        // toast (they are user actions). Queries only toast on network/5xx —
+        // toast (they are user actions) unless meta.silentError is set. Queries only toast on network/5xx —
         // expected 4xx like a 404 "no tour yet" stay silent for inline empty states.
         queryCache: new QueryCache({
           onError: (err) => {
@@ -39,7 +39,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
           },
         }),
         mutationCache: new MutationCache({
-          onError: (err) => notify.error(errorMessage(err)),
+          onError: (err, _vars, _ctx, mutation) => {
+            // Mutations that render their own inline error opt out of the toast.
+            if (mutation.meta?.silentError) return;
+            notify.error(errorMessage(err));
+          },
         }),
       })
   );
