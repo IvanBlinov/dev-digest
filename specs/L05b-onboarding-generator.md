@@ -174,12 +174,14 @@ Non-goals:
   2. `cp .env.example .env` when `.env.example` exists, with the variable names of AC-24 as its
      comment;
   3. `docker compose up -d <services>` when a compose file exists;
-  4. `<pm> run <name>` for each of the `package.json` scripts `dev`, `start`, `build`, `test` that
-     exists, in that order;
+  4. `<pm> run <name>` for each of the scripts `dev`, `start`, `build`, `test` that exists in the
+     **root** `package.json`, in that order;
   5. `make <target>` for each `Makefile` target named `setup`, `install`, `dev`, `run`, `start` or
      `test`.
 
-  The list shall hold at most 6 commands (`ONBOARDING_MAX_COMMANDS`), kept in this order.
+  Scripts and `<pm> run <name>` commands shall come only from the root `package.json`;
+  `package.json` files one directory level deep shall feed only the stack facts and never produce a
+  command. The list shall hold at most 6 commands (`ONBOARDING_MAX_COMMANDS`), kept in this order.
 - AC-33 — The LLM may reference commands only by their id, to set their order and a comment of at
   most 80 characters (`ONBOARDING_MAX_COMMAND_COMMENT_CHARS`). The server shall drop every command
   id the LLM returns that is not in the AC-32 list and append every listed command the LLM left out
@@ -243,7 +245,8 @@ Non-goals:
   is null. "index" shall be omitted when `index_updated_at` is null.
 - AC-50 — IF the repo is not cloned and no tour is stored, THEN the page shall show "Clone and index
   this repository to generate a tour", the index status from `GET /repos/:id/index-state` and a
-  control that triggers `POST /repos/:id/resync`, and no Generate control.
+  control that triggers `POST /repos/:id/refresh` (which enqueues a clone and an index refresh),
+  and no Generate control. The control shall not use `POST /repos/:id/resync`, which never clones.
 - AC-51 — IF the repo is not cloned and a tour is stored, THEN the page shall show the tour with
   Regenerate disabled and the note "Clone the repository to regenerate".
 - AC-52 — WHILE `status` is `none` and the repo is cloned, the page shall show a **Generate
@@ -308,7 +311,8 @@ Non-goals:
 ## Edge cases
 - EC-1 — No repo exists → the page shows "Add a repository to see its onboarding tour" with a link
   to `/onboarding`.
-- EC-2 — Repo not cloned, no tour (fresh import, clone running) → AC-50; POST → AC-5.
+- EC-2 — Repo not cloned, no tour (fresh import, clone running) → AC-50 (clone via
+  `POST /repos/:id/refresh`); POST → AC-5.
 - EC-3 — Repo not cloned, tour stored (seeded `acme/payments-api`) → AC-51, AC-70.
 - EC-4 — Index missing, degraded, failed or flag off → AC-44.
 - EC-5 — Repo above the 5000-file index cap, or index `partial` → AC-45, AC-49 (`N of M files
