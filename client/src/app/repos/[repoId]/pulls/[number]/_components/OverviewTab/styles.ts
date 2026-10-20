@@ -10,4 +10,11 @@ export const s = {
     color: "var(--text-secondary)",
     lineHeight: 1.55,
   } satisfies CSSProperties,
+  // Wraps to one column on narrow screens; cards stretch to equal height.
+  twoCol: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))",
+    gap: 16,
+    alignItems: "stretch",
+  } satisfies CSSProperties,
 } as const;

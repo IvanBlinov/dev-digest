@@ -309,3 +309,18 @@ describe('intent layer contracts', () => {
     expect(PromptAssembly.parse({ system: 's', user: 'u', intent: 'x' }).intent).toBe('x');
   });
 });
+
+describe('BlastRadius', () => {
+  const base = { changed_symbols: [], downstream: [], summary: 's' };
+  it('parses legacy objects without degraded/reason', () => {
+    expect(() => BlastRadius.parse(base)).not.toThrow();
+  });
+  it('parses degraded + reason', () => {
+    const r = BlastRadius.parse({ ...base, degraded: true, reason: 'index_partial' });
+    expect(r.degraded).toBe(true);
+    expect(r.reason).toBe('index_partial');
+  });
+  it('rejects an unknown reason', () => {
+    expect(() => BlastRadius.parse({ ...base, degraded: true, reason: 'bogus' })).toThrow();
+  });
+});

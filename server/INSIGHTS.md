@@ -2,6 +2,18 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-14 — [Pitfall] Reference resolution needs a hop through `index.*` barrels, or client callers vanish
+Symptom: the blast radius showed 0 callers on client PRs (e.g. `page.tsx` → `OverviewTab`), and only ~5% of client references had a `decl_file`.
+Cause: `resolveReferences` only matched a symbol in a file the importer has a direct `file_edges` edge to. Client components are imported through barrels (`./_components/OverviewTab` → `OverviewTab/index.ts`), and the symbol is declared one hop further, in `OverviewTab.tsx`.
+Rule: a reference with no direct candidate may resolve through one `index.*` barrel; a direct candidate always wins, and the "exactly one candidate" rule still applies. Takes effect only after a reindex (`POST /repos/:id/resync`).
+Proof: `server/src/modules/repo-intel/repository.ts:25`, `server/src/modules/repo-intel/repository.ts:424`, `server/test/repo-intel-resolve-barrel.it.test.ts`
+
+## 2026-10-13 — [Non-obvious behaviour] Blast radius caller cap is global, not per symbol; grouping is name-keyed
+Symptom: a PR that changes one heavily used symbol plus several rarely used ones shows few or no callers for the rare ones; same-named symbols from different files merge into one group.
+Cause: `getBlastRadius` truncates the flat caller list with `MAX_CALLERS_PER_SYMBOL` (20) across all symbols, despite the name; callers carry only `viaSymbol` (a name), so `toBlastRadius` groups by name and the declaring-file filter checks every file that declares that name.
+Rule: do not add capping or per-file attribution in `blast/helpers.ts`; fix the limit in the facade (slice per `viaSymbol`) if per-symbol completeness matters.
+Proof: `server/src/modules/repo-intel/service.ts:386`, `server/src/modules/repo-intel/constants.ts:30`, `server/src/modules/blast/helpers.ts:33`
+
 ## 2026-10-08 — [Non-obvious behaviour] Seed patches feed `diff-loader`, and rule order puts `e2e/README.md` in "tests"
 Symptom: seeded `pr_files` patches change what review/intent code sees when git has no diff; a doc under `e2e/` classifies as tests, not docs.
 Cause: `diff-loader` falls back to `pr_files.patch`; the classifier checks directory segments before the `.md` rule.

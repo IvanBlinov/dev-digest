@@ -4,15 +4,15 @@
 From Claude Code (or any MCP client) a developer can list DevDigest review agents, start an AI
 review of an imported pull request, poll for its findings, and read a repo's extracted
 conventions — naming the PR as `owner/name` + PR number. Reviews run inside the already-running
-DevDigest API process, so the web UI shows them live. A fifth tool, `get_blast_radius`, is a
-registered stub whose input contract is fixed for the L04 Blast Radius feature.
+DevDigest API process, so the web UI shows them live. A fifth tool, `get_blast_radius`, returns a PR's
+blast radius (see [L04-blast-radius.md](L04-blast-radius.md)).
 
 ## Scope
 - In: a new standalone package `mcp/` (npm, `tsx`, source-only) exposing five tools over **stdio**;
   a thin adapter over the HTTP API (default `http://localhost:3001`, env `DEVDIGEST_API_URL`);
   project-scope registration in root `.mcp.json`; CI workflow; docs.
 - Out: HTTP/SSE transport and auth; MCP resources, prompts and `resource_link`; accept/dismiss
-  tools; triggering conventions extraction; the real blast-radius implementation; any new server
+  tools; triggering conventions extraction; any new server
   endpoint, DB change or shared-contract change.
 
 ## Design decisions
@@ -55,7 +55,7 @@ New MCP tool contracts (mcp-local zod input schemas):
 | `run_review` | Start an async review; returns `run_id`s | `repo`, `pr_number`, `agent?` (name or id; omit = all enabled) |
 | `get_findings` | Run status, or findings sorted by severity | `repo`, `pr_number`, `run_id?`, `severity_min` (default SUGGESTION), `limit` (1–50, default 20), `offset`, `response_format` |
 | `get_conventions` | Extracted conventions; never starts extraction | `repo`, `limit` (1–100, default 30), `response_format` |
-| `get_blast_radius` | Stub: always `isError` "not implemented yet", no API call | `repo`, `pr_number`, `file?` |
+| `get_blast_radius` | Blast radius of a PR: changed symbols, callers `file:line`, endpoints/crons, degraded reason (`GET /pulls/:id/blast`) | `repo`, `pr_number`, `file?` |
 
 API endpoints used: `GET /agents`, `GET /repos`, `GET /repos/:id/pulls`,
 `POST /pulls/:id/review`, `GET /pulls/:id/runs`, `GET /pulls/:id/reviews`,
@@ -78,7 +78,7 @@ API endpoints used: `GET /agents`, `GET /repos`, `GET /repos/:id/pulls`,
 - [ ] AC4 — `run_review` resolves repo + PR, POSTs `{agentId}` or `{all:true}`, returns `run_id`s at once with status `running`.
 - [ ] AC5 — `get_findings` reports run status, or findings sorted by severity, filtered by `severity_min`, paginated with a next-offset hint, concise by default, ≤ 20,000 chars.
 - [ ] AC6 — `get_conventions` only issues `GET /repos/:id/conventions`.
-- [ ] AC7 — `get_blast_radius` returns `isError: true` "not implemented yet" and makes no API call.
+- [ ] AC7 — `get_blast_radius` returns the PR's blast radius as text (summary, callers `file:line`, endpoints/crons, degraded reason) via one `getBlastRadius` call.
 - [ ] AC8 — API unreachable, timeout, 404, 429 and unknown repo/PR/agent come back as `isError: true` with an actionable message and no stack trace.
 - [ ] AC9 — stdout carries only JSON-RPC (stdio round-trip test; no `console.log` in `src/`).
 - [ ] AC10 — Root `.mcp.json` registers the server and its exact command answers `tools/list`; README documents Claude Code, MCP Inspector and `/context`.

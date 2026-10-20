@@ -4,6 +4,7 @@ import type { DevDigestApi } from './api/port';
 import type { Config } from './config';
 import { INSTRUCTIONS } from './instructions';
 import { AgentsService } from './services/agents-service';
+import { BlastService } from './services/blast-service';
 import { ConventionsService } from './services/conventions-service';
 import { PrResolver } from './services/pr-resolver';
 import { ReviewsService } from './services/reviews-service';
@@ -31,6 +32,7 @@ export function createServer(options: CreateServerOptions): McpServer {
     agents: new AgentsService(api),
     reviews: new ReviewsService(api, resolver, clock),
     conventions: new ConventionsService(api, resolver),
+    blast: new BlastService(api, resolver),
   });
   return server;
 }

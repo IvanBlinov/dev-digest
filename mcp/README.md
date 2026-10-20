@@ -17,7 +17,7 @@ in [src/tools/schemas.ts](src/tools/schemas.ts).
 | `run_review` | `repo`, `pr_number`, `agent?` (name or id; omit = all enabled) | Starts an async review and returns `run_ids`. It spends LLM tokens ([run-review.ts:12](src/tools/run-review.ts)). |
 | `get_findings` | `repo`, `pr_number`, `run_id?` (uuid; omit = latest review of each agent), `severity_min?` (`CRITICAL` / `WARNING` / `SUGGESTION`, default `SUGGESTION`), `limit?` (1-50, default 20), `offset?` (default 0), `response_format?` (`concise` / `detailed`, default `concise`) | Returns findings, or the status of a run that is still going ([get-findings.ts:14](src/tools/get-findings.ts)). |
 | `get_conventions` | `repo`, `limit?` (1-100, default 30), `response_format?` | Returns extracted coding conventions. Read-only: it never starts an extraction ([get-conventions.ts:11](src/tools/get-conventions.ts)). |
-| `get_blast_radius` | `repo`, `pr_number`, `file?` | Registered but not implemented: it always returns an error ([get-blast-radius.ts:8](src/tools/get-blast-radius.ts)). |
+| `get_blast_radius` | `repo`, `pr_number`, `file?` | Blast radius of a PR: changed symbols, callers as `file:line`, affected endpoints and crons, and the index-degraded reason ([get-blast-radius.ts](src/tools/get-blast-radius.ts)). `file` limits it to one changed file. |
 
 Typical flow, from the server instructions ([src/instructions.ts](src/instructions.ts)):
 `list_agents` then `run_review` (async), then poll `get_findings` until the run is done.
@@ -109,4 +109,4 @@ CI runs the hermetic suite in the `mcp.yml` workflow. See [../TESTING.md](../TES
 - **Unexpanded `${DEVDIGEST_API_URL:-...}`**: only Claude Code expands this syntax from `.mcp.json`.
   `loadConfig` treats an unexpanded `${...}` value as unset and uses the default
   ([src/config.ts:20](src/config.ts)).
-- **`get_blast_radius` returns an error**: expected, it is not implemented yet. Use `get_findings`.
+- **`get_blast_radius` says "Index incomplete"**: the repo index is degraded or missing; resync the repo in the DevDigest UI and call again.
