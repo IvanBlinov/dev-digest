@@ -37,18 +37,47 @@ export function FileCard({
   commenting,
   annotations,
   defaultOpen,
+  target,
 }: {
   file: PrFile;
   commenting?: DiffCommentApi;
   annotations?: DiffAnnotationApi;
   /** Overrides the size-based auto-expand rule. */
   defaultOpen?: boolean;
+  /** Set when navigation points at this file: opened, highlighted, scrolled to and focused. */
+  target?: { line: number | null };
 }) {
   const t = useTranslations("shell");
+  const targeted = !!target;
+  const targetLine = target?.line ?? null;
   const [open, setOpen] = React.useState(
-    defaultOpen ?? (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES
+    targeted || (defaultOpen ?? (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES)
   );
   const lines = React.useMemo(() => parsePatch(file.patch), [file.patch]);
+  const cardRef = React.useRef<HTMLDivElement>(null);
+
+  // Index of the line row to highlight: the new-side number, or the old-side one
+  // when the file has no new side (e.g. a deleted file). First match only.
+  const targetIndex = React.useMemo(() => {
+    if (targetLine === null) return -1;
+    const hasNewSide = lines.some((ln) => ln.newNo !== undefined);
+    return lines.findIndex((ln) => ln.kind !== "hunk" && (hasNewSide ? ln.newNo : ln.oldNo) === targetLine);
+  }, [lines, targetLine]);
+
+  // A (new) target forces the card open.
+  React.useEffect(() => {
+    if (targeted) setOpen(true);
+  }, [targeted, targetLine]);
+
+  // Scroll + focus the card. A layout effect runs before the highlighted row's own
+  // (passive) scroll, so the row — the more precise target — scrolls last and wins.
+  React.useLayoutEffect(() => {
+    if (!targeted || !open) return;
+    const el = cardRef.current;
+    if (!el) return;
+    el.scrollIntoView({ block: "center" });
+    el.focus({ preventScroll: true });
+  }, [targeted, targetLine, open]);
 
   // Group this file's comments into threads, then split into ones we can anchor
   // to a rendered line vs. "outdated" (GitHub dropped the line / it's not here).
@@ -78,7 +107,12 @@ export function FileCard({
     : 0;
 
   return (
-    <div style={s.fileCard}>
+    <div
+      ref={cardRef}
+      style={targeted ? { ...s.fileCard, ...s.fileCardTarget } : s.fileCard}
+      tabIndex={targeted ? -1 : undefined}
+      data-target={targeted ? "true" : undefined}
+    >
       <div onClick={() => setOpen((o) => !o)} style={s.fileHeader}>
         <Icon.ChevronRight size={13} style={chevronFor(open)} />
         <Icon.FileText size={14} style={s.fileIcon} />
@@ -110,6 +144,7 @@ export function FileCard({
               <CodeLine
                 key={i}
                 ln={ln}
+                highlighted={i === targetIndex}
                 path={file.path}
                 threads={threadsForLine(ln, matched)}
                 commenting={commenting}

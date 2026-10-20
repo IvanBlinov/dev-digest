@@ -2,6 +2,12 @@
 
 Dated entries, newest first. Format and rubrics: [../.claude/skills/engineering-insights/SKILL.md](../.claude/skills/engineering-insights/SKILL.md).
 
+## 2026-10-20 — [Pitfall] Child effects run before the parent's: a card-level scrollIntoView overrides the line-level one
+Symptom: a Files changed link with `&line=` landed on the file header, not the highlighted line.
+Cause: `CodeLine`'s passive effect scrolls the row first, then `FileCard`'s own passive effect scrolls the card and wins.
+Rule: the card's scroll+focus runs in `useLayoutEffect` (before every passive effect) so the row scrolls last; `focus({ preventScroll: true })` avoids a second jump.
+Proof: `client/src/components/diff-viewer/FileCard/FileCard.tsx:74`, `client/src/components/diff-viewer/CodeLine/CodeLine.tsx:38`
+
 ## 2026-10-20 — [Non-obvious behaviour] Every mutation error is toasted globally unless `meta.silentError` is set
 Symptom: a mutation that renders its own inline error (PR Brief card) would also pop a toast, so the user sees the failure twice.
 Cause: `MutationCache.onError` toasts all mutation errors; there is no per-hook opt-out other than the mutation's `meta`.

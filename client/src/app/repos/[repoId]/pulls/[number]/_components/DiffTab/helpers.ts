@@ -1,5 +1,6 @@
 /** Pure helpers for the DiffTab smart view. */
 import type { FindingRecord, PrFile, SmartDiffResponse, SmartDiffRole } from "@devdigest/shared";
+import { parsePatch } from "@/components/diff-viewer";
 import { SEVERITY_LINE_LABEL_KEY } from "./constants";
 
 export interface JoinedGroup {
@@ -58,4 +59,33 @@ export function totals(files: readonly PrFile[]): { files: number; additions: nu
     (t, f) => ({ files: t.files + 1, additions: t.additions + (f.additions ?? 0), deletions: t.deletions + (f.deletions ?? 0) }),
     { files: 0, additions: 0, deletions: 0 },
   );
+}
+
+/** `?line=` is a positive integer or nothing; anything else is ignored. */
+export function parseLineParam(raw: string | null): number | null {
+  if (raw === null || !/^[0-9]+$/.test(raw)) return null;
+  const n = Number(raw);
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+export type TargetStatus = "none" | "ok" | "not_in_diff" | "line_not_shown";
+
+/**
+ * Where a Files-changed link points: no target, a file that is not in the diff,
+ * a file whose requested line the patch does not render, or a usable target.
+ * The line is matched on the new side (old side when the file has no new side).
+ */
+export function resolveTarget(
+  files: readonly PrFile[],
+  file: string | null,
+  line: number | null,
+): { status: TargetStatus; path?: string } {
+  if (!file) return { status: "none" };
+  const f = files.find((x) => x.path === file);
+  if (!f) return { status: "not_in_diff" };
+  if (line === null) return { status: "ok", path: f.path };
+  const lines = parsePatch(f.patch).filter((ln) => ln.kind !== "hunk");
+  const hasNewSide = lines.some((ln) => ln.newNo !== undefined);
+  const shown = lines.some((ln) => (hasNewSide ? ln.newNo : ln.oldNo) === line);
+  return { status: shown ? "ok" : "line_not_shown", path: f.path };
 }

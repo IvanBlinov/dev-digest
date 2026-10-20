@@ -12,7 +12,7 @@ import { useSmartDiff } from "@/lib/hooks/smart-diff";
 import { notify } from "@/lib/toast";
 import type { PrFile, SmartDiffRole } from "@devdigest/shared";
 import { COLLAPSED_ROLES } from "./constants";
-import { filesWithFindings, joinGroups, totals } from "./helpers";
+import { filesWithFindings, joinGroups, resolveTarget, totals } from "./helpers";
 import { useFindingAnnotations } from "./useFindingAnnotations";
 import { SmartGroupHeader } from "./_components/SmartGroupHeader";
 import { s } from "./styles";
@@ -29,6 +29,10 @@ interface DiffTabProps {
   onOrderChange: (order: DiffOrder) => void;
   repoFullName?: string | null;
   headSha?: string | null;
+  /** `?file=` — a changed file to open, highlight and focus. */
+  targetFile?: string | null;
+  /** `?line=` — a line (new side) inside `targetFile`. */
+  targetLine?: number | null;
 }
 
 export function DiffTab({
@@ -40,8 +44,11 @@ export function DiffTab({
   onOrderChange,
   repoFullName,
   headSha,
+  targetFile = null,
+  targetLine = null,
 }: DiffTabProps) {
   const t = useTranslations("prReview.smartDiff");
+  const tBrief = useTranslations("brief");
   const { data: comments } = usePrComments(prId);
   const create = useCreatePrComment(prId);
   const smart = useSmartDiff(order === "smart" ? prId : null);
@@ -80,6 +87,15 @@ export function DiffTab({
   const useSmartView = order === "smart" && !smart.isError;
   const loading = order === "smart" && smart.isLoading;
   const sums = totals(files);
+  const target = React.useMemo(() => resolveTarget(files, targetFile, targetLine), [files, targetFile, targetLine]);
+  const targetPath = target.path ?? null;
+  const viewerTarget = { targetPath, targetLine: target.status === "ok" ? targetLine : null };
+  const targetNotice =
+    target.status === "not_in_diff"
+      ? tBrief("fileNotInDiff")
+      : target.status === "line_not_shown"
+        ? tBrief("lineNotShown")
+        : null;
 
   const toggle = (
     <div style={s.actions}>
@@ -110,6 +126,8 @@ export function DiffTab({
           : t("filesChanged", { count: filesCount })}
       </SectionLabel>
 
+      {targetNotice && <div style={s.notice}>{targetNotice}</div>}
+
       {loading ? (
         <Skeleton height={160} />
       ) : useSmartView ? (
@@ -117,7 +135,9 @@ export function DiffTab({
           {!reviewed && <div style={s.notice}>{t("reviewNotRun")}</div>}
           <div style={s.groups}>
             {groups.map((g) => {
-              const open = groupOpen[g.role] ?? !COLLAPSED_ROLES.has(g.role);
+              // The group holding the navigation target is open unless the user closed it.
+              const holdsTarget = targetPath !== null && g.files.some((f) => f.path === targetPath);
+              const open = groupOpen[g.role] ?? (holdsTarget || !COLLAPSED_ROLES.has(g.role));
               return (
                 <div key={g.role} style={s.group}>
                   <SmartGroupHeader
@@ -129,7 +149,12 @@ export function DiffTab({
                     onToggle={() => setGroupOpen((prev) => ({ ...prev, [g.role]: !open }))}
                   />
                   {open && (
-                    <DiffViewer files={g.files} commenting={commenting} annotations={api(showComments)} />
+                    <DiffViewer
+                      files={g.files}
+                      commenting={commenting}
+                      annotations={api(showComments)}
+                      {...viewerTarget}
+                    />
                   )}
                 </div>
               );
@@ -137,7 +162,7 @@ export function DiffTab({
           </div>
         </>
       ) : (
-        <DiffViewer files={files} commenting={commenting} />
+        <DiffViewer files={files} commenting={commenting} {...viewerTarget} />
       )}
     </section>
   );

@@ -13,7 +13,7 @@ import { RepoNotFound } from "@/components/repo-not-found";
 import { PrDetailHeader } from "./_components/PrDetailHeader";
 import { OverviewTab } from "./_components/OverviewTab";
 import { FindingsTab } from "./_components/FindingsTab";
-import { DiffTab } from "./_components/DiffTab";
+import { DiffTab, parseLineParam } from "./_components/DiffTab";
 import { IntentCard } from "./_components/IntentCard";
 import { latestReviewFor } from "./_components/OverviewTab/helpers";
 import RunTraceDrawer from "./_components/RunTraceDrawer";
@@ -220,6 +220,8 @@ export default function PRDetailPage() {
             onOrderChange={(o) => setParam("order", o === "original" ? "original" : null)}
             repoFullName={repoFullName}
             headSha={pr.head_sha}
+            targetFile={search.get("file")}
+            targetLine={parseLineParam(search.get("line"))}
           />
         )}
       </div>

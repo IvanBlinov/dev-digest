@@ -1,0 +1,15 @@
+{
+  "name": "PR detail Overview offers the PR Brief and a Files changed link opens a collapsed doc",
+  "description": "From PR #482, the Overview tab shows the 'Generate brief' button (no brief stored in the seed, and no model call is made), then the same PR is reopened at ?tab=diff&file=docs%2Frate-limiting.md&line=3: the docs group is collapsed by default, so seeing the doc's seeded line proves the target group and card were opened (AC-57). The repo id is not known to the flow, so the target is applied by setting location.search on the current PR URL. AC-61 (browser Back returns to Overview) is not asserted here because agent-browser 'back' was not available when this flow was written; it is proven in the manual S21 demo. Read-only seeded data. Assumes a freshly-seeded DB (see e2e/README.md).",
+  "steps": [
+    { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "land on the PR list" },
+    { "cmd": ["find", "text", "Add rate limiting to public API endpoints", "click"], "label": "open the PR row" },
+    { "cmd": ["wait", "--url", "/pulls/482"], "label": "navigate to the PR detail route" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "PR detail data settles" },
+    { "cmd": ["wait", "--text", "Generate brief"], "label": "Overview offers to generate the brief (AC-37)" },
+    { "cmd": ["eval", "window.location.search = '?tab=diff&file=docs%2Frate-limiting.md&line=3'"], "label": "follow a Files changed link to the collapsed docs file" },
+    { "cmd": ["wait", "--url", "tab=diff"], "label": "diff tab is active in the URL" },
+    { "cmd": ["wait", "--text", "new doc 3"], "label": "the collapsed docs group opened and shows the targeted line (AC-57)" }
+  ]
+}
