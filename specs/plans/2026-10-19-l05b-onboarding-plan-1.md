@@ -4,7 +4,7 @@
 **Packages:** server, @devdigest/shared (server canonical, client mirror), reviewer-core · **Size:** L (15 steps; ~20 KB because test-writer needs exact red-phase cases)
 **Execution mode:** multi (chosen by the user 2026-10-19) · **Red phase:** test-writer — S7, S8, S9, S10, S11, S12, S13
 
-Approved by the user 2026-10-19 ("proceed with implementation"). Next: `/plan-review` (cross-model), then `/implement`.
+Approved by the user 2026-10-19 ("proceed with implementation"). Revised 2026-10-19 after the cross-model review ([review](2026-10-19-l05b-onboarding-plan-1-review.md); rows 2, 4, 5, 6, 8 became test cases in S7, S8, S12, S13).
 
 ## Goal
 `POST /repos/:id/onboarding/generate` builds a five-section tour from deterministic repo facts and makes exactly one narrative LLM request (no reprompt, no transport retry). `GET /repos/:id/onboarding` returns the stored tour with an honest status, staleness and failure reason. The seeded repo has a ready tour.
@@ -147,17 +147,20 @@ Approved by the user 2026-10-19 ("proceed with implementation"). Next: `/plan-re
 
 ### S7 — Fact reader and command derivation  [package: server · layer: service + helpers] (red phase)
 - **Skills:** onion-architecture, security, test-strategy
-- **Files:** create `server/src/modules/onboarding/constants.ts` (every NFR-1 server constant, plus `ONBOARDING_MAX_TASK_TITLE_CHARS` 120, `ONBOARDING_MAX_TASK_DESCRIPTION_CHARS` 300, `ONBOARDING_MAX_SCRIPT_BODY_CHARS` 200); `facts.ts` (`readCloneFacts(git, ref)`); `helpers.ts` (pure parsers and `deriveCommands`).
-- **Test first:** `server/test/onboarding-facts.test.ts`, using `MockGitClient` with a `readFile` spy.
-  - "AC-23: reads only README*, package.json, compose*, .env.example, Makefile". `listDir` returns `.env`, `.env.local`, `id_rsa`, `cert.pem`, `key.json`, `README.md`, `.env.example`, `pnpm-lock.yaml`, `docker-compose.yml`, `Makefile`, `package.json`. readFile is never called for `.env`, `.env.local`, `id_rsa`, `cert.pem`, `key.json` or `pnpm-lock.yaml` (lockfiles are names only).
+- **Files:** create `server/src/modules/onboarding/constants.ts` (every NFR-1 server constant, plus `ONBOARDING_MAX_TASK_TITLE_CHARS` 120, `ONBOARDING_MAX_TASK_DESCRIPTION_CHARS` 300, `ONBOARDING_MAX_SCRIPT_BODY_CHARS` 200); `facts.ts` (`readCloneFacts(git, ref, topLevelDirs)`); `helpers.ts` (pure parsers and `deriveCommands`).
+- **Test first:** `server/test/onboarding-facts.test.ts`. It uses `MockGitClient` with spies on **every** `readFile` and `listDir` call.
+  - Fixture: root `listDir` returns `.env`, `.env.local`, `id_rsa`, `cert.pem`, `key.json`, `README.md`, `.env.example`, `pnpm-lock.yaml`, `docker-compose.yml`, `Makefile`, `package.json`, `src`, `docs`. `files` includes `docs/README.md`, `src/index.ts` and `api/package.json`.
+  - "AC-23: every readFile path is on the allowlist". Every recorded path matches one of: a root `README*` (no `/`), `package.json` or `<topdir>/package.json`, root `docker-compose*.yml` / `compose*.yml`, `.env.example`, `Makefile`. `listDir` is called only for the root (`''`).
+  - "AC-23: never reads .env, .env.local, id_rsa, cert.pem, key.json or lockfile bodies (pnpm-lock.yaml)".
+  - "AC-23: never reads a nested docs/README.md or an arbitrary src/index.ts".
   - "AC-23: README excerpt capped at 4000 chars".
-  - "AC-24: .env.example yields at most 20 names and no values". Given 25 lines `NAME_i=secret`, the output has 20 names and no `secret` anywhere in the facts.
-  - "AC-32: pnpm-lock.yaml → first command `pnpm install`; yarn.lock → `yarn install`; none → `npm install`".
-  - "AC-32: order is install, `cp .env.example .env` (comment = names joined ', ', ≤ 80 chars), `docker compose up -d api db`, `pnpm run dev|start|build|test` (only those present in the **root** package.json, that order), `make setup|install|dev|run|start|test`; capped at 6 with ids install, env, compose, script:<name>, make:<target>".
-  - "AC-32: scripts of a nested package.json produce no commands".
-  - "AC-34: no package.json, no compose file and no Makefile → an empty command list".
-  - "script_body is carried truncated to 200 chars".
-- **Implement:** parse compose services by indentation, without a YAML dependency.
+  - "AC-24: .env.example with 25 `NAME_i=secret` lines → 20 names; `secret` appears nowhere in the facts".
+  - "AC-32: lockfile → package manager". `pnpm-lock.yaml` → `pnpm install`; `yarn.lock` → `yarn install`; `package-lock.json` or no lockfile → `npm install`.
+  - "AC-32: order and cap": install; `cp .env.example .env` (comment = the names joined with ', ', at most 80 characters); `docker compose up -d api db`; `<pm> run` for the scripts dev, start, build, test (only those present in the **root** `package.json`, in that order); `make` for the targets setup, install, dev, run, start, test. Capped at 6, with ids `install`, `env`, `compose`, `script:<name>`, `make:<target>`.
+  - "AC-32: scripts of api/package.json produce no commands".
+  - "AC-34: no package.json, compose file or Makefile → empty command list".
+  - "script_body is truncated to 200 chars".
+- **Implement:** parse compose services by indentation (no YAML dependency). Treat `''` and a throw both as "missing". The implementer must not edit the red-phase test file.
 - **Verify:** `cd server && pnpm exec vitest run test/onboarding-facts.test.ts && pnpm typecheck`.
 - **Depends on:** S4
 - **Done when:** AC-23, AC-24, AC-32, AC-34.
@@ -165,23 +168,25 @@ Approved by the user 2026-10-19 ("proceed with implementation"). Next: `/plan-re
 ### S8 — Deterministic sections  [package: server · layer: helpers] (red phase)
 - **Skills:** onion-architecture, test-strategy
 - **Files:** create `server/src/modules/onboarding/sections.ts` (pure).
-- **Test first:** `server/test/onboarding-sections.test.ts`. The fixture graph:
-  - files `src/app.ts` 0.9, `src/db.ts` 0.7, `src/util.ts` 0.7, `test/app.test.ts` 0.95, `src/types.d.ts` 0.8, `migrations/001.ts` 0.85, `vite.config.ts` 0.6;
-  - edges app→db, app→util, util→db;
-  - facts: app has 3 endpoints.
-
-  Cases:
-  - "AC-35: reading path = src/app.ts, src/db.ts, src/util.ts (rank desc, ties path asc, tests/d.ts/migrations/config excluded), max 8".
-  - "AC-36: default why = 'Imported by 2 files' for src/db.ts, 'Imported by 1 file' for util".
-  - "AC-37: no edges → reading path unavailable, reason no_graph, items []".
-  - "AC-30: critical paths from endpoint/cron files ∪ getCriticalPaths chains, rank desc, max 5, excluded kinds dropped".
-  - "AC-31: fact = '3 endpoints · imported by 0 files' (singular '1 endpoint', '1 file')".
-  - "AC-28: ≤ 8 module nodes by summed rank, ≤ 4 service nodes from compose, an edge when any file imports across modules; module = first path segment after stripping a single shared top-level dir".
-  - "AC-29: empty graph → diagram null, reason no_graph".
-  - "AC-44: index degraded / missing / flag off → reading path, critical paths and diagram unavailable with index_degraded".
-  - "AC-27: deterministic architecture summary names the stack, the modules and 'N endpoints'".
-  - "AC-40: known_paths = every path in facts (readme/package/compose names, ranked files, critical paths)".
-  - "AC-45: index partial or bounded > 0 → coverage.partial true, reason index_partial".
+- **Test first:** `server/test/onboarding-sections.test.ts`.
+  - **Base fixture.** Files and ranks: `src/app.ts` 0.9, `src/db.ts` 0.7, `src/util.ts` 0.7, `test/app.test.ts` 0.95, `src/types.d.ts` 0.8, `migrations/001.ts` 0.85, `vite.config.ts` 0.6. Edges: app→db, app→util, util→db. Facts: app has 3 endpoints.
+  - "AC-35: reading path = src/app.ts, src/db.ts, src/util.ts" (rank desc, ties by path asc; tests, `.d.ts`, migrations and configs excluded).
+  - "AC-35: 12 eligible ranked files → exactly 8, the top 8 by rank".
+  - "AC-36: default why = 'Imported by 2 files' for src/db.ts and 'Imported by 1 file' for src/util.ts".
+  - "AC-37: no edges → reading path unavailable with no_graph and items []".
+  - "AC-30: critical paths = endpoint/cron files ∪ `getCriticalPaths` chains" (rank desc; excluded kinds dropped).
+  - "AC-30: a file with crons and no endpoints is a critical-path entry".
+  - "AC-30: 9 candidate files → exactly 5, by rank desc then path asc".
+  - "AC-31: fact = '3 endpoints · imported by 0 files'" (singular forms: '1 endpoint', '1 cron', '1 file').
+  - "AC-28: module and edge rules" (module = first path segment after stripping a single shared top-level dir; a module edge exists when any file imports across modules).
+  - "AC-28: 10 top-level dirs → exactly 8 module nodes, the 8 with the highest summed rank".
+  - "AC-28: compose with 6 services → exactly 4 service nodes, the first 4 in file order".
+  - "AC-29: empty graph → diagram null with no_graph".
+  - "AC-44: index degraded, missing or flag off → reading path, critical paths and diagram unavailable with index_degraded".
+  - "AC-27: the deterministic summary names the stack, the modules and 'N endpoints'".
+  - "AC-40: known_paths = every path present in the facts".
+  - "AC-45: index partial, or bounded > 0 → coverage.partial true and reason index_partial".
+- **Implement:** the implementer must not edit the red-phase test file.
 - **Verify:** `cd server && pnpm exec vitest run test/onboarding-sections.test.ts && pnpm typecheck`.
 - **Depends on:** S1, S6
 - **Done when:** AC-27 to AC-31, AC-35, AC-37, AC-40, AC-44, AC-45.
@@ -234,45 +239,49 @@ Approved by the user 2026-10-19 ("proceed with implementation"). Next: `/plan-re
 
 ### S12 — Generator: one narrative call  [package: server · layer: service] (red phase)
 - **Skills:** onion-architecture, security, test-strategy
-- **Files:** create `server/src/modules/onboarding/generator.ts`: `generateOnboarding({ repo, workspaceId }, deps)`, where `deps = { repoIntel, git, resolveModel, llm(provider) /* throws ConfigError without key */, tokenizer, log(line), promptLog(event), now }`. It returns `{ tour, failure: OnboardingReason|null }` and calls `log` exactly once.
-- **Test first:** `server/test/onboarding-generator.test.ts`, with `MockLLMProvider` (cost 0.001), `MockGitClient`, a fake RepoIntel (the S8 graph) and a captured log.
-  - "AC-71 / AC-15: cloned repo with key → mock receives exactly 1 completeStructured call; log has `llm_calls=1`; reading path equals the fixture's rank-desc order".
+- **Files:** create `server/src/modules/onboarding/generator.ts`: `generateOnboarding({ repo, workspaceId }, deps)`, where `deps = { repoIntel, git, resolveModel, llm(provider) /* throws ConfigError without key */, tokenizer, log(line), promptLog(event), now }`. It returns `{ tour, failure: OnboardingReason|null }`. `deps.log` and `deps.promptLog` are its **only** logging channels.
+- **Test first:** `server/test/onboarding-generator.test.ts`. Harness: `MockLLMProvider` (cost 0.001), `MockGitClient`, a fake RepoIntel (the S8 graph), and **one captured sink** that records every `log` and `promptLog` call in order.
+  - "AC-71 / AC-15: cloned repo with a key → exactly 1 completeStructured call; `llm_calls=1`; reading path = the fixture's rank-desc order".
+  - "AC-20 / AC-21 / NFR-4: the sink holds exactly 2 records — one `prompt.assembled` event (promptKind onboarding), then one line starting `onboarding: done` — and nothing else". Asserted for each of: success, no key, llm_error.
   - "AC-14 / AC-18: the request has maxRetries 0, timeoutMs 60000, maxTokens 3000, temperature 0.2".
-  - "AC-17: model from resolveModel('onboarding')".
-  - "AC-16: llm() throws ConfigError → 0 calls, `llm_calls=0`, failure no_api_key, skeleton tour".
-  - "AC-19: a provider error → llm_error; TimeoutError → llm_timeout; a schema failure → invalid_output; each gives a skeleton tour with the reason".
+  - "AC-17: the model comes from resolveModel('onboarding')".
+  - "AC-16: llm() throws ConfigError → 0 calls, `llm_calls=0`, no_api_key, skeleton".
+  - "AC-19: failure reasons": a provider error → llm_error; a `TimeoutError` → llm_timeout; schema failure → invalid_output; each produces a skeleton with that reason.
   - "AC-22: generation = {provider, model, llm_calls 1, tokens_in 100, tokens_out 50, cost_usd 0.001, duration_ms}".
-  - "AC-11: tour has index_sha = lastIndexedSha (null without index state), prompt_version, coverage".
-  - "AC-20 / NFR-4: the log line contains no README or narrative text" (fixture strings are absent).
-  - "AC-21: promptLog called once with promptKind onboarding".
-  - "AC-26: oversize README → reasons include budget_trimmed and the log names `dropped=readme`".
-  - "AC-44: degraded index + LLM ok → partial; + LLM fails → skeleton".
+  - "AC-11: tour metadata": `index_sha` = lastIndexedSha (null without an index state); `prompt_version` and `coverage` are set.
+  - "NFR-4: sink records contain no README text and no narrative text".
+  - "AC-26: an oversize README → reasons include budget_trimmed and the done line has `dropped=readme`".
+  - "AC-44: degraded index → partial when the LLM succeeds, skeleton when it fails".
   - "AC-45: partial index → coverage.partial true".
-  - "AC-23: `.env` never read" (readFile spy).
-- **Implement:** `deps.llm` is wired in S13 as `container.llm(p, { retries: 0 })`.
+  - "AC-23: `.env` is never read".
+  - "NFR-3: fact collection ≤ 10 s with 5000 files": the fake RepoIntel has 5000 ranked files and about 15000 edges; a `MockLLMProvider` subclass records `Date.now()` when it is called; assert (call time − start) ≤ 10000 ms, measured once.
+- **Implement:** in S13, `deps.llm` is wired to `container.llm(p, { retries: 0 })`. The implementer must not edit the red-phase test file.
 - **Verify:** `cd server && pnpm exec vitest run test/onboarding-generator.test.ts && pnpm typecheck`.
-- **Depends on:** S5, S7 to S10
-- **Done when:** AC-11, AC-14 to AC-22, AC-26, AC-44, AC-45, AC-71.
+- **Depends on:** S5, S7–S10
+- **Done when:** AC-11, AC-14–AC-22, AC-26, AC-44, AC-45, AC-71; the NFR-3 fact-collection bound holds.
 
 ### S13 — Service, routes, registration  [package: server · layer: service / route] (red phase)
 - **Skills:** onion-architecture, fastify-best-practices, security, test-strategy
-- **Files:** create `server/src/modules/onboarding/service.ts` (copy the shape of `ConventionsService`: `inflight` map, `settle()`, `failStale` on GET and POST; `withTimeout` around the job; errors `AppError('onboarding_generation_running', …, 409)` and `AppError('repo_not_cloned', …, 409)`); `routes.ts` (GET → `OnboardingTourState`, POST → 202, `config.rateLimit {max: 6, timeWindow: '1 minute'}`, `onClose` → `settle`); modify `server/src/modules/index.ts:14` (register).
-- **Test first:** `server/test/onboarding.it.test.ts`. Uses `buildApp` with overrides `llm: { openrouter: MockLLMProvider }` and `MockGitClient`; a repo with `clonePath` set.
+- **Files:** create `server/src/modules/onboarding/service.ts` (copy the `ConventionsService` shape: `inflight` map, `settle()`, `failStale` on GET and POST, `withTimeout` around the job, `AppError('onboarding_generation_running', …, 409)`, `AppError('repo_not_cloned', …, 409)`); `routes.ts` (GET → `OnboardingTourState`; POST → 202 with `config.rateLimit {max: 6, timeWindow: '1 minute'}`; `onClose` → `settle`); modify `server/src/modules/index.ts:14` (register the module).
+- **Test first:** `server/test/onboarding.it.test.ts`. Harness: `buildApp` with overrides `llm: { openrouter: MockLLMProvider }` and `MockGitClient`; a repo with `clonePath` set.
   - "AC-3: no tour → status none, tour null, cloned true".
-  - "AC-1: POST → 202 {status:'generating'}; after settle GET → ready/partial with a tour".
-  - "AC-4: POST while running → 409 onboarding_generation_running and mock calls stay 1".
-  - "AC-5: clonePath null → POST 409 repo_not_cloned, 0 LLM calls; GET cloned false".
-  - "AC-6: app with nodeEnv 'development': the 7th POST within a minute → 429".
-  - "AC-7: a generating row started 11 min ago → GET failed / interrupted, then POST → 202".
+  - "AC-1: POST → 202 {status:'generating'}; after settle, GET returns ready or partial with a tour".
+  - "AC-4: POST while running → 409 onboarding_generation_running; mock calls stay at 1".
+  - "AC-5: clonePath null → POST 409 repo_not_cloned with 0 LLM calls; GET cloned false".
+  - "AC-6: app with nodeEnv 'development' → the 7th POST within a minute gets 429".
+  - "AC-7: a generating row started 11 min ago → GET failed / interrupted; then POST → 202".
   - "AC-8: tour readable from a fresh buildApp on the same DB".
-  - "AC-9: a second run failing (mock throws) → GET failed, previous tour, last_error".
-  - "AC-10: first run fails → status skeleton".
-  - "AC-12: index state row with a different sha → stale true / index_moved".
-  - "AC-13: DELETE /repos/:id → onboarding row gone".
+  - "AC-9: a second run that fails → GET failed, previous tour kept, last_error set".
+  - "AC-10: first run fails → skeleton".
+  - "AC-12: index-state row with a different sha → stale true / index_moved".
+  - "AC-13: DELETE /repos/:id → the onboarding row is gone".
   - "AC-2: the response parses as OnboardingTourState".
+  - "NFR-2: GET starts no generation in any stored state": insert a row directly for each state (none, generating fresh, generating started > 10 min ago, ready, partial, skeleton, failed); GET twice each; the mock call count is unchanged, `inflight` stays empty (`service.settle()` resolves at once) and `started_at` is unchanged — except that the stale row becomes `failed`, as AC-7 requires.
+  - "NFR-3: GET p95 ≤ 300 ms with a stored ready tour": a row shaped like the S14 seed tour on the it-db test database (S13 runs before S14, so no `pnpm db:seed` data); 1 warm-up, then N=20 sequential `app.inject` GETs; p95 = the 19th fastest ≤ 300 ms.
+- **Implement:** the implementer must not edit the red-phase test file.
 - **Verify:** `scripts/it-db.sh run server/test/onboarding.it.test.ts`; `cd server && pnpm typecheck`.
 - **Depends on:** S11, S12
-- **Done when:** AC-1 to AC-13.
+- **Done when:** AC-1 to AC-13; NFR-2 (no LLM call from GET) and the NFR-3 GET bound hold.
 
 ### S14 — Seed a ready tour  [package: server · layer: db]
 - **Skills:** db-schema-change, test-strategy
@@ -310,7 +319,7 @@ Run with `/implement specs/plans/2026-10-19-l05b-onboarding-plan-1.md`.
 |---|---|---|
 | The SDK or an adapter retries anyway | M | S5 tests against a real HTTP endpoint and counts hits |
 | `drizzle-kit generate` prompts or produces unexpected SQL | L | S3 adds columns only; review the SQL before migrating |
-| Fact collection > 10 s on a 5000-file index (NFR-3) | L | One `getOnboardingGraph` query plus in-memory graph work; no per-file reads beyond the allowlist |
+| Fact collection > 10 s on a 5000-file index (NFR-3) | L | One `getOnboardingGraph` query plus in-memory graph work; timing tests in S12 (facts) and S13 (GET p95) |
 | Copying `adapters.ts` over the client breaks the client | L | Types only; `cd client && pnpm typecheck` in S4 |
 | Seeded tour drifts from the contract | M | S14 test parses it with the contract |
 
