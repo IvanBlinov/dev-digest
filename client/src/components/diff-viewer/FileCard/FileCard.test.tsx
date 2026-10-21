@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { PrFile } from "@/lib/types";
@@ -118,5 +118,52 @@ describe("FileCard annotations", () => {
     expect(screen.getByText("const key = 'x';")).toBeInTheDocument();
     expect(screen.queryByLabelText("Has findings")).not.toBeInTheDocument();
     expect(screen.queryByText("blocker")).not.toBeInTheDocument();
+  });
+});
+
+describe("FileCard target (Files changed navigation)", () => {
+  const scrolled: Element[] = [];
+  const original = Element.prototype.scrollIntoView;
+  beforeEach(() => {
+    scrolled.length = 0;
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+      scrolled.push(this);
+    });
+  });
+  afterEach(() => {
+    Element.prototype.scrollIntoView = original;
+  });
+
+  const BIG: PrFile = { ...FILE, additions: 500, deletions: 0 } as PrFile;
+
+  it("AC-57: a large file collapsed by default opens when targeted, is highlighted, scrolled to and focused", () => {
+    const plain = renderCard(<FileCard file={BIG} />);
+    expect(screen.queryByText("const key = 'x';")).not.toBeInTheDocument();
+    expect(plain.container.querySelector("[data-target]")).toBeNull();
+    expect(scrolled).toHaveLength(0);
+    cleanup();
+
+    const view = renderCard(<FileCard file={BIG} target={{ line: null }} />);
+    expect(screen.getByText("const key = 'x';")).toBeInTheDocument();
+    const card = view.container.querySelector("[data-target='true']") as HTMLElement;
+    expect(card).not.toBeNull();
+    expect(card).toContainElement(screen.getByText("src/config.ts"));
+    expect(document.activeElement).toBe(card);
+    expect(scrolled).toContain(card);
+  });
+
+  it("AC-58: the targeted line is highlighted and scrolled into view; other lines are not", () => {
+    const { container } = renderCard(<FileCard file={FILE} target={{ line: 12 }} />);
+    const row = container.querySelector("[data-line='12']") as HTMLElement;
+    expect(row).not.toBeNull();
+    expect(row).toHaveAttribute("aria-current", "location");
+    expect(scrolled).toContain(row);
+    expect(container.querySelector("[data-line='11']")).not.toHaveAttribute("aria-current");
+  });
+
+  it("AC-58: without a target no line is highlighted", () => {
+    const { container } = renderCard(<FileCard file={FILE} />);
+    expect(container.querySelector("[aria-current]")).toBeNull();
+    expect(scrolled).toHaveLength(0);
   });
 });

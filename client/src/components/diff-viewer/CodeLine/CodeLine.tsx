@@ -17,6 +17,7 @@ export function CodeLine({
   commenting,
   marker,
   annotationNodes,
+  highlighted,
 }: {
   ln: Line;
   path: string;
@@ -26,9 +27,16 @@ export function CodeLine({
   marker?: LineMarker | null;
   /** Annotation nodes rendered under the line (after any comment threads). */
   annotationNodes?: ReactNode[];
+  /** The navigation target line: highlighted and scrolled into view on mount. */
+  highlighted?: boolean;
 }) {
   const [hover, setHover] = React.useState(false);
   const [composing, setComposing] = React.useState(false);
+  const rowRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (highlighted) rowRef.current?.scrollIntoView({ block: "center" });
+  }, [highlighted]);
 
   if (ln.kind === "hunk") {
     return (
@@ -48,7 +56,12 @@ export function CodeLine({
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      <div style={lineRowFor(ln.kind, marker?.color)}>
+      <div
+        ref={rowRef}
+        style={highlighted ? { ...lineRowFor(ln.kind, marker?.color), ...s.lineTarget } : lineRowFor(ln.kind, marker?.color)}
+        data-line={ln.newNo ?? ln.oldNo}
+        aria-current={highlighted ? "location" : undefined}
+      >
         <span className="mono tnum" style={{ ...s.lineNo, position: "relative" }}>
           {showAdd && target && (
             <button

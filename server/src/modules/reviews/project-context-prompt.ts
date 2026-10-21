@@ -99,7 +99,12 @@ function skipReason(read: Exclude<DocRead, { ok: true }> | { ok: false; reason: 
 }
 
 /** AC-18/23/24: formats, truncates and budgets the documents in order. Pure. */
-export function buildProjectContextPlan(reads: readonly ContextRead[], tokenizer: Tokenizer): ProjectContextPlan {
+export function buildProjectContextPlan(
+  reads: readonly ContextRead[],
+  tokenizer: Tokenizer,
+  opts: { maxTokens?: number } = {},
+): ProjectContextPlan {
+  const maxTokens = opts.maxTokens ?? PROJECT_CONTEXT_MAX_TOKENS;
   const texts: string[] = [];
   const blocks: ProjectContextBlock[] = [];
   const skipped: ProjectContextSkip[] = [];
@@ -110,7 +115,7 @@ export function buildProjectContextPlan(reads: readonly ContextRead[], tokenizer
       continue;
     }
     const { text, truncated } = formatDocument(r.path, r.read.content, r.read.truncated === true);
-    if (overBudget || tokenizer.count([...texts, text].join(SPECS_JOINER)) > PROJECT_CONTEXT_MAX_TOKENS) {
+    if (overBudget || tokenizer.count([...texts, text].join(SPECS_JOINER)) > maxTokens) {
       overBudget = true;
       skipped.push({ path: r.path, reason: 'over_budget' });
       continue;

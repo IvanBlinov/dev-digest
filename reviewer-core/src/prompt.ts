@@ -76,6 +76,20 @@ export function wrapUntrusted(label: string, content: string): string {
   return `<untrusted source="${label}">\n${safe}\n</untrusted>`;
 }
 
+/**
+ * Neutralise every opening/closing look-alike of our delimiter (any case, any inner whitespace,
+ * e.g. `</UNTRUSTED >` or `< /untrusted`) by turning its `<` into `&lt;`. Stricter than
+ * `wrapUntrusted`, which only handles an exact `</untrusted>`.
+ */
+export function escapeUntrustedMarkers(content: string): string {
+  return content.replace(/<(?=\s*\/?\s*untrusted)/gi, '&lt;');
+}
+
+/** `wrapUntrusted` with the strict escape: the only look-alikes left are our own open and close tags. */
+export function wrapUntrustedStrict(label: string, content: string): string {
+  return `<untrusted source="${label}">\n${escapeUntrustedMarkers(content)}\n</untrusted>`;
+}
+
 /** Cap the PR description so a huge author body can't blow the token budget. */
 const MAX_PR_DESCRIPTION_CHARS = 4000;
 
@@ -256,3 +270,5 @@ export function assemblePrompt(parts: PromptParts, meter?: SectionMeter): Assemb
 
   return { messages, assembly, sections };
 }
+
+export { INJECTION_GUARD };

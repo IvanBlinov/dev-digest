@@ -11,6 +11,15 @@ export const s = {
     overflow: "hidden",
     background: "var(--bg-elevated)",
   } satisfies CSSProperties,
+  fileCardTarget: {
+    border: "1px solid var(--accent)",
+    outline: "none",
+  } satisfies CSSProperties,
+  lineTarget: {
+    boxShadow: "inset 3px 0 0 var(--accent)",
+    outline: "1px solid var(--accent)",
+    outlineOffset: -1,
+  } satisfies CSSProperties,
   fileHeader: {
     display: "flex",
     alignItems: "center",

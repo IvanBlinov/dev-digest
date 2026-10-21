@@ -94,6 +94,12 @@ describe('buildPromptAssembledEvent', () => {
     expect(e.chunk).toEqual({ index: 1, total: 5, file: 'src/a.ts' });
   });
 
+  it('AC-31: promptKind brief is kept and no section text is held', () => {
+    const e = buildPromptAssembledEvent({ ...input, promptKind: 'brief' as const }, { verbose: false });
+    expect(e.promptKind).toBe('brief');
+    expect(JSON.stringify(e)).not.toContain('GUARD PREVIEW');
+  });
+
   it('redacts every string (e.g. a URL query in a source)', () => {
     const e = buildPromptAssembledEvent(
       { ...input, sections: [{ name: 'doc:x', source: 'https://h.io/d?k=URLQUERYSECRET', trust: 'untrusted', chars: 1 }] },

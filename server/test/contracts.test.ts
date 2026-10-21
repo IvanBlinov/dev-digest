@@ -22,6 +22,11 @@ import {
   PrDetail,
   PutContextAttachmentsBody,
   ContextListing,
+  PrBrief,
+  PrBriefResponse,
+  BriefModelOutput,
+  Risk,
+  FEATURE_MODELS,
 } from '@devdigest/shared';
 
 /**
@@ -111,7 +116,7 @@ describe('AI contracts parse fixtures', () => {
     ).not.toThrow();
     expect(() =>
       Risks.parse({
-        risks: [{ kind: 'security', title: 't', explanation: 'e', severity: 'high', file_refs: [] }],
+        risks: [{ kind: 'security', title: 't', explanation: 'e', severity: 'high', refs: [{ file: 'a.ts', start_line: null, end_line: null }] }],
       }),
     ).not.toThrow();
     expect(() =>
@@ -374,5 +379,50 @@ describe('Project context contracts (L05)', () => {
       documents: [],
     });
     expect(l.synced_at).toBeNull();
+  });
+});
+
+describe('PR Brief contracts (SPEC-03)', () => {
+  const brief = {
+    summary: 's',
+    risks: [],
+    review_focus: [{ file: 'a.ts', line: 3, reason: 'r' }],
+    head_sha: 'abc',
+    generated_at: '2026-10-19T10:00:00.000Z',
+    prompt_version: 'brief-v1',
+    input_hash: 'h',
+    provider: 'openrouter',
+    model: 'openai/gpt-4.1-mini',
+    tokens_in: 1,
+    tokens_out: 2,
+    cost_usd: null,
+    duration_ms: 5,
+    attempts: 1,
+    inputs: [{ kind: 'files', ref: 'changed files', status: 'ok', shown: 1, total: 1 }],
+    dropped: { risks: 0, review_focus: 0 },
+  };
+  const risk = { kind: 'k', title: 't', explanation: 'e', severity: 'high' };
+
+  it('AC-1: a full PrBrief parses and strips legacy intent', () => {
+    expect(() => PrBrief.parse(brief)).not.toThrow();
+    expect('intent' in PrBrief.parse({ ...brief, intent: { summary: 'x' } })).toBe(false);
+  });
+  it('AC-2: Risk needs at least one ref; null lines parse', () => {
+    expect(() => Risk.parse({ ...risk, refs: [] })).toThrow();
+    expect(() => Risk.parse({ ...risk, refs: [{ file: 'a', start_line: null, end_line: null }] })).not.toThrow();
+  });
+  it('AC-3: PrBriefResponse parses an empty response', () => {
+    expect(() => PrBriefResponse.parse({ brief: null, stale: false, stale_reason: null })).not.toThrow();
+    expect(() => PrBriefResponse.parse({ brief: null, stale: true, stale_reason: 'bogus' })).toThrow();
+  });
+  it('AC-5: BriefModelOutput accepts a risk with empty refs', () => {
+    expect(() =>
+      BriefModelOutput.parse({ summary: 's', risks: [{ ...risk, refs: [] }], review_focus: [] }),
+    ).not.toThrow();
+  });
+  it('AC-12: risk_brief defaults to openrouter / openai/gpt-4.1-mini', () => {
+    const f = FEATURE_MODELS.find((m) => m.id === 'risk_brief');
+    expect(f?.defaultProvider).toBe('openrouter');
+    expect(f?.defaultModel).toBe('openai/gpt-4.1-mini');
   });
 });

@@ -197,21 +197,29 @@ export class Container {
   }
 
   /** Resolve an LLM provider by id; constructs from the secret key, cached. */
-  async llm(id: 'openai' | 'anthropic' | 'openrouter'): Promise<LLMProvider> {
+  async llm(
+    id: 'openai' | 'anthropic' | 'openrouter',
+    opts: { retries?: 0 } = {},
+  ): Promise<LLMProvider> {
     const injected = this.overrides.llm?.[id];
     if (injected) return injected;
-    const cached = this.llmCache.get(id);
+    // A no-retry instance (one transport attempt) is cached separately from the default one.
+    const cacheKey = opts.retries === 0 ? `${id}:0` : id;
+    const cached = this.llmCache.get(cacheKey);
     if (cached) return cached;
-    const provider = await this.buildLlm(id);
-    this.llmCache.set(id, provider);
+    const provider = await this.buildLlm(id, opts.retries);
+    this.llmCache.set(cacheKey, provider);
     return provider;
   }
 
-  private async buildLlm(id: 'openai' | 'anthropic' | 'openrouter'): Promise<LLMProvider> {
+  private async buildLlm(
+    id: 'openai' | 'anthropic' | 'openrouter',
+    retries?: number,
+  ): Promise<LLMProvider> {
     if (id === 'openai') {
       const key = await this.secrets.get('OPENAI_API_KEY');
       if (!key) throw new ConfigError('OPENAI_API_KEY is not configured');
-      return new OpenAIProvider(key);
+      return new OpenAIProvider(key, { retries });
     }
     if (id === 'openrouter') {
       // Single OpenRouter provider lives in reviewer-core (shared with the CI
@@ -220,13 +228,14 @@ export class Container {
       const key = await this.secrets.get('OPENROUTER_API_KEY');
       if (!key) throw new ConfigError('OPENROUTER_API_KEY is not configured');
       return new OpenRouterProvider(key, {
+        maxRetries: retries,
         estimateCost: (model, tokensIn, tokensOut) =>
           this.priceBook.estimate(model, tokensIn, tokensOut),
       });
     }
     const key = await this.secrets.get('ANTHROPIC_API_KEY');
     if (!key) throw new ConfigError('ANTHROPIC_API_KEY is not configured');
-    return new AnthropicProvider(key);
+    return new AnthropicProvider(key, { retries });
   }
 
   async embedder(): Promise<Embedder> {

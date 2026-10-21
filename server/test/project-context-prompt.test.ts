@@ -100,6 +100,22 @@ describe('buildProjectContextPlan', () => {
   });
 });
 
+describe('buildProjectContextPlan maxTokens option (brief)', () => {
+  const reads = [
+    { path: 'specs/a.md', origin: 'agent' as const, read: { ok: true as const, content: 'a'.repeat(3000) } },
+    { path: 'specs/b.md', origin: 'agent' as const, read: { ok: true as const, content: 'b'.repeat(3000) } },
+  ];
+  it('AC-17: with maxTokens 4000 a second document that does not fit is over_budget', () => {
+    const p = buildProjectContextPlan(reads as never, charTokenizer, { maxTokens: 4000 });
+    expect(p.blocks.map((b) => b.path)).toEqual(['specs/a.md']);
+    expect(p.skipped).toEqual([{ path: 'specs/b.md', reason: 'over_budget' }]);
+  });
+  it('AC-17: with no options the default budget still applies', () => {
+    const p = buildProjectContextPlan(reads as never, charTokenizer);
+    expect(p.blocks).toHaveLength(2);
+  });
+});
+
 describe('projectContextLogLine', () => {
   it('AC-26: summary and none forms', async () => {
     const p = await plan(
